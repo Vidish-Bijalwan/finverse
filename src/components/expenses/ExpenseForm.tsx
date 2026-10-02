@@ -1,11 +1,25 @@
 import { useMemo, useState, type CSSProperties } from "react";
-import { Check, Delete, Trash2 } from "lucide-react";
+import { Check, Delete, Plus, Settings2, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 
-import { EXPENSE_CATEGORIES, INCOME_CATEGORIES } from "@/lib/finance/categories";
-import { useAddTransaction, useDeleteTransaction, useUpdateTransaction } from "@/lib/finance/hooks";
+import { allCategories } from "@/lib/finance/categories";
+import {
+  useAccounts,
+  useAddTransaction,
+  useDeleteTransaction,
+  useUpdateTransaction,
+} from "@/lib/finance/hooks";
 import { formatINR, todayISO } from "@/lib/finance/format";
 import type { PayMode, Transaction, TransactionType } from "@/lib/finance/types";
+import { CategoryManagerDialog } from "@/components/money/CategoryManagerDialog";
+import { TagEditor } from "@/components/money/TagEditor";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { cn } from "@/lib/utils";
 
 /**
@@ -27,6 +41,8 @@ export interface ExpenseDraft {
   type?: TransactionType;
   payMode?: PayMode;
   dateISO?: string;
+  accountId?: string;
+  tags?: string[];
 }
 
 type FormErrors = { amount?: string; category?: string };
@@ -66,6 +82,11 @@ export function ExpenseForm({
   const [payMode, setPayMode] = useState<PayMode>(editing?.payMode ?? draft?.payMode ?? "UPI");
   const [note, setNote] = useState<string>(editing?.note ?? draft?.note ?? "");
   const [dateISO, setDateISO] = useState<string>(editing?.dateISO ?? draft?.dateISO ?? todayISO());
+  const [tags, setTags] = useState<string[]>(editing?.tags ?? draft?.tags ?? []);
+  const [accountId, setAccountId] = useState<string | undefined>(
+    editing?.accountId ?? draft?.accountId,
+  );
+  const [managingCategories, setManagingCategories] = useState(false);
   const [errors, setErrors] = useState<FormErrors>({});
   const clearError = (key: keyof FormErrors) =>
     setErrors((prev) => {
@@ -78,9 +99,13 @@ export function ExpenseForm({
   const addTxn = useAddTransaction();
   const updateTxn = useUpdateTransaction();
   const deleteTxn = useDeleteTransaction();
+  const { data: accounts } = useAccounts();
   const saving = addTxn.isPending || updateTxn.isPending;
 
-  const categories = type === "expense" ? EXPENSE_CATEGORIES : INCOME_CATEGORIES;
+  const defaultAccountId = accounts?.find((a) => a.isDefault)?.id ?? accounts?.[0]?.id;
+  const effectiveAccountId = accountId ?? defaultAccountId;
+
+  const categories = useMemo(() => allCategories().filter((c) => c.kind === type), [type]);
   const defaultCategoryFor = (t: TransactionType) => (t === "expense" ? "food" : "salary");
 
   const amountPaise = useMemo(() => {
@@ -115,7 +140,7 @@ export function ExpenseForm({
   const switchType = (t: TransactionType) => {
     setType(t);
     setCategoryId((current) => {
-      const pool = t === "expense" ? EXPENSE_CATEGORIES : INCOME_CATEGORIES;
+      const pool = allCategories().filter((c) => c.kind === t);
       return pool.some((c) => c.id === current) ? current : defaultCategoryFor(t);
     });
     clearError("category");
@@ -138,6 +163,8 @@ export function ExpenseForm({
       note: note.trim(),
       dateISO,
       payMode,
+      tags,
+      ...(effectiveAccountId ? { accountId: effectiveAccountId } : {}),
     };
     if (isEdit && editing) {
       updateTxn.mutate(
@@ -245,7 +272,16 @@ export function ExpenseForm({
 
       {/* Category grid */}
       <div>
-        <p className="mb-2 text-sm font-semibold text-muted-foreground">Category</p>
+        <div className="mb-2 flex items-center justify-between">
+          <p className="text-sm font-semibold text-muted-foreground">Category</p>
+          <button
+            type="button"
+            onClick={() => setManagingCategories(true)}
+            className="flex items-center gap-1 rounded-full px-2 py-1 text-xs font-semibold text-primary transition-colors hover:bg-primary/10"
+          >
+            <Settings2 className="h-3.5 w-3.5" /> Manage
+          </button>
+        </div>
         <div className="grid grid-cols-4 gap-2" role="radiogroup" aria-label="Category">
           {categories.map((c) => {
             const Icon = c.icon;
@@ -320,6 +356,33 @@ export function ExpenseForm({
         </div>
       </div>
 
+      {/* Account picker */}
+      <div>
+        <p className="mb-2 text-sm font-semibold text-muted-foreground">Account</p>
+        <Select value={effectiveAccountId ?? ""} onValueChange={setAccountId}>
+          <SelectTrigger aria-label="Account" className="w-full">
+            <SelectValue placeholder="Select account" />
+          </SelectTrigger>
+          <SelectContent>
+            {(accounts ?? []).map((a) => (
+              <SelectItem key={a.id} value={a.id}>
+                <span className="flex items-center gap-2">
+                  {a.name}
+                  {a.isDefault && (
+                    <span className="text-[10px] font-bold uppercase text-muted-foreground">
+                      Default
+                    </span>
+                  )}
+                </span>
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+        <p className="mt-1 text-xs text-muted-foreground">
+          The balance of this account updates when you save.
+        </p>
+      </div>
+
       {/* Note + date */}
       <div className="grid grid-cols-[1fr_auto] gap-2">
         <label className="flex flex-col gap-1.5">
@@ -344,6 +407,9 @@ export function ExpenseForm({
           />
         </label>
       </div>
+
+      {/* Tags */}
+      <TagEditor tags={tags} onChange={setTags} />
 
       {/* Save */}
       <button
@@ -385,6 +451,12 @@ export function ExpenseForm({
               : "Delete transaction"}
         </button>
       )}
+
+      <CategoryManagerDialog
+        open={managingCategories}
+        onOpenChange={setManagingCategories}
+        defaultKind={type === "income" ? "income" : "expense"}
+      />
     </div>
   );
 }
