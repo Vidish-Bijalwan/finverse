@@ -11,9 +11,6 @@ import { useEffect, type ReactNode } from "react";
 
 import appCss from "../styles.css?url";
 import { reportLovableError } from "../lib/lovable-error-reporting";
-import { AppHeader } from "@/components/shell/AppHeader";
-import { BottomTabBar } from "@/components/shell/BottomTabBar";
-import { PageTransition } from "@/components/shell/PageTransition";
 
 function NotFoundComponent() {
   return (
@@ -84,7 +81,6 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
       { name: "description", content: "Clear, explainable insights for your financial life." },
       { name: "author", content: "FinVerse AI" },
       { property: "og:type", content: "website" },
-      { property: "og:title", content: "FinVerse AI" },
       { name: "twitter:card", content: "summary_large_image" },
       { name: "twitter:site", content: "@Lovable" },
     ],
@@ -95,10 +91,7 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
       },
       { rel: "preconnect", href: "https://fonts.googleapis.com" },
       { rel: "preconnect", href: "https://fonts.gstatic.com", crossOrigin: "anonymous" },
-      {
-        rel: "stylesheet",
-        href: "https://fonts.googleapis.com/css2?family=Roboto:wght@400;500;700;900&display=swap",
-      },
+      { rel: "stylesheet", href: "https://fonts.googleapis.com/css2?family=Roboto:wght@400;500;700;900&display=swap" },
       { rel: "icon", href: "/favicon.ico", type: "image/x-icon" },
     ],
   }),
@@ -127,16 +120,8 @@ function RootComponent() {
 
   return (
     <QueryClientProvider client={queryClient}>
-      <div className="min-h-screen bg-background text-foreground">
-        <AppHeader />
-        <main className="pb-24 md:pb-0">
-          <PageTransition>
-            {/* Required: nested routes render here. Removing <Outlet /> breaks all child routes. */}
-            <Outlet />
-          </PageTransition>
-        </main>
-        <BottomTabBar />
-      </div>
+      {/* Required: nested routes render here. Removing <Outlet /> breaks all child routes. */}
+      <Outlet />
     </QueryClientProvider>
   );
 }
