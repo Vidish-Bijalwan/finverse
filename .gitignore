@@ -33,3 +33,6 @@ src/routeTree.gen.ts
 *.njsproj
 *.sln
 *.sw?
+
+# wrangler build output
+.wrangler/
