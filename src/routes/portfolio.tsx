@@ -53,49 +53,10 @@ const DONUT_COLORS = [
   "#8b5cf6",
 ];
 
-/** Per-holding dividend-yield overrides (percent), persisted by holding id. */
-const DIVIDEND_KEY = "finverse:dividends:v1";
-
-function loadDividendYields(): Record<string, number> {
-  if (typeof window === "undefined") return {};
-  try {
-    const raw = window.localStorage.getItem(DIVIDEND_KEY);
-    const parsed: unknown = raw ? JSON.parse(raw) : {};
-    if (typeof parsed !== "object" || parsed === null) return {};
-    const out: Record<string, number> = {};
-    for (const [k, v] of Object.entries(parsed as Record<string, unknown>)) {
-      if (typeof v === "number" && Number.isFinite(v) && v >= 0 && v <= 100) out[k] = v;
-    }
-    return out;
-  } catch {
-    return {};
-  }
-}
-
-function useDividendYields() {
-  const [yields, setYields] = useState<Record<string, number>>({});
-  useEffect(() => setYields(loadDividendYields()), []);
-  const setYield = (holdingId: string, pct: number) => {
-    if (!Number.isFinite(pct)) return;
-    const clamped = Math.min(100, Math.max(0, Math.round(pct * 10) / 10));
-    setYields((prev) => {
-      const next = { ...prev, [holdingId]: clamped };
-      try {
-        window.localStorage.setItem(DIVIDEND_KEY, JSON.stringify(next));
-      } catch {
-        // Storage unavailable — keep the in-memory value.
-      }
-      return next;
-    });
-  };
-  return { yields, setYield };
-}
-
 function PortfolioPage() {
   const { data: holdings, isPending } = useHoldings();
   const deleteHolding = useDeleteHolding();
   const reducedMotion = usePrefersReducedMotion();
-  const { yields: dividendYields, setYield: setDividendYield } = useDividendYields();
 
   const [mounted, setMounted] = useState(false);
   const [priceTick, setPriceTick] = useState(0);
@@ -141,26 +102,6 @@ function PortfolioPage() {
     const pnl = value - invested;
     return { invested, value, pnl, pnlPct: invested > 0 ? (pnl / invested) * 100 : 0 };
   }, [rows]);
-
-  /** Per-holding dividend yield (editable override, else the stock's listed
-   *  yield, else 1%) and the expected annual dividend at the current LTP. */
-  const dividendRows = useMemo(
-    () =>
-      rows.map((r) => {
-        const yieldPct = dividendYields[r.holding.id] ?? r.stock?.divYield ?? 1.0;
-        const annualPaise = Math.round(r.holding.qty * r.ltp * (yieldPct / 100));
-        return { ...r, yieldPct, annualPaise };
-      }),
-    [rows, dividendYields],
-  );
-
-  const dividendTotals = useMemo(() => {
-    const annual = dividendRows.reduce((a, r) => a + r.annualPaise, 0);
-    return {
-      annual,
-      avgYieldPct: totals.value > 0 ? (annual / totals.value) * 100 : 0,
-    };
-  }, [dividendRows, totals.value]);
 
   function handleRefresh() {
     rows.forEach((r) => refreshLTP(r.holding.symbol));
@@ -264,9 +205,9 @@ function PortfolioPage() {
                         ))}
                       </Pie>
                       <Tooltip
-                        formatter={(v: unknown, name: unknown) => [
-                          formatINR(typeof v === "number" ? v : 0),
-                          typeof name === "string" ? name : "",
+                        formatter={(v: number | undefined, name: string | undefined) => [
+                          formatINR(v ?? 0),
+                          name ?? "",
                         ]}
                         contentStyle={{ borderRadius: 8, fontSize: 13 }}
                       />
@@ -431,90 +372,10 @@ function PortfolioPage() {
               </div>
             </SectionCard>
           </div>
-
-          {/* Dividends */}
-          <SectionCard title="Dividends">
-            <p className="mb-4 text-sm text-muted-foreground">
-              Expected annual dividends at current prices. Tap a yield to adjust it per holding —
-              FinVerse remembers your overrides.
-            </p>
-            <div className="mb-4 grid gap-4 sm:grid-cols-2">
-              <Card className="shadow-card">
-                <CardContent className="pt-5">
-                  <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-                    Expected annual dividends
-                  </p>
-                  <p className="mt-1.5 text-2xl font-black text-primary-dark tabular-nums">
-                    {formatINR(dividendTotals.annual)}
-                  </p>
-                </CardContent>
-              </Card>
-              <Card className="shadow-card">
-                <CardContent className="pt-5">
-                  <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-                    Portfolio dividend yield
-                  </p>
-                  <p className="mt-1.5 text-2xl font-black text-primary-dark tabular-nums">
-                    {dividendTotals.avgYieldPct.toFixed(2)}%
-                  </p>
-                </CardContent>
-              </Card>
-            </div>
-            <div className="overflow-x-auto">
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Stock</TableHead>
-                    <TableHead className="text-right">Yield %</TableHead>
-                    <TableHead className="text-right">Est. annual dividend</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {dividendRows.map((r) => (
-                    <TableRow key={r.holding.id}>
-                      <TableCell>
-                        <Link
-                          to="/stocks/$symbol"
-                          params={{ symbol: r.holding.symbol }}
-                          className="font-bold text-primary hover:underline"
-                        >
-                          {r.holding.symbol}
-                        </Link>
-                        <div className="text-xs text-muted-foreground">{r.name}</div>
-                      </TableCell>
-                      <TableCell className="text-right">
-                        <label
-                          className="sr-only"
-                          htmlFor={`div-yield-${r.holding.id}`}
-                        >{`Dividend yield for ${r.holding.symbol}`}</label>
-                        <input
-                          id={`div-yield-${r.holding.id}`}
-                          type="number"
-                          min={0}
-                          max={100}
-                          step={0.1}
-                          value={r.yieldPct}
-                          onChange={(e) => setDividendYield(r.holding.id, Number(e.target.value))}
-                          className="w-20 rounded-md border border-input bg-background px-2 py-1 text-right text-sm tabular-nums text-foreground focus:border-ring focus:outline-none"
-                        />
-                      </TableCell>
-                      <TableCell className="text-right font-semibold tabular-nums">
-                        {formatINR(r.annualPaise)}
-                      </TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-            </div>
-          </SectionCard>
         </div>
       )}
 
-      <HoldingDialog
-        open={dialogOpen}
-        onOpenChange={setDialogOpen}
-        {...(editing ? { holding: editing } : {})}
-      />
+      <HoldingDialog open={dialogOpen} onOpenChange={setDialogOpen} holding={editing} />
 
       <AlertDialog open={!!deleting} onOpenChange={(o) => !o && setDeleting(undefined)}>
         <AlertDialogContent>

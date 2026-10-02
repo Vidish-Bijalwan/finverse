@@ -10,6 +10,7 @@
 
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
+import { Route as AccountsRouteImport } from './routes/accounts'
 import { Route as BillsRouteImport } from './routes/bills'
 import { Route as BudgetsRouteImport } from './routes/budgets'
 import { Route as ChatRouteImport } from './routes/chat'
@@ -17,17 +18,19 @@ import { Route as ExpensesRouteImport } from './routes/expenses'
 import { Route as GoalsRouteImport } from './routes/goals'
 import { Route as InsightsRouteImport } from './routes/insights'
 import { Route as MoreRouteImport } from './routes/more'
-import { Route as NotificationsRouteImport } from './routes/notifications'
 import { Route as PortfolioRouteImport } from './routes/portfolio'
 import { Route as ReadinessRouteImport } from './routes/readiness'
 import { Route as ScreenerRouteImport } from './routes/screener'
-import { Route as SettingsRouteImport } from './routes/settings'
-import { Route as WatchlistRouteImport } from './routes/watchlist'
 import { Route as StocksSymbolRouteImport } from './routes/stocks.$symbol'
 
 const IndexRoute = IndexRouteImport.update({
   id: '/',
   path: '/',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const AccountsRoute = AccountsRouteImport.update({
+  id: '/accounts',
+  path: '/accounts',
   getParentRoute: () => rootRouteImport,
 } as any)
 const BillsRoute = BillsRouteImport.update({
@@ -65,11 +68,6 @@ const MoreRoute = MoreRouteImport.update({
   path: '/more',
   getParentRoute: () => rootRouteImport,
 } as any)
-const NotificationsRoute = NotificationsRouteImport.update({
-  id: '/notifications',
-  path: '/notifications',
-  getParentRoute: () => rootRouteImport,
-} as any)
 const PortfolioRoute = PortfolioRouteImport.update({
   id: '/portfolio',
   path: '/portfolio',
@@ -85,16 +83,6 @@ const ScreenerRoute = ScreenerRouteImport.update({
   path: '/screener',
   getParentRoute: () => rootRouteImport,
 } as any)
-const SettingsRoute = SettingsRouteImport.update({
-  id: '/settings',
-  path: '/settings',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const WatchlistRoute = WatchlistRouteImport.update({
-  id: '/watchlist',
-  path: '/watchlist',
-  getParentRoute: () => rootRouteImport,
-} as any)
 const StocksSymbolRoute = StocksSymbolRouteImport.update({
   id: '/stocks/$symbol',
   path: '/stocks/$symbol',
@@ -103,6 +91,7 @@ const StocksSymbolRoute = StocksSymbolRouteImport.update({
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
+  '/accounts': typeof AccountsRoute
   '/bills': typeof BillsRoute
   '/budgets': typeof BudgetsRoute
   '/chat': typeof ChatRoute
@@ -110,16 +99,14 @@ export interface FileRoutesByFullPath {
   '/goals': typeof GoalsRoute
   '/insights': typeof InsightsRoute
   '/more': typeof MoreRoute
-  '/notifications': typeof NotificationsRoute
   '/portfolio': typeof PortfolioRoute
   '/readiness': typeof ReadinessRoute
   '/screener': typeof ScreenerRoute
-  '/settings': typeof SettingsRoute
-  '/watchlist': typeof WatchlistRoute
   '/stocks/$symbol': typeof StocksSymbolRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
+  '/accounts': typeof AccountsRoute
   '/bills': typeof BillsRoute
   '/budgets': typeof BudgetsRoute
   '/chat': typeof ChatRoute
@@ -127,17 +114,15 @@ export interface FileRoutesByTo {
   '/goals': typeof GoalsRoute
   '/insights': typeof InsightsRoute
   '/more': typeof MoreRoute
-  '/notifications': typeof NotificationsRoute
   '/portfolio': typeof PortfolioRoute
   '/readiness': typeof ReadinessRoute
   '/screener': typeof ScreenerRoute
-  '/settings': typeof SettingsRoute
-  '/watchlist': typeof WatchlistRoute
   '/stocks/$symbol': typeof StocksSymbolRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
+  '/accounts': typeof AccountsRoute
   '/bills': typeof BillsRoute
   '/budgets': typeof BudgetsRoute
   '/chat': typeof ChatRoute
@@ -145,18 +130,16 @@ export interface FileRoutesById {
   '/goals': typeof GoalsRoute
   '/insights': typeof InsightsRoute
   '/more': typeof MoreRoute
-  '/notifications': typeof NotificationsRoute
   '/portfolio': typeof PortfolioRoute
   '/readiness': typeof ReadinessRoute
   '/screener': typeof ScreenerRoute
-  '/settings': typeof SettingsRoute
-  '/watchlist': typeof WatchlistRoute
   '/stocks/$symbol': typeof StocksSymbolRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
   fullPaths:
     | '/'
+    | '/accounts'
     | '/bills'
     | '/budgets'
     | '/chat'
@@ -164,16 +147,14 @@ export interface FileRouteTypes {
     | '/goals'
     | '/insights'
     | '/more'
-    | '/notifications'
     | '/portfolio'
     | '/readiness'
     | '/screener'
-    | '/settings'
-    | '/watchlist'
     | '/stocks/$symbol'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
+    | '/accounts'
     | '/bills'
     | '/budgets'
     | '/chat'
@@ -181,16 +162,14 @@ export interface FileRouteTypes {
     | '/goals'
     | '/insights'
     | '/more'
-    | '/notifications'
     | '/portfolio'
     | '/readiness'
     | '/screener'
-    | '/settings'
-    | '/watchlist'
     | '/stocks/$symbol'
   id:
     | '__root__'
     | '/'
+    | '/accounts'
     | '/bills'
     | '/budgets'
     | '/chat'
@@ -198,17 +177,15 @@ export interface FileRouteTypes {
     | '/goals'
     | '/insights'
     | '/more'
-    | '/notifications'
     | '/portfolio'
     | '/readiness'
     | '/screener'
-    | '/settings'
-    | '/watchlist'
     | '/stocks/$symbol'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
+  AccountsRoute: typeof AccountsRoute
   BillsRoute: typeof BillsRoute
   BudgetsRoute: typeof BudgetsRoute
   ChatRoute: typeof ChatRoute
@@ -216,12 +193,9 @@ export interface RootRouteChildren {
   GoalsRoute: typeof GoalsRoute
   InsightsRoute: typeof InsightsRoute
   MoreRoute: typeof MoreRoute
-  NotificationsRoute: typeof NotificationsRoute
   PortfolioRoute: typeof PortfolioRoute
   ReadinessRoute: typeof ReadinessRoute
   ScreenerRoute: typeof ScreenerRoute
-  SettingsRoute: typeof SettingsRoute
-  WatchlistRoute: typeof WatchlistRoute
   StocksSymbolRoute: typeof StocksSymbolRoute
 }
 
@@ -232,6 +206,13 @@ declare module '@tanstack/react-router' {
       path: '/'
       fullPath: '/'
       preLoaderRoute: typeof IndexRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/accounts': {
+      id: '/accounts'
+      path: '/accounts'
+      fullPath: '/accounts'
+      preLoaderRoute: typeof AccountsRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/bills': {
@@ -283,13 +264,6 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof MoreRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/notifications': {
-      id: '/notifications'
-      path: '/notifications'
-      fullPath: '/notifications'
-      preLoaderRoute: typeof NotificationsRouteImport
-      parentRoute: typeof rootRouteImport
-    }
     '/portfolio': {
       id: '/portfolio'
       path: '/portfolio'
@@ -311,20 +285,6 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ScreenerRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/settings': {
-      id: '/settings'
-      path: '/settings'
-      fullPath: '/settings'
-      preLoaderRoute: typeof SettingsRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/watchlist': {
-      id: '/watchlist'
-      path: '/watchlist'
-      fullPath: '/watchlist'
-      preLoaderRoute: typeof WatchlistRouteImport
-      parentRoute: typeof rootRouteImport
-    }
     '/stocks/$symbol': {
       id: '/stocks/$symbol'
       path: '/stocks/$symbol'
@@ -337,6 +297,7 @@ declare module '@tanstack/react-router' {
 
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
+  AccountsRoute: AccountsRoute,
   BillsRoute: BillsRoute,
   BudgetsRoute: BudgetsRoute,
   ChatRoute: ChatRoute,
@@ -344,12 +305,9 @@ const rootRouteChildren: RootRouteChildren = {
   GoalsRoute: GoalsRoute,
   InsightsRoute: InsightsRoute,
   MoreRoute: MoreRoute,
-  NotificationsRoute: NotificationsRoute,
   PortfolioRoute: PortfolioRoute,
   ReadinessRoute: ReadinessRoute,
   ScreenerRoute: ScreenerRoute,
-  SettingsRoute: SettingsRoute,
-  WatchlistRoute: WatchlistRoute,
   StocksSymbolRoute: StocksSymbolRoute,
 }
 export const routeTree = rootRouteImport
