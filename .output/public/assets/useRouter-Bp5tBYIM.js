@@ -1,0 +1,1 @@
+import{_ as e,m as t}from"./dist-B34a6bIO.js";var n=e(t(),1),r=n.createContext(null);function i(e){return n.useContext(r)}export{r as n,i as t};

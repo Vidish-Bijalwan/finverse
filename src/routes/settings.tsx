@@ -1,5 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useQueryClient } from "@tanstack/react-query";
+import { downloadFile } from "@/lib/utils";
 import { useRef, useState } from "react";
 import {
   AlertTriangle,
@@ -64,20 +65,6 @@ export const Route = createFileRoute("/settings")({
   component: SettingsPage,
 });
 
-function downloadFile(filename: string, content: string, mime: string) {
-  const blob = new Blob([content], { type: `${mime};charset=utf-8` });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement("a");
-  a.href = url;
-  a.download = filename;
-  document.body.appendChild(a);
-  a.click();
-  a.remove();
-  URL.revokeObjectURL(url);
-}
-
-// ---------------------------------------------------------------------------
-// Page
 // ---------------------------------------------------------------------------
 
 const THEME_OPTIONS: { value: ThemeMode; label: string; hint: string; icon: typeof Sun }[] = [
@@ -100,7 +87,11 @@ function SettingsPage() {
       toast.info("No transactions to export yet.");
       return;
     }
-    downloadFile(`finverse-transactions-${todayISO()}.csv`, buildTransactionsCSV(db), "text/csv");
+    downloadFile(
+      `finverse-transactions-${todayISO()}.csv`,
+      buildTransactionsCSV(db.transactions),
+      "text/csv",
+    );
     toast.success(`Exported ${db.transactions.length} transactions to CSV.`);
   }
 

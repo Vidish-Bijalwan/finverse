@@ -1,6 +1,6 @@
 import { useCallback, useSyncExternalStore } from "react";
 
-import type { FinanceDB } from "./finance/types";
+import type { FinanceDB, Transaction } from "./finance/types";
 
 /**
  * App-level personalization settings, persisted in localStorage.
@@ -199,7 +199,7 @@ function csvEscape(value: string | number): string {
 }
 
 /** Build a transactions CSV with proper quoting/escaping. */
-export function buildTransactionsCSV(db: FinanceDB): string {
+export function buildTransactionsCSV(transactions: Transaction[]): string {
   const header = [
     "id",
     "type",
@@ -213,7 +213,7 @@ export function buildTransactionsCSV(db: FinanceDB): string {
     "bill_id",
     "created_at",
   ];
-  const lines = db.transactions.map((t) =>
+  const lines = transactions.map((t) =>
     [
       csvEscape(t.id),
       csvEscape(t.type),
