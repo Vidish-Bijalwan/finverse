@@ -9,7 +9,7 @@ import { Input } from "@/components/ui/input";
 import { billStatuses, previousMonth } from "@/lib/ai/engine";
 import { ALL_CATEGORIES, categoryById } from "@/lib/finance/categories";
 import { formatINR, monthKey, monthLabel, todayISO } from "@/lib/finance/format";
-import { getBudgets, listTransactions } from "@/lib/finance/store";
+import { getBudgets, listTransactions, seedIfEmpty } from "@/lib/finance/store";
 import type { Category, FinanceDB, Transaction } from "@/lib/finance/types";
 
 export const Route = createFileRoute("/chat")({
@@ -234,7 +234,11 @@ function ChatPage() {
     timer.current = setTimeout(() => {
       const answer = dbQuery.data
         ? answerQuery(text, dbQuery.data)
-        : { text: "Still loading your data — one moment…" };
+        : dbQuery.isError
+          ? {
+              text: "I couldn't load your data just now — please reload the page and try again.",
+            }
+          : { text: "Still loading your data — one moment…" };
       setMessages((m) => [...m, { id: nextId(), role: "ai", ...answer }]);
       setTyping(false);
     }, 600);
