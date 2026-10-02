@@ -1,0 +1,366 @@
+import { useMemo, useState, type CSSProperties } from "react";
+import { Check, Delete, Trash2 } from "lucide-react";
+
+import { EXPENSE_CATEGORIES, INCOME_CATEGORIES } from "@/lib/finance/categories";
+import { useAddTransaction, useDeleteTransaction, useUpdateTransaction } from "@/lib/finance/hooks";
+import { todayISO } from "@/lib/finance/format";
+import type { PayMode, Transaction, TransactionType } from "@/lib/finance/types";
+import { cn } from "@/lib/utils";
+
+/**
+ * Paytm-style add/edit expense sheet content.
+ *
+ * - Big amount display + numeric keypad (1-9, 0, ., backspace).
+ * - Expense/Income toggle, category icon-tile grid, pay-mode segmented
+ *   control, note input, date input.
+ * - Save validates (amount > 0, category required) with inline errors.
+ * - In edit mode a Delete button appears with a two-tap confirm.
+ *
+ * Amounts are always stored as integer paise (Math.round(parseFloat * 100)).
+ */
+
+export interface ExpenseDraft {
+  amountPaise?: number;
+  category?: string;
+  note?: string;
+  type?: TransactionType;
+  payMode?: PayMode;
+  dateISO?: string;
+}
+
+type FormErrors = { amount?: string; category?: string };
+
+const PAY_MODES: PayMode[] = ["UPI", "Cash", "Card", "Bank"];
+
+const KEYPAD_KEYS = ["1", "2", "3", "4", "5", "6", "7", "8", "9", ".", "0", "back"] as const;
+
+function paiseToRupeesString(paise: number): string {
+  return (paise / 100).toString();
+}
+
+export function ExpenseForm({
+  editing,
+  draft,
+  onDone,
+}: {
+  /** When set, the form edits this transaction instead of creating one. */
+  editing?: Transaction | null;
+  /** Prefill from quick-add / receipt scan. */
+  draft?: ExpenseDraft | null;
+  onDone: () => void;
+}) {
+  const isEdit = Boolean(editing);
+
+  const [type, setType] = useState<TransactionType>(editing?.type ?? draft?.type ?? "expense");
+  const [amountStr, setAmountStr] = useState<string>(
+    editing
+      ? paiseToRupeesString(editing.amountPaise)
+      : draft?.amountPaise
+        ? paiseToRupeesString(draft.amountPaise)
+        : "0",
+  );
+  const [categoryId, setCategoryId] = useState<string>(
+    editing?.category ?? draft?.category ?? "food",
+  );
+  const [payMode, setPayMode] = useState<PayMode>(editing?.payMode ?? draft?.payMode ?? "UPI");
+  const [note, setNote] = useState<string>(editing?.note ?? draft?.note ?? "");
+  const [dateISO, setDateISO] = useState<string>(editing?.dateISO ?? draft?.dateISO ?? todayISO());
+  const [errors, setErrors] = useState<FormErrors>({});
+  const clearError = (key: keyof FormErrors) =>
+    setErrors((prev) => {
+      const next = { ...prev };
+      delete next[key];
+      return next;
+    });
+  const [confirmingDelete, setConfirmingDelete] = useState(false);
+
+  const addTxn = useAddTransaction();
+  const updateTxn = useUpdateTransaction();
+  const deleteTxn = useDeleteTransaction();
+  const saving = addTxn.isPending || updateTxn.isPending;
+
+  const categories = type === "expense" ? EXPENSE_CATEGORIES : INCOME_CATEGORIES;
+  const defaultCategoryFor = (t: TransactionType) => (t === "expense" ? "food" : "salary");
+
+  const amountPaise = useMemo(() => {
+    const v = parseFloat(amountStr);
+    if (!Number.isFinite(v) || v <= 0) return 0;
+    return Math.round(v * 100);
+  }, [amountStr]);
+
+  const pressKey = (key: (typeof KEYPAD_KEYS)[number]) => {
+    clearError("amount");
+    if (key === "back") {
+      setAmountStr((s) => (s.length <= 1 ? "0" : s.slice(0, -1)));
+      return;
+    }
+    setAmountStr((s) => {
+      if (key === ".") {
+        if (s.includes(".")) return s;
+        return `${s}.`;
+      }
+      if (s.includes(".")) {
+        const decimals = s.split(".")[1] ?? "";
+        if (decimals.length >= 2) return s;
+        return `${s}${key}`;
+      }
+      // Avoid runaway leading zeros and cap integer length for sanity.
+      const next = s === "0" ? key : `${s}${key}`;
+      if (next.replace(".", "").length > 10) return s;
+      return next;
+    });
+  };
+
+  const switchType = (t: TransactionType) => {
+    setType(t);
+    setCategoryId((current) => {
+      const pool = t === "expense" ? EXPENSE_CATEGORIES : INCOME_CATEGORIES;
+      return pool.some((c) => c.id === current) ? current : defaultCategoryFor(t);
+    });
+    clearError("category");
+  };
+
+  const validate = () => {
+    const errs: { amount?: string; category?: string } = {};
+    if (amountPaise <= 0) errs.amount = "Enter an amount greater than zero.";
+    if (!categoryId) errs.category = "Pick a category.";
+    setErrors(errs);
+    return Object.keys(errs).length === 0;
+  };
+
+  const handleSave = () => {
+    if (!validate() || saving) return;
+    const payload = {
+      type,
+      amountPaise,
+      category: categoryId,
+      note: note.trim(),
+      dateISO,
+      payMode,
+    };
+    if (isEdit && editing) {
+      updateTxn.mutate({ id: editing.id, patch: payload }, { onSuccess: onDone });
+    } else {
+      addTxn.mutate(payload, { onSuccess: onDone });
+    }
+  };
+
+  const handleDelete = () => {
+    if (!editing) return;
+    if (!confirmingDelete) {
+      setConfirmingDelete(true);
+      return;
+    }
+    deleteTxn.mutate(editing.id, { onSuccess: onDone });
+  };
+
+  const amountColor = type === "expense" ? "text-destructive" : "text-success";
+  const saveLabel = isEdit ? "Save changes" : `Add ${type === "expense" ? "expense" : "income"}`;
+
+  return (
+    <div className="flex flex-col gap-4">
+      {/* Type toggle */}
+      <div
+        className="grid grid-cols-2 gap-1 rounded-2xl bg-muted p-1"
+        role="tablist"
+        aria-label="Transaction type"
+      >
+        {(["expense", "income"] as const).map((t) => (
+          <button
+            key={t}
+            type="button"
+            role="tab"
+            aria-selected={type === t}
+            onClick={() => switchType(t)}
+            className={cn(
+              "rounded-xl py-2.5 text-sm font-semibold transition-colors",
+              type === t
+                ? "bg-card text-foreground shadow-sm"
+                : "text-muted-foreground hover:text-foreground",
+            )}
+          >
+            {t === "expense" ? "Expense" : "Income"}
+          </button>
+        ))}
+      </div>
+
+      {/* Big amount display */}
+      <div className="flex flex-col items-center py-2">
+        <span
+          aria-live="polite"
+          className={cn("text-5xl font-bold tracking-tight tabular-nums", amountColor)}
+        >
+          ₹{amountStr || "0"}
+        </span>
+        {errors.amount && (
+          <p role="alert" className="mt-1 text-sm font-medium text-destructive">
+            {errors.amount}
+          </p>
+        )}
+      </div>
+
+      {/* Numeric keypad */}
+      <div className="grid grid-cols-3 gap-2" role="group" aria-label="Amount keypad">
+        {KEYPAD_KEYS.map((key) => (
+          <button
+            key={key}
+            type="button"
+            onClick={() => pressKey(key)}
+            aria-label={
+              key === "back" ? "Backspace" : key === "." ? "Decimal point" : `Digit ${key}`
+            }
+            className={cn(
+              "flex h-12 items-center justify-center rounded-xl text-xl font-semibold transition-colors",
+              "bg-muted text-foreground hover:bg-accent active:bg-accent/70",
+            )}
+          >
+            {key === "back" ? <Delete className="h-5 w-5" /> : key}
+          </button>
+        ))}
+      </div>
+
+      {/* Category grid */}
+      <div>
+        <p className="mb-2 text-sm font-semibold text-muted-foreground">Category</p>
+        <div className="grid grid-cols-4 gap-2" role="radiogroup" aria-label="Category">
+          {categories.map((c) => {
+            const Icon = c.icon;
+            const selected = categoryId === c.id;
+            return (
+              <button
+                key={c.id}
+                type="button"
+                role="radio"
+                aria-checked={selected}
+                onClick={() => {
+                  setCategoryId(c.id);
+                  clearError("category");
+                }}
+                className={cn(
+                  "flex flex-col items-center gap-1.5 rounded-2xl border p-2.5 transition-all",
+                  selected
+                    ? "border-transparent ring-2 ring-offset-1"
+                    : "border-transparent hover:bg-muted",
+                )}
+                style={
+                  selected
+                    ? ({ ["--tw-ring-color" as string]: c.color } as CSSProperties)
+                    : undefined
+                }
+              >
+                <span
+                  className="flex h-10 w-10 items-center justify-center rounded-xl"
+                  style={{ backgroundColor: `${c.color}1f`, color: c.color }}
+                >
+                  <Icon className="h-5 w-5" />
+                </span>
+                <span className="text-center text-[11px] font-medium leading-tight text-foreground">
+                  {c.label}
+                </span>
+              </button>
+            );
+          })}
+        </div>
+        {errors.category && (
+          <p role="alert" className="mt-1 text-sm font-medium text-destructive">
+            {errors.category}
+          </p>
+        )}
+      </div>
+
+      {/* Pay mode segmented control */}
+      <div>
+        <p className="mb-2 text-sm font-semibold text-muted-foreground">Paid via</p>
+        <div
+          className="grid grid-cols-4 gap-1 rounded-2xl bg-muted p-1"
+          role="radiogroup"
+          aria-label="Payment mode"
+        >
+          {PAY_MODES.map((m) => (
+            <button
+              key={m}
+              type="button"
+              role="radio"
+              aria-checked={payMode === m}
+              onClick={() => setPayMode(m)}
+              className={cn(
+                "rounded-xl py-2 text-sm font-semibold transition-colors",
+                payMode === m
+                  ? "bg-card text-foreground shadow-sm"
+                  : "text-muted-foreground hover:text-foreground",
+              )}
+            >
+              {m}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {/* Note + date */}
+      <div className="grid grid-cols-[1fr_auto] gap-2">
+        <label className="flex flex-col gap-1.5">
+          <span className="text-sm font-semibold text-muted-foreground">Note</span>
+          <input
+            type="text"
+            value={note}
+            onChange={(e) => setNote(e.target.value)}
+            placeholder="What was this for?"
+            maxLength={120}
+            className="h-11 rounded-xl border border-input bg-background px-3 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring"
+          />
+        </label>
+        <label className="flex flex-col gap-1.5">
+          <span className="text-sm font-semibold text-muted-foreground">Date</span>
+          <input
+            type="date"
+            value={dateISO}
+            onChange={(e) => e.target.value && setDateISO(e.target.value)}
+            max={todayISO()}
+            className="h-11 rounded-xl border border-input bg-background px-3 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-ring"
+          />
+        </label>
+      </div>
+
+      {/* Save */}
+      <button
+        type="button"
+        onClick={handleSave}
+        disabled={saving}
+        className={cn(
+          "flex h-13 items-center justify-center gap-2 rounded-2xl bg-primary py-3.5 text-base font-bold text-primary-foreground",
+          "transition-opacity hover:opacity-90 disabled:opacity-60",
+        )}
+      >
+        {saving ? (
+          "Saving…"
+        ) : (
+          <>
+            <Check className="h-5 w-5" /> {saveLabel}
+          </>
+        )}
+      </button>
+
+      {/* Delete in edit mode, with two-tap confirm */}
+      {isEdit && (
+        <button
+          type="button"
+          onClick={handleDelete}
+          disabled={deleteTxn.isPending}
+          className={cn(
+            "flex items-center justify-center gap-2 rounded-2xl border py-3 text-sm font-semibold transition-colors",
+            confirmingDelete
+              ? "border-destructive bg-destructive text-destructive-foreground"
+              : "border-destructive/40 text-destructive hover:bg-destructive/10",
+          )}
+        >
+          <Trash2 className="h-4 w-4" />
+          {deleteTxn.isPending
+            ? "Deleting…"
+            : confirmingDelete
+              ? "Tap again to confirm delete"
+              : "Delete transaction"}
+        </button>
+      )}
+    </div>
+  );
+}
