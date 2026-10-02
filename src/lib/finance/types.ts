@@ -29,6 +29,17 @@ export interface Transaction {
   goalId?: string;
   /** Linked bill when this transaction paid a bill. */
   billId?: string;
+  /**
+   * Linked account. For expense/income this is the account debited/credited.
+   * For transfers this is the SOURCE account (use toAccountId for the destination).
+   */
+  accountId?: string;
+  /** Destination account for type === "transfer" account-to-account moves. */
+  toAccountId?: string;
+  /** Free-form tags, e.g. ["trip-goa", "work"]. */
+  tags?: string[];
+  /** Recurring rule that posted this occurrence (drives idempotent auto-post). */
+  recurringRuleId?: string;
   createdAt: string;
   updatedAt: string;
 }
@@ -107,4 +118,66 @@ export interface FinanceDB {
   bills: Bill[];
   goals: Goal[];
   holdings: Holding[];
+  accounts: Account[];
+  customCategories: CustomCategory[];
+  recurringRules: RecurringRule[];
+}
+
+export type AccountType = "cash" | "upi" | "bank";
+
+export interface Account {
+  id: string;
+  name: string;
+  type: AccountType;
+  /** Key into CUSTOM_ICON_OPTIONS (see categories.ts); falls back to a per-type icon. */
+  iconName: string;
+  /** Hex color, e.g. "#10B981". */
+  color: string;
+  /** Integer paise at creation; live balance = opening + replayed transaction effects. */
+  openingBalancePaise: number;
+  /** Exactly one account is the default for new transactions. */
+  isDefault: boolean;
+  createdAt: string;
+  updatedAt: string;
+}
+
+/** User-created category. Stored with an icon NAME (serializable); resolve via categories.ts. */
+export interface CustomCategory {
+  id: string;
+  label: string;
+  /** Key into CUSTOM_ICON_OPTIONS (see categories.ts). */
+  iconName: string;
+  /** Hex color, e.g. "#F59E0B". */
+  color: string;
+  kind: CategoryKind;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export type RecurringFrequency = "daily" | "weekly" | "monthly" | "yearly";
+
+export interface RecurringRule {
+  id: string;
+  type: TransactionType;
+  /** Integer paise, always >= 0. */
+  amountPaise: number;
+  /** Category id (built-in or custom). */
+  category: string;
+  note: string;
+  payMode: PayMode;
+  /** Account debited (expense/transfer) or credited (income). */
+  accountId?: string;
+  /** Destination account when type === "transfer". */
+  toAccountId?: string;
+  tags: string[];
+  frequency: RecurringFrequency;
+  /** First occurrence, "YYYY-MM-DD". */
+  startDateISO: string;
+  /** Last occurrence, "YYYY-MM-DD"; omitted means no end. */
+  endDateISO?: string;
+  /** "YYYY-MM-DD" of the most recently posted occurrence; null when never posted. */
+  lastPostedDateISO?: string | null;
+  isPaused: boolean;
+  createdAt: string;
+  updatedAt: string;
 }
