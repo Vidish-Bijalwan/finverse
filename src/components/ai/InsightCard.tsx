@@ -8,7 +8,6 @@ import {
   Receipt,
   Target,
   TrendingUp,
-  Zap,
   type LucideIcon,
 } from "lucide-react";
 
@@ -23,7 +22,6 @@ const KIND_ICONS: Record<string, LucideIcon> = {
   savings: PiggyBank,
   budget: AlertOctagon,
   unusual: Receipt,
-  anomaly: Zap,
   goal: Target,
   bill: CalendarClock,
 };
