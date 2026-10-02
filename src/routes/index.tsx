@@ -8,7 +8,6 @@ import {
   ChevronRight,
   Headphones,
   Lightbulb,
-  Menu,
   Plus,
   Receipt,
   ShieldCheck,
@@ -18,7 +17,6 @@ import {
   TrendingUp,
   Wallet,
   WalletCards,
-  X,
 } from "lucide-react";
 import { useEffect, useMemo, useState, type ReactNode } from "react";
 
@@ -79,13 +77,6 @@ const quickActions = [
   { label: "AI Chat", icon: Bot, to: "/chat" },
 ];
 
-const navLinks = [
-  { label: "Dashboard", to: "/" },
-  { label: "Portfolio", to: "/portfolio" },
-  { label: "Insights", to: "/insights" },
-  { label: "Screener", to: "/screener" },
-];
-
 function Logo() {
   return (
     <div className="flex items-center gap-2.5" aria-label="FinVerse home">
@@ -111,7 +102,6 @@ interface Mover {
 
 function FinVerseDashboard() {
   const [month, setMonth] = useMonth();
-  const [menuOpen, setMenuOpen] = useState(false);
   const [chartsReady, setChartsReady] = useState(false);
 
   // Recharts needs layout measurements; mount charts client-side only (SSR-safe).
@@ -235,67 +225,6 @@ function FinVerseDashboard() {
 
   return (
     <div className="min-h-screen bg-background text-foreground">
-      <header className="sticky top-0 z-50 border-b border-border/70 bg-background/95 shadow-header backdrop-blur">
-        <div className="mx-auto flex h-17 max-w-dashboard items-center justify-between px-5 lg:px-8">
-          <Link to="/" aria-label="FinVerse home">
-            <Logo />
-          </Link>
-          <nav className="hidden items-center gap-8 md:flex" aria-label="Main navigation">
-            {navLinks.map((item) => (
-              <Link
-                key={item.label}
-                to={item.to}
-                className={cn(
-                  "text-sm font-medium transition-colors hover:text-primary",
-                  item.to === "/" ? "text-primary" : "text-foreground",
-                )}
-              >
-                {item.label}
-              </Link>
-            ))}
-          </nav>
-          <div className="hidden items-center gap-3 md:flex">
-            <Button size="sm" asChild>
-              <Link to="/chat">
-                <Bot className="size-4" /> Ask AI
-              </Link>
-            </Button>
-          </div>
-          <Button
-            variant="icon"
-            size="icon"
-            className="md:hidden"
-            aria-label={menuOpen ? "Close menu" : "Open menu"}
-            onClick={() => setMenuOpen(!menuOpen)}
-          >
-            {menuOpen ? <X className="size-5" /> : <Menu className="size-5" />}
-          </Button>
-        </div>
-        {menuOpen && (
-          <div className="border-t border-border bg-background px-5 py-4 md:hidden">
-            <nav className="grid gap-1" aria-label="Mobile navigation">
-              {navLinks.map((item) => (
-                <Link
-                  key={item.label}
-                  to={item.to}
-                  className="rounded-sm px-3 py-3 text-left text-sm font-medium hover:bg-muted"
-                  onClick={() => setMenuOpen(false)}
-                >
-                  {item.label}
-                </Link>
-              ))}
-              <Link
-                to="/chat"
-                className="rounded-sm px-3 py-3 text-left text-sm font-bold text-primary hover:bg-muted"
-                onClick={() => setMenuOpen(false)}
-              >
-                Ask AI
-              </Link>
-            </nav>
-          </div>
-        )}
-      </header>
-
       <main>
         {/* ── Hero: balance + month selector ─────────────────────────── */}
         <section className="border-b border-border bg-surface-soft">

@@ -10,33 +10,128 @@
 
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
+import { Route as BillsRouteImport } from './routes/bills'
+import { Route as BudgetsRouteImport } from './routes/budgets'
+import { Route as ChatRouteImport } from './routes/chat'
+import { Route as ExpensesRouteImport } from './routes/expenses'
+import { Route as GoalsRouteImport } from './routes/goals'
+import { Route as InsightsRouteImport } from './routes/insights'
+import { Route as MoreRouteImport } from './routes/more'
 
 const IndexRoute = IndexRouteImport.update({
   id: '/',
   path: '/',
   getParentRoute: () => rootRouteImport,
 } as any)
+const BillsRoute = BillsRouteImport.update({
+  id: '/bills',
+  path: '/bills',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const BudgetsRoute = BudgetsRouteImport.update({
+  id: '/budgets',
+  path: '/budgets',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ChatRoute = ChatRouteImport.update({
+  id: '/chat',
+  path: '/chat',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ExpensesRoute = ExpensesRouteImport.update({
+  id: '/expenses',
+  path: '/expenses',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const GoalsRoute = GoalsRouteImport.update({
+  id: '/goals',
+  path: '/goals',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const InsightsRoute = InsightsRouteImport.update({
+  id: '/insights',
+  path: '/insights',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const MoreRoute = MoreRouteImport.update({
+  id: '/more',
+  path: '/more',
+  getParentRoute: () => rootRouteImport,
+} as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
+  '/bills': typeof BillsRoute
+  '/budgets': typeof BudgetsRoute
+  '/chat': typeof ChatRoute
+  '/expenses': typeof ExpensesRoute
+  '/goals': typeof GoalsRoute
+  '/insights': typeof InsightsRoute
+  '/more': typeof MoreRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
+  '/bills': typeof BillsRoute
+  '/budgets': typeof BudgetsRoute
+  '/chat': typeof ChatRoute
+  '/expenses': typeof ExpensesRoute
+  '/goals': typeof GoalsRoute
+  '/insights': typeof InsightsRoute
+  '/more': typeof MoreRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
+  '/bills': typeof BillsRoute
+  '/budgets': typeof BudgetsRoute
+  '/chat': typeof ChatRoute
+  '/expenses': typeof ExpensesRoute
+  '/goals': typeof GoalsRoute
+  '/insights': typeof InsightsRoute
+  '/more': typeof MoreRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/'
+  fullPaths:
+    | '/'
+    | '/bills'
+    | '/budgets'
+    | '/chat'
+    | '/expenses'
+    | '/goals'
+    | '/insights'
+    | '/more'
   fileRoutesByTo: FileRoutesByTo
-  to: '/'
-  id: '__root__' | '/'
+  to:
+    | '/'
+    | '/bills'
+    | '/budgets'
+    | '/chat'
+    | '/expenses'
+    | '/goals'
+    | '/insights'
+    | '/more'
+  id:
+    | '__root__'
+    | '/'
+    | '/bills'
+    | '/budgets'
+    | '/chat'
+    | '/expenses'
+    | '/goals'
+    | '/insights'
+    | '/more'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
+  BillsRoute: typeof BillsRoute
+  BudgetsRoute: typeof BudgetsRoute
+  ChatRoute: typeof ChatRoute
+  ExpensesRoute: typeof ExpensesRoute
+  GoalsRoute: typeof GoalsRoute
+  InsightsRoute: typeof InsightsRoute
+  MoreRoute: typeof MoreRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -48,11 +143,67 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof IndexRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/bills': {
+      id: '/bills'
+      path: '/bills'
+      fullPath: '/bills'
+      preLoaderRoute: typeof BillsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/budgets': {
+      id: '/budgets'
+      path: '/budgets'
+      fullPath: '/budgets'
+      preLoaderRoute: typeof BudgetsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/chat': {
+      id: '/chat'
+      path: '/chat'
+      fullPath: '/chat'
+      preLoaderRoute: typeof ChatRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/expenses': {
+      id: '/expenses'
+      path: '/expenses'
+      fullPath: '/expenses'
+      preLoaderRoute: typeof ExpensesRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/goals': {
+      id: '/goals'
+      path: '/goals'
+      fullPath: '/goals'
+      preLoaderRoute: typeof GoalsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/insights': {
+      id: '/insights'
+      path: '/insights'
+      fullPath: '/insights'
+      preLoaderRoute: typeof InsightsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/more': {
+      id: '/more'
+      path: '/more'
+      fullPath: '/more'
+      preLoaderRoute: typeof MoreRouteImport
+      parentRoute: typeof rootRouteImport
+    }
   }
 }
 
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
+  BillsRoute: BillsRoute,
+  BudgetsRoute: BudgetsRoute,
+  ChatRoute: ChatRoute,
+  ExpensesRoute: ExpensesRoute,
+  GoalsRoute: GoalsRoute,
+  InsightsRoute: InsightsRoute,
+  MoreRoute: MoreRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
