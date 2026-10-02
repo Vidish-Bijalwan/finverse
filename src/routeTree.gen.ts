@@ -10,7 +10,10 @@
 
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
+import { Route as BillsRouteImport } from './routes/bills'
+import { Route as BudgetsRouteImport } from './routes/budgets'
 import { Route as ChatRouteImport } from './routes/chat'
+import { Route as GoalsRouteImport } from './routes/goals'
 import { Route as InsightsRouteImport } from './routes/insights'
 import { Route as MoreRouteImport } from './routes/more'
 
@@ -19,9 +22,24 @@ const IndexRoute = IndexRouteImport.update({
   path: '/',
   getParentRoute: () => rootRouteImport,
 } as any)
+const BillsRoute = BillsRouteImport.update({
+  id: '/bills',
+  path: '/bills',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const BudgetsRoute = BudgetsRouteImport.update({
+  id: '/budgets',
+  path: '/budgets',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const ChatRoute = ChatRouteImport.update({
   id: '/chat',
   path: '/chat',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const GoalsRoute = GoalsRouteImport.update({
+  id: '/goals',
+  path: '/goals',
   getParentRoute: () => rootRouteImport,
 } as any)
 const InsightsRoute = InsightsRouteImport.update({
@@ -37,34 +55,55 @@ const MoreRoute = MoreRouteImport.update({
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
+  '/bills': typeof BillsRoute
+  '/budgets': typeof BudgetsRoute
   '/chat': typeof ChatRoute
+  '/goals': typeof GoalsRoute
   '/insights': typeof InsightsRoute
   '/more': typeof MoreRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
+  '/bills': typeof BillsRoute
+  '/budgets': typeof BudgetsRoute
   '/chat': typeof ChatRoute
+  '/goals': typeof GoalsRoute
   '/insights': typeof InsightsRoute
   '/more': typeof MoreRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
+  '/bills': typeof BillsRoute
+  '/budgets': typeof BudgetsRoute
   '/chat': typeof ChatRoute
+  '/goals': typeof GoalsRoute
   '/insights': typeof InsightsRoute
   '/more': typeof MoreRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/' | '/chat' | '/insights' | '/more'
+  fullPaths:
+    '/' | '/bills' | '/budgets' | '/chat' | '/goals' | '/insights' | '/more'
   fileRoutesByTo: FileRoutesByTo
-  to: '/' | '/chat' | '/insights' | '/more'
-  id: '__root__' | '/' | '/chat' | '/insights' | '/more'
+  to: '/' | '/bills' | '/budgets' | '/chat' | '/goals' | '/insights' | '/more'
+  id:
+    | '__root__'
+    | '/'
+    | '/bills'
+    | '/budgets'
+    | '/chat'
+    | '/goals'
+    | '/insights'
+    | '/more'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
+  BillsRoute: typeof BillsRoute
+  BudgetsRoute: typeof BudgetsRoute
   ChatRoute: typeof ChatRoute
+  GoalsRoute: typeof GoalsRoute
   InsightsRoute: typeof InsightsRoute
   MoreRoute: typeof MoreRoute
 }
@@ -78,11 +117,32 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof IndexRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/bills': {
+      id: '/bills'
+      path: '/bills'
+      fullPath: '/bills'
+      preLoaderRoute: typeof BillsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/budgets': {
+      id: '/budgets'
+      path: '/budgets'
+      fullPath: '/budgets'
+      preLoaderRoute: typeof BudgetsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/chat': {
       id: '/chat'
       path: '/chat'
       fullPath: '/chat'
       preLoaderRoute: typeof ChatRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/goals': {
+      id: '/goals'
+      path: '/goals'
+      fullPath: '/goals'
+      preLoaderRoute: typeof GoalsRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/insights': {
@@ -104,7 +164,10 @@ declare module '@tanstack/react-router' {
 
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
+  BillsRoute: BillsRoute,
+  BudgetsRoute: BudgetsRoute,
   ChatRoute: ChatRoute,
+  GoalsRoute: GoalsRoute,
   InsightsRoute: InsightsRoute,
   MoreRoute: MoreRoute,
 }
