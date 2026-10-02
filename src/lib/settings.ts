@@ -44,15 +44,35 @@ function isValidSettings(v: unknown): v is AppSettings {
 
 /** Read settings. SSR-safe: returns defaults on the server. */
 export function getSettings(): AppSettings {
-  if (!isBrowser()) return { ...DEFAULT_SETTINGS };
-  try {
-    const raw = window.localStorage.getItem(SETTINGS_KEY);
-    if (!raw) return { ...DEFAULT_SETTINGS };
-    const parsed: unknown = JSON.parse(raw);
-    return isValidSettings(parsed) ? parsed : { ...DEFAULT_SETTINGS };
-  } catch {
-    return { ...DEFAULT_SETTINGS };
+  return readSettingsSnapshot();
+}
+
+/**
+ * Snapshot reader for useSyncExternalStore. React requires getSnapshot to
+ * return a CACHED value — returning a fresh object on every call makes
+ * useSyncExternalStore re-render in an infinite loop ("Maximum update depth
+ * exceeded"). The snapshot is keyed on the raw localStorage string: unchanged
+ * storage -> identical object reference; changed storage -> re-parsed once.
+ * Do not mutate the returned object; use setSettings() to change settings.
+ */
+let snapshotRaw: string | null | undefined;
+let snapshotSettings: AppSettings = DEFAULT_SETTINGS;
+
+function readSettingsSnapshot(): AppSettings {
+  const raw = isBrowser() ? window.localStorage.getItem(SETTINGS_KEY) : null;
+  if (raw === snapshotRaw) return snapshotSettings;
+  snapshotRaw = raw;
+  if (!raw) {
+    snapshotSettings = DEFAULT_SETTINGS;
+    return snapshotSettings;
   }
+  try {
+    const parsed: unknown = JSON.parse(raw);
+    snapshotSettings = isValidSettings(parsed) ? parsed : DEFAULT_SETTINGS;
+  } catch {
+    snapshotSettings = DEFAULT_SETTINGS;
+  }
+  return snapshotSettings;
 }
 
 type Listener = () => void;

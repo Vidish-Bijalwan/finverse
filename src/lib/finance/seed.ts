@@ -28,7 +28,9 @@ function mulberry32(seed: number) {
   };
 }
 
-const rand = mulberry32(20261002);
+let rand = mulberry32(20261002);
+/** Deterministic transaction-ID counter (see makeTxn). Reset per buildSeed(). */
+let txnSeq = 0;
 const pick = <T>(arr: T[]): T => arr[Math.floor(rand() * arr.length)] as T;
 const jitter = (base: number, spread: number) => Math.round(base + (rand() * 2 - 1) * spread);
 const pad = (n: number) => String(n).padStart(2, "0");
@@ -66,8 +68,11 @@ interface TxnSeed {
 function makeTxn(s: TxnSeed): Transaction {
   const dateISO = d(s.month, s.day);
   const createdAt = `${dateISO}T${pad(8 + Math.floor(rand() * 12))}:${pad(Math.floor(rand() * 60))}:00.000Z`;
+  // Deterministic IDs: crypto.randomUUID() differs between SSR and client,
+  // which breaks React hydration (server HTML must match the client tree).
+  txnSeq += 1;
   return {
-    id: crypto.randomUUID(),
+    id: `seed-txn-${String(txnSeq).padStart(4, "0")}`,
     type: s.type,
     amountPaise: Math.round(s.rupees * 100),
     category: s.category,
@@ -740,6 +745,10 @@ function buildHoldings(): Holding[] {
 }
 
 export function buildSeed(): FinanceDB {
+  // Reset deterministic generators so every buildSeed() call — server or
+  // client, first or tenth — produces byte-identical data (hydration-safe).
+  rand = mulberry32(20261002);
+  txnSeq = 0;
   return {
     transactions: buildTransactions(),
     budgets: buildBudgets(),
