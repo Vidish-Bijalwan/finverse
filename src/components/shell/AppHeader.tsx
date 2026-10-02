@@ -12,6 +12,8 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { GlobalSearch } from "@/components/shell/GlobalSearch";
+import { NotificationBell } from "@/components/shell/NotificationBell";
 
 export const APP_VERSION = "v1.0.0";
 
@@ -71,13 +73,18 @@ export function AppHeader() {
         </nav>
 
         <div className="flex items-center gap-2">
+          <div className="hidden sm:block">
+            <GlobalSearch />
+          </div>
           <Link
             to="/expenses"
             aria-label="Search transactions"
-            className="grid size-10 place-items-center rounded-full text-foreground transition-colors hover:bg-muted"
+            className="grid size-10 place-items-center rounded-full text-foreground transition-colors hover:bg-muted sm:hidden"
           >
             <Search className="size-5" />
           </Link>
+
+          <NotificationBell />
 
           <DropdownMenu>
             <DropdownMenuTrigger asChild>

@@ -13,6 +13,7 @@ import {
   seedIfEmpty,
 } from "@/lib/finance/store";
 import type { FinanceDB } from "@/lib/finance/types";
+import { watchlistAlerts } from "@/lib/watchlist";
 
 /**
  * Notifications center data layer.
@@ -30,7 +31,7 @@ import type { FinanceDB } from "@/lib/finance/types";
 
 export interface AppNotification {
   id: string;
-  kind: "bill" | "budget" | "goal" | "anomaly" | "streak" | "info";
+  kind: "bill" | "budget" | "goal" | "anomaly" | "streak" | "price" | "info";
   title: string;
   body: string;
   /** Route the notification deep-links to. */
@@ -66,11 +67,12 @@ function writeStoredIds(ids: string[]): void {
 // Severity order for "newest first" display within urgency bands.
 const KIND_PRIORITY: Record<AppNotification["kind"], number> = {
   bill: 0,
-  anomaly: 1,
-  budget: 2,
-  goal: 3,
-  streak: 4,
-  info: 5,
+  price: 1,
+  anomaly: 2,
+  budget: 3,
+  goal: 4,
+  streak: 5,
+  info: 6,
 };
 
 function catLabel(id: string): string {
@@ -209,6 +211,18 @@ export function collectNotifications(db: FinanceDB): AppNotification[] {
     createdAt: digest.weekStartISO,
   });
 
+  // (7) Watchlist price alerts (from the Batch D watchlist module).
+  for (const a of watchlistAlerts(db)) {
+    out.push({
+      id: a.id,
+      kind: "price",
+      title: a.title,
+      body: a.body,
+      to: a.to,
+      createdAt: a.createdAt,
+    });
+  }
+
   return out.sort((a, b) => {
     const p = KIND_PRIORITY[a.kind] - KIND_PRIORITY[b.kind];
     if (p !== 0) return p;
@@ -228,7 +242,20 @@ function buildNotificationsDB(
   bills: FinanceDB["bills"],
   goals: FinanceDB["goals"],
 ): FinanceDB {
-  return { transactions, budgets, bills, goals, holdings: [] };
+  // FinanceDB grew new collections in Batch A (accounts, customCategories,
+  // recurringRules) — pull them from the canonical store so the synthetic
+  // DB stays complete.
+  const db = seedIfEmpty();
+  return {
+    transactions,
+    budgets,
+    bills,
+    goals,
+    holdings: [],
+    accounts: db.accounts,
+    customCategories: db.customCategories,
+    recurringRules: db.recurringRules,
+  };
 }
 
 /**

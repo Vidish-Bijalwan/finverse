@@ -1,6 +1,7 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import {
   Bell,
+  BellRing,
   CalendarClock,
   CheckCheck,
   Flame,
@@ -36,11 +37,13 @@ const GROUP_META: Record<AppNotification["kind"], { label: string; icon: LucideI
   goal: { label: "Goals", icon: Target },
   anomaly: { label: "Unusual spending", icon: Zap },
   streak: { label: "Streaks", icon: Flame },
+  price: { label: "Price alerts", icon: BellRing },
   info: { label: "Updates", icon: Lightbulb },
 };
 
 const GROUP_ORDER: AppNotification["kind"][] = [
   "bill",
+  "price",
   "budget",
   "goal",
   "anomaly",
