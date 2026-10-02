@@ -17,6 +17,7 @@ import { Route as ExpensesRouteImport } from './routes/expenses'
 import { Route as GoalsRouteImport } from './routes/goals'
 import { Route as InsightsRouteImport } from './routes/insights'
 import { Route as MoreRouteImport } from './routes/more'
+import { Route as NotificationsRouteImport } from './routes/notifications'
 import { Route as PortfolioRouteImport } from './routes/portfolio'
 import { Route as ReadinessRouteImport } from './routes/readiness'
 import { Route as ScreenerRouteImport } from './routes/screener'
@@ -62,6 +63,11 @@ const MoreRoute = MoreRouteImport.update({
   path: '/more',
   getParentRoute: () => rootRouteImport,
 } as any)
+const NotificationsRoute = NotificationsRouteImport.update({
+  id: '/notifications',
+  path: '/notifications',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const PortfolioRoute = PortfolioRouteImport.update({
   id: '/portfolio',
   path: '/portfolio',
@@ -92,6 +98,7 @@ export interface FileRoutesByFullPath {
   '/goals': typeof GoalsRoute
   '/insights': typeof InsightsRoute
   '/more': typeof MoreRoute
+  '/notifications': typeof NotificationsRoute
   '/portfolio': typeof PortfolioRoute
   '/readiness': typeof ReadinessRoute
   '/screener': typeof ScreenerRoute
@@ -106,6 +113,7 @@ export interface FileRoutesByTo {
   '/goals': typeof GoalsRoute
   '/insights': typeof InsightsRoute
   '/more': typeof MoreRoute
+  '/notifications': typeof NotificationsRoute
   '/portfolio': typeof PortfolioRoute
   '/readiness': typeof ReadinessRoute
   '/screener': typeof ScreenerRoute
@@ -121,6 +129,7 @@ export interface FileRoutesById {
   '/goals': typeof GoalsRoute
   '/insights': typeof InsightsRoute
   '/more': typeof MoreRoute
+  '/notifications': typeof NotificationsRoute
   '/portfolio': typeof PortfolioRoute
   '/readiness': typeof ReadinessRoute
   '/screener': typeof ScreenerRoute
@@ -137,6 +146,7 @@ export interface FileRouteTypes {
     | '/goals'
     | '/insights'
     | '/more'
+    | '/notifications'
     | '/portfolio'
     | '/readiness'
     | '/screener'
@@ -151,6 +161,7 @@ export interface FileRouteTypes {
     | '/goals'
     | '/insights'
     | '/more'
+    | '/notifications'
     | '/portfolio'
     | '/readiness'
     | '/screener'
@@ -165,6 +176,7 @@ export interface FileRouteTypes {
     | '/goals'
     | '/insights'
     | '/more'
+    | '/notifications'
     | '/portfolio'
     | '/readiness'
     | '/screener'
@@ -180,6 +192,7 @@ export interface RootRouteChildren {
   GoalsRoute: typeof GoalsRoute
   InsightsRoute: typeof InsightsRoute
   MoreRoute: typeof MoreRoute
+  NotificationsRoute: typeof NotificationsRoute
   PortfolioRoute: typeof PortfolioRoute
   ReadinessRoute: typeof ReadinessRoute
   ScreenerRoute: typeof ScreenerRoute
@@ -244,6 +257,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof MoreRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/notifications': {
+      id: '/notifications'
+      path: '/notifications'
+      fullPath: '/notifications'
+      preLoaderRoute: typeof NotificationsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/portfolio': {
       id: '/portfolio'
       path: '/portfolio'
@@ -284,6 +304,7 @@ const rootRouteChildren: RootRouteChildren = {
   GoalsRoute: GoalsRoute,
   InsightsRoute: InsightsRoute,
   MoreRoute: MoreRoute,
+  NotificationsRoute: NotificationsRoute,
   PortfolioRoute: PortfolioRoute,
   ReadinessRoute: ReadinessRoute,
   ScreenerRoute: ScreenerRoute,

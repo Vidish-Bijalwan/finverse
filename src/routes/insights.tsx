@@ -1,14 +1,18 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { Sparkles } from "lucide-react";
+import { ChevronLeft, ChevronRight, Sparkles } from "lucide-react";
 
 import { InsightCard } from "@/components/ai/InsightCard";
+import { CategoryMoM } from "@/components/ai/CategoryMoM";
+import { SpendingHeatmap } from "@/components/ai/SpendingHeatmap";
+import { StreakCard } from "@/components/ai/StreakCard";
+import { WeeklyDigest } from "@/components/ai/WeeklyDigest";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
-import { buildInsights } from "@/lib/ai/engine";
-import { monthLabel } from "@/lib/finance/format";
+import { buildInsights, previousMonth } from "@/lib/ai/engine";
+import { monthKey, monthLabel } from "@/lib/finance/format";
 import { seedIfEmpty } from "@/lib/finance/store";
 import { useMonth } from "@/lib/finance/hooks";
 
@@ -25,8 +29,17 @@ export const Route = createFileRoute("/insights")({
   component: InsightsPage,
 });
 
+function shiftMonthKey(key: string, offset: number): string {
+  const [y = 1970, m = 1] = key.split("-").map(Number);
+  const d = new Date(y, m - 1 + offset, 1);
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+}
+
 function InsightsPage() {
-  const [month] = useMonth();
+  const [month, setMonth] = useMonth();
+  const currentMonth = monthKey(new Date());
+  const isCurrentMonth = month === currentMonth;
+
   const dbQuery = useQuery({
     queryKey: ["finverse", "ai-db"],
     queryFn: () => seedIfEmpty(),
@@ -44,9 +57,36 @@ function InsightsPage() {
           <div className="flex items-center gap-2 text-sm font-bold text-primary">
             <Sparkles className="size-4" /> FINVERSE AI
           </div>
-          <h1 className="mt-1 text-2xl font-black tracking-tight sm:text-3xl">
-            Insights for {monthLabel(month)}
-          </h1>
+          <div className="mt-1 flex items-center justify-between gap-2">
+            <h1 className="text-2xl font-black tracking-tight sm:text-3xl">
+              Insights for {monthLabel(month)}
+            </h1>
+            <div
+              className="flex shrink-0 items-center gap-1"
+              role="group"
+              aria-label="Change month"
+            >
+              <Button
+                variant="ghost"
+                size="icon"
+                className="size-8"
+                onClick={() => setMonth(previousMonth(month))}
+                aria-label={`Previous month (${monthLabel(previousMonth(month))})`}
+              >
+                <ChevronLeft className="size-4" />
+              </Button>
+              <Button
+                variant="ghost"
+                size="icon"
+                className="size-8"
+                onClick={() => setMonth(shiftMonthKey(month, 1))}
+                disabled={isCurrentMonth}
+                aria-label={`Next month (${monthLabel(shiftMonthKey(month, 1))})`}
+              >
+                <ChevronRight className="size-4" />
+              </Button>
+            </div>
+          </div>
           <p className="mt-2 text-sm leading-6 text-muted-foreground">
             Computed from your real data by simple, transparent rules — expand any card to see
             exactly why it appeared.
@@ -59,6 +99,15 @@ function InsightsPage() {
               <Skeleton className="h-32 rounded-xl" />
               <Skeleton className="h-32 rounded-xl" />
               <Skeleton className="h-32 rounded-xl" />
+            </>
+          )}
+
+          {dbQuery.isSuccess && dbQuery.data && (
+            <>
+              {isCurrentMonth && <WeeklyDigest db={dbQuery.data} />}
+              <StreakCard db={dbQuery.data} />
+              <SpendingHeatmap db={dbQuery.data} month={month} />
+              <CategoryMoM db={dbQuery.data} month={month} />
             </>
           )}
 
