@@ -16,6 +16,9 @@ dist-ssr
 .nitro
 *.local
 
+# TanStack router codegen — regenerated on every build; never commit
+src/routeTree.gen.ts
+
 # Wrangler / Cloudflare
 .wrangler/
 .dev.vars
