@@ -1,6 +1,7 @@
 import { useMemo, useState } from "react";
 import { createFileRoute } from "@tanstack/react-router";
-import { Pencil, Plus, Trash2 } from "lucide-react";
+import { Pencil, Plus, Target, Trash2 } from "lucide-react";
+import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -213,14 +214,30 @@ function GoalsPage() {
   const loading = goalsLoading || txnsLoading;
 
   const handleSave = (input: GoalFormInput) => {
+    const isEdit = Boolean(editing);
     const onDone = () => {
       setFormOpen(false);
       setEditing(null);
     };
     if (editing) {
-      updateGoal.mutate({ id: editing.id, patch: input }, { onSuccess: onDone });
+      updateGoal.mutate(
+        { id: editing.id, patch: input },
+        {
+          onSuccess: () => {
+            onDone();
+            toast.success("Goal updated");
+          },
+          onError: () => toast.error("Couldn't save — try again."),
+        },
+      );
     } else {
-      addGoal.mutate(input, { onSuccess: onDone });
+      addGoal.mutate(input, {
+        onSuccess: () => {
+          onDone();
+          toast.success(`Goal created · ${formatINR(input.targetPaise)} target`);
+        },
+        onError: () => toast.error("Couldn't save — try again."),
+      });
     }
   };
 
@@ -253,6 +270,9 @@ function GoalsPage() {
       ) : goals.length === 0 ? (
         <Card>
           <CardContent className="flex flex-col items-center gap-3 py-12 text-center">
+            <span className="grid size-14 place-items-center rounded-2xl bg-tint">
+              <Target className="size-7 text-primary" />
+            </span>
             <p className="text-lg font-medium">No goals yet</p>
             <p className="max-w-sm text-sm text-muted-foreground">
               Create your first savings goal — an emergency fund, a gadget, a trip — and FinVerse
@@ -300,7 +320,15 @@ function GoalsPage() {
         open={fundsFor !== null}
         onOpenChange={(open) => !open && setFundsFor(null)}
         goal={fundsFor}
-        onSave={(input) => addToGoal.mutate(input, { onSuccess: () => setFundsFor(null) })}
+        onSave={(input) =>
+          addToGoal.mutate(input, {
+            onSuccess: () => {
+              toast.success(`Added ${formatINR(input.amountPaise)} to ${fundsFor?.name ?? "goal"}`);
+              setFundsFor(null);
+            },
+            onError: () => toast.error("Couldn't add funds — try again."),
+          })
+        }
         saving={addToGoal.isPending}
       />
       <ConfirmDeleteDialog
@@ -313,7 +341,14 @@ function GoalsPage() {
             : ""
         }
         onConfirm={() =>
-          deleting && deleteGoal.mutate(deleting.id, { onSuccess: () => setDeleting(null) })
+          deleting &&
+          deleteGoal.mutate(deleting.id, {
+            onSuccess: () => {
+              setDeleting(null);
+              toast.success("Goal deleted");
+            },
+            onError: () => toast.error("Couldn't delete — try again."),
+          })
         }
         pending={deleteGoal.isPending}
       />

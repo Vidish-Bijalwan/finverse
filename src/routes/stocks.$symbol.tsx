@@ -37,6 +37,7 @@ import { EmptyState } from "@/components/markets/shared";
 import { PageShell } from "@/components/markets/PageShell";
 import { HoldingDialog } from "@/components/markets/HoldingDialog";
 import { useWatchlist } from "@/components/markets/useWatchlist";
+import { usePrefersReducedMotion } from "@/hooks/use-prefers-reduced-motion";
 import { cn } from "@/lib/utils";
 
 export const Route = createFileRoute("/stocks/$symbol")({
@@ -258,6 +259,7 @@ function StockDetailPage() {
   const [mounted, setMounted] = useState(false);
   const [range, setRange] = useState<RangeKey>("1Y");
   const [dialogOpen, setDialogOpen] = useState(false);
+  const reducedMotion = usePrefersReducedMotion();
   // Jittered LTP is client-only so SSR/hydration stay identical.
   const [ltp, setLtp] = useState<number | null>(null);
 
@@ -459,6 +461,7 @@ function StockDetailPage() {
                   stroke={stroke}
                   strokeWidth={2}
                   fill="url(#priceFill)"
+                  isAnimationActive={!reducedMotion}
                 />
               </AreaChart>
             </ResponsiveContainer>

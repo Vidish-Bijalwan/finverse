@@ -282,7 +282,7 @@ function ChatPage() {
                 type="button"
                 disabled={typing}
                 onClick={() => send(s)}
-                className="shrink-0 rounded-full border border-border bg-card px-3.5 py-1.5 text-xs font-medium text-muted-foreground hover:border-primary hover:text-primary disabled:opacity-50"
+                className="shrink-0 rounded-full border border-border bg-card px-3.5 py-1.5 text-xs font-medium text-muted-foreground transition-colors hover:border-primary hover:text-primary disabled:opacity-50"
               >
                 {s}
               </button>

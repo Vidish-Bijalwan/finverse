@@ -1,6 +1,7 @@
 import { Cell, Pie, PieChart, ResponsiveContainer, Tooltip } from "recharts";
 import { formatINR, formatINRShort } from "@/lib/finance/format";
 import { ChartSkeleton, MoneyTooltip } from "./shared";
+import { usePrefersReducedMotion } from "@/hooks/use-prefers-reduced-motion";
 
 export interface DonutSlice {
   id: string;
@@ -25,6 +26,7 @@ interface SpendDonutProps {
  * spend for the month.
  */
 export function SpendDonut({ data, totalPaise, ready, loading }: SpendDonutProps) {
+  const reducedMotion = usePrefersReducedMotion();
   if (loading || !ready) return <ChartSkeleton className="h-64" />;
 
   if (data.length === 0) {
@@ -53,6 +55,7 @@ export function SpendDonut({ data, totalPaise, ready, loading }: SpendDonutProps
               paddingAngle={2}
               strokeWidth={2}
               stroke="var(--color-card)"
+              isAnimationActive={!reducedMotion}
             >
               {data.map((slice) => (
                 <Cell key={slice.id} fill={slice.color} />

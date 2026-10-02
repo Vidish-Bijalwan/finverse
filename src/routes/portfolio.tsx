@@ -26,6 +26,8 @@ import {
 } from "@/components/ui/table";
 import { useDeleteHolding, useHoldings } from "@/lib/finance/hooks";
 import { formatINR, formatINRShort } from "@/lib/finance/format";
+import { toast } from "sonner";
+import { usePrefersReducedMotion } from "@/hooks/use-prefers-reduced-motion";
 import { getStock } from "@/lib/market/data";
 import { getLTP, refreshLTP } from "@/lib/market/history";
 import { EmptyState, PnlBadge, SectionCard } from "@/components/markets/shared";
@@ -54,6 +56,7 @@ const DONUT_COLORS = [
 function PortfolioPage() {
   const { data: holdings, isPending } = useHoldings();
   const deleteHolding = useDeleteHolding();
+  const reducedMotion = usePrefersReducedMotion();
 
   const [mounted, setMounted] = useState(false);
   const [priceTick, setPriceTick] = useState(0);
@@ -195,6 +198,7 @@ function PortfolioPage() {
                         outerRadius="88%"
                         paddingAngle={2}
                         strokeWidth={0}
+                        isAnimationActive={!reducedMotion}
                       >
                         {rows.map((r, i) => (
                           <Cell key={r.holding.id} fill={DONUT_COLORS[i % DONUT_COLORS.length]} />
@@ -385,7 +389,16 @@ function PortfolioPage() {
             <AlertDialogCancel>Cancel</AlertDialogCancel>
             <AlertDialogAction
               className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
-              onClick={() => deleting && deleteHolding.mutate(deleting.id)}
+              onClick={() =>
+                deleting &&
+                deleteHolding.mutate(deleting.id, {
+                  onSuccess: () => {
+                    toast.success(`${deleting.symbol} removed from portfolio`);
+                    setDeleting(undefined);
+                  },
+                  onError: () => toast.error("Couldn't remove — try again."),
+                })
+              }
             >
               Remove
             </AlertDialogAction>

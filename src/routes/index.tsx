@@ -414,7 +414,7 @@ function FinVerseDashboard() {
               <Link
                 key={label}
                 to={to}
-                className="group flex flex-col items-center gap-2.5 rounded-md p-2 text-center transition-transform hover:-translate-y-0.5"
+                className="group flex flex-col items-center gap-2.5 rounded-md p-2 text-center transition-transform hover:-translate-y-0.5 active:scale-95"
               >
                 <span className="grid size-15 place-items-center rounded-md bg-tint shadow-tile transition-colors group-hover:bg-primary">
                   <Icon className="size-6 text-primary transition-colors group-hover:text-primary-foreground" />
@@ -565,7 +565,7 @@ function DeepLinkCard({
   return (
     <Link
       to={to}
-      className="group flex flex-col rounded-lg border border-border bg-card p-6 shadow-card transition-all duration-200 hover:-translate-y-0.5 hover:shadow-modal"
+      className="group flex flex-col rounded-lg border border-border bg-card p-6 shadow-card transition-all duration-200 hover:-translate-y-0.5 hover:shadow-modal active:translate-y-0 active:scale-[0.99]"
     >
       <div className="grid size-12 shrink-0 place-items-center rounded-md bg-tint text-primary transition-colors group-hover:bg-primary group-hover:text-primary-foreground">
         {icon}
@@ -599,7 +599,7 @@ function FooterColumn({
             <Link
               key={link.label}
               to={link.to}
-              className="w-fit text-left text-xs text-muted-foreground hover:text-primary"
+              className="w-fit text-left text-xs text-muted-foreground transition-colors hover:text-primary"
             >
               {link.label}
             </Link>

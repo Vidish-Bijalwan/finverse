@@ -13,8 +13,9 @@ import {
 } from "lucide-react";
 
 import { ExpenseForm, type ExpenseDraft } from "@/components/expenses/ExpenseForm";
-import { Sheet } from "@/components/expenses/Sheet";
+import { BottomSheet } from "@/components/shell/BottomSheet";
 import { Skeleton } from "@/components/ui/skeleton";
+import { toast } from "sonner";
 import { EXPENSE_CATEGORIES, INCOME_CATEGORIES, categoryById } from "@/lib/finance/categories";
 import { formatINR, monthKey, monthLabel, todayISO } from "@/lib/finance/format";
 import {
@@ -270,7 +271,13 @@ function ExpensesPage() {
         payMode: "UPI",
       },
       {
-        onSuccess: () => setQuickAdd(""),
+        onSuccess: () => {
+          setQuickAdd("");
+          toast.success(
+            `${parsed.type === "income" ? "Income" : "Expense"} added · ${formatINR(parsed.amountPaise)}`,
+          );
+        },
+        onError: () => toast.error("Couldn't save — try again."),
       },
     );
   };
@@ -573,7 +580,12 @@ function ExpensesPage() {
                       <SwipeableRow
                         key={t.id}
                         onOpen={() => setSheet({ mode: "edit", txn: t })}
-                        onDelete={() => deleteTxn.mutate(t.id)}
+                        onDelete={() =>
+                          deleteTxn.mutate(t.id, {
+                            onSuccess: () => toast.success("Transaction deleted"),
+                            onError: () => toast.error("Couldn't delete — try again."),
+                          })
+                        }
                         deleteLabel={`Delete ${t.note || cat?.label || "transaction"}`}
                       >
                         <div className="flex items-center gap-3 rounded-2xl bg-card p-3 shadow-tile">
@@ -623,13 +635,14 @@ function ExpensesPage() {
       </button>
 
       {/* Add / edit sheet */}
-      <Sheet
+      <BottomSheet
         open={sheet !== null}
         onClose={() => {
           setSheet(null);
           setPrefill(null);
         }}
         title={sheet?.mode === "edit" ? "Edit transaction" : "Add transaction"}
+        showCloseButton
       >
         {sheet?.mode === "edit" ? (
           <ExpenseForm
@@ -650,7 +663,7 @@ function ExpensesPage() {
             }}
           />
         )}
-      </Sheet>
+      </BottomSheet>
     </div>
   );
 }

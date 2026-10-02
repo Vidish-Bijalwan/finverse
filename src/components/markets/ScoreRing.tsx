@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { cn } from "@/lib/utils";
+import { usePrefersReducedMotion } from "@/hooks/use-prefers-reduced-motion";
 
 /**
  * Animated score ring. Animates the arc on mount (and when score changes);
@@ -7,13 +8,19 @@ import { cn } from "@/lib/utils";
  */
 export function ScoreRing({ score, size = 190 }: { score: number; size?: number }) {
   const [animated, setAnimated] = useState(0);
+  const reducedMotion = usePrefersReducedMotion();
   const clamped = Math.max(0, Math.min(100, score));
 
   useEffect(() => {
+    if (reducedMotion) {
+      // No sweep animation — show the final value immediately.
+      setAnimated(clamped);
+      return;
+    }
     setAnimated(0);
     const raf = requestAnimationFrame(() => requestAnimationFrame(() => setAnimated(clamped)));
     return () => cancelAnimationFrame(raf);
-  }, [clamped]);
+  }, [clamped, reducedMotion]);
 
   const stroke = 14;
   const r = (size - stroke) / 2;
