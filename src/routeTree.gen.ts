@@ -22,6 +22,7 @@ import { Route as PortfolioRouteImport } from './routes/portfolio'
 import { Route as ReadinessRouteImport } from './routes/readiness'
 import { Route as ScreenerRouteImport } from './routes/screener'
 import { Route as SettingsRouteImport } from './routes/settings'
+import { Route as ToolsRouteImport } from './routes/tools'
 import { Route as WatchlistRouteImport } from './routes/watchlist'
 import { Route as StocksSymbolRouteImport } from './routes/stocks.$symbol'
 
@@ -90,6 +91,11 @@ const SettingsRoute = SettingsRouteImport.update({
   path: '/settings',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ToolsRoute = ToolsRouteImport.update({
+  id: '/tools',
+  path: '/tools',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const WatchlistRoute = WatchlistRouteImport.update({
   id: '/watchlist',
   path: '/watchlist',
@@ -115,6 +121,7 @@ export interface FileRoutesByFullPath {
   '/readiness': typeof ReadinessRoute
   '/screener': typeof ScreenerRoute
   '/settings': typeof SettingsRoute
+  '/tools': typeof ToolsRoute
   '/watchlist': typeof WatchlistRoute
   '/stocks/$symbol': typeof StocksSymbolRoute
 }
@@ -132,6 +139,7 @@ export interface FileRoutesByTo {
   '/readiness': typeof ReadinessRoute
   '/screener': typeof ScreenerRoute
   '/settings': typeof SettingsRoute
+  '/tools': typeof ToolsRoute
   '/watchlist': typeof WatchlistRoute
   '/stocks/$symbol': typeof StocksSymbolRoute
 }
@@ -150,6 +158,7 @@ export interface FileRoutesById {
   '/readiness': typeof ReadinessRoute
   '/screener': typeof ScreenerRoute
   '/settings': typeof SettingsRoute
+  '/tools': typeof ToolsRoute
   '/watchlist': typeof WatchlistRoute
   '/stocks/$symbol': typeof StocksSymbolRoute
 }
@@ -169,6 +178,7 @@ export interface FileRouteTypes {
     | '/readiness'
     | '/screener'
     | '/settings'
+    | '/tools'
     | '/watchlist'
     | '/stocks/$symbol'
   fileRoutesByTo: FileRoutesByTo
@@ -186,6 +196,7 @@ export interface FileRouteTypes {
     | '/readiness'
     | '/screener'
     | '/settings'
+    | '/tools'
     | '/watchlist'
     | '/stocks/$symbol'
   id:
@@ -203,6 +214,7 @@ export interface FileRouteTypes {
     | '/readiness'
     | '/screener'
     | '/settings'
+    | '/tools'
     | '/watchlist'
     | '/stocks/$symbol'
   fileRoutesById: FileRoutesById
@@ -221,6 +233,7 @@ export interface RootRouteChildren {
   ReadinessRoute: typeof ReadinessRoute
   ScreenerRoute: typeof ScreenerRoute
   SettingsRoute: typeof SettingsRoute
+  ToolsRoute: typeof ToolsRoute
   WatchlistRoute: typeof WatchlistRoute
   StocksSymbolRoute: typeof StocksSymbolRoute
 }
@@ -318,6 +331,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof SettingsRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/tools': {
+      id: '/tools'
+      path: '/tools'
+      fullPath: '/tools'
+      preLoaderRoute: typeof ToolsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/watchlist': {
       id: '/watchlist'
       path: '/watchlist'
@@ -349,6 +369,7 @@ const rootRouteChildren: RootRouteChildren = {
   ReadinessRoute: ReadinessRoute,
   ScreenerRoute: ScreenerRoute,
   SettingsRoute: SettingsRoute,
+  ToolsRoute: ToolsRoute,
   WatchlistRoute: WatchlistRoute,
   StocksSymbolRoute: StocksSymbolRoute,
 }
