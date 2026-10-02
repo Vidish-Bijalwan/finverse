@@ -4,6 +4,7 @@ import {
   Camera,
   ChevronLeft,
   ChevronRight,
+  Download,
   Loader2,
   Mic,
   Plus,
@@ -30,9 +31,10 @@ import {
   useTransactions,
 } from "@/lib/finance/hooks";
 import { parseExpenseInput } from "@/lib/nlp";
+import { buildTransactionsCSV } from "@/lib/settings";
 import { useVoiceInput } from "@/lib/voice";
 import type { PayMode, Transaction } from "@/lib/finance/types";
-import { cn } from "@/lib/utils";
+import { cn, downloadFile } from "@/lib/utils";
 
 export const Route = createFileRoute("/expenses")({
   head: () => ({
@@ -189,6 +191,17 @@ function ExpensesPage() {
   const deleteTxn = useDeleteTransaction();
 
   const defaultAccountId = accounts?.find((a) => a.isDefault)?.id ?? accounts?.[0]?.id;
+
+  function handleExportCSV() {
+    if (filtered.length === 0) {
+      toast.info("Nothing to export — no transactions match the current filters.");
+      return;
+    }
+    downloadFile(`finverse-expenses-${month}.csv`, buildTransactionsCSV(filtered), "text/csv");
+    toast.success(
+      `Exported ${filtered.length} transaction${filtered.length === 1 ? "" : "s"} to CSV.`,
+    );
+  }
 
   const {
     supported: voiceSupported,
@@ -386,6 +399,15 @@ function ExpensesPage() {
         >
           <Wallet className="h-4 w-4" /> Accounts
         </Link>
+        <button
+          type="button"
+          onClick={handleExportCSV}
+          aria-label="Export visible transactions to CSV"
+          title="Export visible transactions to CSV"
+          className="flex items-center gap-1.5 rounded-2xl bg-card px-3.5 py-2.5 text-sm font-bold text-primary shadow-tile transition-colors hover:bg-primary/10"
+        >
+          <Download className="h-4 w-4" /> Export
+        </button>
       </div>
 
       {tab === "recurring" ? (
