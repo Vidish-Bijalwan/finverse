@@ -1,14 +1,19 @@
 import { Link, createFileRoute } from "@tanstack/react-router";
 import {
+  Bell,
   Bot,
   BriefcaseBusiness,
+  Calculator,
   ChevronRight,
+  Eye,
   Landmark,
   ReceiptIndianRupee,
   RotateCcw,
+  Settings,
   ShieldCheck,
   Sparkles,
   Target,
+  Wallet,
   WalletCards,
 } from "lucide-react";
 
@@ -40,6 +45,36 @@ const MENU_ROWS = [
   },
   { label: "Goals", description: "Savings goals and milestones", to: "/goals", icon: Target },
   { label: "AI Chat", description: "Ask FinVerse about your money", to: "/chat", icon: Bot },
+  {
+    label: "Accounts",
+    description: "Cash, UPI and bank wallets with live balances",
+    to: "/accounts",
+    icon: Wallet,
+  },
+  {
+    label: "Calculators",
+    description: "SIP, EMI, FD, tax, emergency fund and forecasts",
+    to: "/tools",
+    icon: Calculator,
+  },
+  {
+    label: "Notifications",
+    description: "Bill dues, budget alerts, price alerts and more",
+    to: "/notifications",
+    icon: Bell,
+  },
+  {
+    label: "Watchlist",
+    description: "Track stocks and set price alerts",
+    to: "/watchlist",
+    icon: Eye,
+  },
+  {
+    label: "Settings",
+    description: "Theme, data controls and about",
+    to: "/settings",
+    icon: Settings,
+  },
   {
     label: "Screener",
     description: "Screen stocks by fundamentals",

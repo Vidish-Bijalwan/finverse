@@ -3,9 +3,11 @@ import {
   ArrowRight,
   Bot,
   BriefcaseBusiness,
+  Calculator,
   ChartNoAxesCombined,
   ChevronLeft,
   ChevronRight,
+  Eye,
   Headphones,
   Lightbulb,
   Plus,
@@ -75,6 +77,9 @@ const quickActions = [
   { label: "Goals", icon: Target, to: "/goals" },
   { label: "Portfolio", icon: BriefcaseBusiness, to: "/portfolio" },
   { label: "AI Chat", icon: Bot, to: "/chat" },
+  { label: "Accounts", icon: Wallet, to: "/accounts" },
+  { label: "Calculators", icon: Calculator, to: "/tools" },
+  { label: "Watchlist", icon: Eye, to: "/watchlist" },
 ];
 
 function Logo() {

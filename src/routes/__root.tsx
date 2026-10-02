@@ -15,6 +15,7 @@ import { Toaster } from "@/components/ui/sonner";
 import { AppHeader } from "@/components/shell/AppHeader";
 import { BottomTabBar } from "@/components/shell/BottomTabBar";
 import { PageTransition } from "@/components/shell/PageTransition";
+import { ThemeApplier } from "@/components/shell/ThemeApplier";
 
 function NotFoundComponent() {
   return (
@@ -128,6 +129,7 @@ function RootComponent() {
 
   return (
     <QueryClientProvider client={queryClient}>
+      <ThemeApplier />
       <div className="min-h-screen bg-background text-foreground">
         <AppHeader />
         <main className="pb-24 md:pb-0">
