@@ -1,9 +1,10 @@
-import { createFileRoute } from "@tanstack/react-router";
+import { createFileRoute, Link } from "@tanstack/react-router";
 import { useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Sparkles } from "lucide-react";
 
 import { InsightCard } from "@/components/ai/InsightCard";
+import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { buildInsights } from "@/lib/ai/engine";
@@ -74,6 +75,9 @@ function InsightsPage() {
                   FinVerse AI checked your spending trends, budget usage, upcoming bills, goal pace
                   and savings rate. Everything looks healthy.
                 </p>
+                <Button variant="outline" size="sm" className="mt-4" asChild>
+                  <Link to="/expenses">Review transactions</Link>
+                </Button>
               </CardContent>
             </Card>
           )}

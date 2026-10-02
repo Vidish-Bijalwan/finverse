@@ -11,6 +11,7 @@ import { useEffect, type ReactNode } from "react";
 
 import appCss from "../styles.css?url";
 import { reportLovableError } from "../lib/lovable-error-reporting";
+import { Toaster } from "@/components/ui/sonner";
 import { AppHeader } from "@/components/shell/AppHeader";
 import { BottomTabBar } from "@/components/shell/BottomTabBar";
 import { PageTransition } from "@/components/shell/PageTransition";
@@ -136,6 +137,7 @@ function RootComponent() {
           </PageTransition>
         </main>
         <BottomTabBar />
+        <Toaster richColors position="bottom-center" />
       </div>
     </QueryClientProvider>
   );

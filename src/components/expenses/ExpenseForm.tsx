@@ -1,9 +1,10 @@
 import { useMemo, useState, type CSSProperties } from "react";
 import { Check, Delete, Trash2 } from "lucide-react";
+import { toast } from "sonner";
 
 import { EXPENSE_CATEGORIES, INCOME_CATEGORIES } from "@/lib/finance/categories";
 import { useAddTransaction, useDeleteTransaction, useUpdateTransaction } from "@/lib/finance/hooks";
-import { todayISO } from "@/lib/finance/format";
+import { formatINR, todayISO } from "@/lib/finance/format";
 import type { PayMode, Transaction, TransactionType } from "@/lib/finance/types";
 import { cn } from "@/lib/utils";
 
@@ -139,9 +140,26 @@ export function ExpenseForm({
       payMode,
     };
     if (isEdit && editing) {
-      updateTxn.mutate({ id: editing.id, patch: payload }, { onSuccess: onDone });
+      updateTxn.mutate(
+        { id: editing.id, patch: payload },
+        {
+          onSuccess: () => {
+            toast.success("Transaction updated");
+            onDone();
+          },
+          onError: () => toast.error("Couldn't save — try again."),
+        },
+      );
     } else {
-      addTxn.mutate(payload, { onSuccess: onDone });
+      addTxn.mutate(payload, {
+        onSuccess: () => {
+          toast.success(
+            `${type === "income" ? "Income" : "Expense"} added · ${formatINR(amountPaise)}`,
+          );
+          onDone();
+        },
+        onError: () => toast.error("Couldn't save — try again."),
+      });
     }
   };
 
@@ -151,7 +169,13 @@ export function ExpenseForm({
       setConfirmingDelete(true);
       return;
     }
-    deleteTxn.mutate(editing.id, { onSuccess: onDone });
+    deleteTxn.mutate(editing.id, {
+      onSuccess: () => {
+        toast.success("Transaction deleted");
+        onDone();
+      },
+      onError: () => toast.error("Couldn't delete — try again."),
+    });
   };
 
   const amountColor = type === "expense" ? "text-destructive" : "text-success";
@@ -328,7 +352,7 @@ export function ExpenseForm({
         disabled={saving}
         className={cn(
           "flex h-13 items-center justify-center gap-2 rounded-2xl bg-primary py-3.5 text-base font-bold text-primary-foreground",
-          "transition-opacity hover:opacity-90 disabled:opacity-60",
+          "transition-all hover:opacity-90 active:scale-[0.98] disabled:opacity-60",
         )}
       >
         {saving ? (

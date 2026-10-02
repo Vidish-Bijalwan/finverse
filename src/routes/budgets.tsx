@@ -1,6 +1,7 @@
 import { useMemo, useState } from "react";
 import { createFileRoute } from "@tanstack/react-router";
-import { ChevronLeft, ChevronRight, Pencil, Plus } from "lucide-react";
+import { ChevronLeft, ChevronRight, Pencil, Plus, WalletCards } from "lucide-react";
+import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -157,7 +158,11 @@ function BudgetsPage() {
           setDialogOpen(false);
           setEditing(null);
           setPresetCategoryId(undefined);
+          toast.success(
+            `Budget set · ${categoryById(input.categoryId)?.label ?? "category"} ${formatINR(input.limitPaise)}`,
+          );
         },
+        onError: () => toast.error("Couldn't save — try again."),
       },
     );
   };
@@ -201,6 +206,9 @@ function BudgetsPage() {
       ) : budgets.length === 0 && unbudgeted.length === 0 ? (
         <Card>
           <CardContent className="flex flex-col items-center gap-3 py-12 text-center">
+            <span className="grid size-14 place-items-center rounded-2xl bg-tint">
+              <WalletCards className="size-7 text-primary" />
+            </span>
             <p className="text-lg font-medium">No budgets for {monthLabel(month)}</p>
             <p className="max-w-sm text-sm text-muted-foreground">
               Pick a category and a monthly limit to start tracking spending against it.

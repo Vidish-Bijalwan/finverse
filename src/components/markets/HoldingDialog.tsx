@@ -19,6 +19,7 @@ import {
 } from "@/components/ui/select";
 import { useAddHolding, useUpdateHolding } from "@/lib/finance/hooks";
 import { formatINR } from "@/lib/finance/format";
+import { toast } from "sonner";
 import { STOCKS, getStock } from "@/lib/market/data";
 import { getLTP } from "@/lib/market/history";
 import type { Holding } from "@/lib/finance/types";
@@ -79,12 +80,32 @@ export function HoldingDialog({
     if (isEdit && holding) {
       updateHolding.mutate(
         { id: holding.id, patch: { qty: qtyNum, avgPricePaise } },
-        { onSuccess: () => onOpenChange(false), onError: (e) => setError(e.message) },
+        {
+          onSuccess: () => {
+            toast.success(`Holding updated · ${holding.symbol} × ${qtyNum}`);
+            onOpenChange(false);
+          },
+          onError: (e) => {
+            setError(e.message);
+            toast.error("Couldn't save — try again.");
+          },
+        },
       );
     } else {
       addHolding.mutate(
         { symbol: symbol.toUpperCase(), qty: qtyNum, avgPricePaise },
-        { onSuccess: () => onOpenChange(false), onError: (e) => setError(e.message) },
+        {
+          onSuccess: () => {
+            toast.success(
+              `Holding added · ${symbol.toUpperCase()} × ${qtyNum} · ${formatINR(Math.round(qtyNum * priceNum * 100))}`,
+            );
+            onOpenChange(false);
+          },
+          onError: (e) => {
+            setError(e.message);
+            toast.error("Couldn't save — try again.");
+          },
+        },
       );
     }
   }

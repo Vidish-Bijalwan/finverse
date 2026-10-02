@@ -1,34 +1,26 @@
 import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 import { createPortal } from "react-dom";
+import { X } from "lucide-react";
 
 import { cn } from "@/lib/utils";
+import { usePrefersReducedMotion } from "@/hooks/use-prefers-reduced-motion";
 
 interface BottomSheetProps {
   open: boolean;
   onClose: () => void;
   title?: string;
+  /** Renders an X close button in the header (default false). */
+  showCloseButton?: boolean;
   children: ReactNode;
 }
 
 const DISMISS_THRESHOLD = 110;
 
-function usePrefersReducedMotion() {
-  const [reduced, setReduced] = useState(false);
-  useEffect(() => {
-    const mq = window.matchMedia("(prefers-reduced-motion: reduce)");
-    setReduced(mq.matches);
-    const onChange = (e: MediaQueryListEvent) => setReduced(e.matches);
-    mq.addEventListener("change", onChange);
-    return () => mq.removeEventListener("change", onChange);
-  }, []);
-  return reduced;
-}
-
 /**
  * Reusable bottom sheet: drag handle, swipe-down-to-dismiss on touch,
  * overlay click closes, Escape closes. SSR-safe (renders only in the browser).
  */
-export function BottomSheet({ open, onClose, title, children }: BottomSheetProps) {
+export function BottomSheet({ open, onClose, title, showCloseButton, children }: BottomSheetProps) {
   const [mounted, setMounted] = useState(false);
   const [visible, setVisible] = useState(false);
   const reducedMotion = usePrefersReducedMotion();
@@ -152,10 +144,24 @@ export function BottomSheet({ open, onClose, title, children }: BottomSheetProps
           reducedMotion ? undefined : { transform: open ? "translateY(0)" : "translateY(100%)" }
         }
       >
-        <div className="flex flex-col items-center px-5 pb-2 pt-3">
-          <div className="h-1.5 w-11 rounded-full bg-muted" aria-hidden="true" />
-          {title && (
-            <h2 className="mt-3 w-full text-left text-lg font-bold text-foreground">{title}</h2>
+        <div className="px-5 pb-2 pt-3">
+          <div className="flex flex-col items-center">
+            <div className="h-1.5 w-11 rounded-full bg-muted" aria-hidden="true" />
+          </div>
+          {(title || showCloseButton) && (
+            <div className="mt-3 flex items-center justify-between gap-3">
+              {title ? <h2 className="text-lg font-bold text-foreground">{title}</h2> : <span />}
+              {showCloseButton && (
+                <button
+                  type="button"
+                  onClick={onClose}
+                  aria-label="Close sheet"
+                  className="rounded-full p-2 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+                >
+                  <X className="h-5 w-5" />
+                </button>
+              )}
+            </div>
           )}
         </div>
         <div className="max-h-[calc(88dvh-4rem)] overflow-y-auto px-5 pb-8">{children}</div>

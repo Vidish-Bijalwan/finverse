@@ -1,4 +1,5 @@
 import { Bot } from "lucide-react";
+import { Link } from "@tanstack/react-router";
 
 import { cn } from "@/lib/utils";
 
@@ -32,12 +33,12 @@ export function ChatMessage({ msg }: { msg: ChatMsg }) {
       >
         <p className="whitespace-pre-wrap">{msg.text}</p>
         {msg.link && (
-          <a
-            href={msg.link.to}
+          <Link
+            to={msg.link.to}
             className="mt-2 inline-flex items-center gap-1 font-semibold text-primary hover:underline"
           >
             {msg.link.label} <span aria-hidden>→</span>
-          </a>
+          </Link>
         )}
       </div>
     </div>

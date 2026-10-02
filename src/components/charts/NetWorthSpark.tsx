@@ -9,6 +9,7 @@ import {
 } from "recharts";
 import { ChartSkeleton, MoneyTooltip } from "./shared";
 import { axisTick } from "./money";
+import { usePrefersReducedMotion } from "@/hooks/use-prefers-reduced-motion";
 
 export interface NetWorthPoint {
   /** e.g. "2026-10". */
@@ -27,6 +28,7 @@ interface NetWorthSparkProps {
 
 /** Cumulative net-worth sparkline (area) for the last six months. */
 export function NetWorthSpark({ data, ready, loading }: NetWorthSparkProps) {
+  const reducedMotion = usePrefersReducedMotion();
   if (loading || !ready) return <ChartSkeleton className="h-48" />;
   if (data.length === 0) {
     return (
@@ -73,6 +75,7 @@ export function NetWorthSpark({ data, ready, loading }: NetWorthSparkProps) {
             fill="url(#netWorthFill)"
             dot={false}
             activeDot={{ r: 4, fill: "var(--color-primary)" }}
+            isAnimationActive={!reducedMotion}
           />
         </AreaChart>
       </ResponsiveContainer>

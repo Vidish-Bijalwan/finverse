@@ -1,7 +1,8 @@
 import { useState } from "react";
 import { createFileRoute } from "@tanstack/react-router";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { Check, Pencil, Plus, Trash2 } from "lucide-react";
+import { Check, Pencil, Plus, ReceiptIndianRupee, Trash2 } from "lucide-react";
+import { toast } from "sonner";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -184,13 +185,16 @@ function BillsPage() {
   const [deleting, setDeleting] = useState<Bill | null>(null);
 
   const handleSave = (input: BillFormInput) => {
+    const isEdit = Boolean(editing);
     saveBill.mutate(
       { id: editing?.id, input },
       {
         onSuccess: () => {
           setDialogOpen(false);
           setEditing(null);
+          toast.success(isEdit ? "Bill updated" : `Bill added · ${formatINR(input.amountPaise)}`);
         },
+        onError: () => toast.error("Couldn't save — try again."),
       },
     );
   };
@@ -198,7 +202,11 @@ function BillsPage() {
   const handleDelete = () => {
     if (!deleting) return;
     deleteBill.mutate(deleting.id, {
-      onSuccess: () => setDeleting(null),
+      onSuccess: () => {
+        setDeleting(null);
+        toast.success("Bill deleted");
+      },
+      onError: () => toast.error("Couldn't delete — try again."),
     });
   };
 
@@ -231,6 +239,9 @@ function BillsPage() {
       ) : bills.length === 0 ? (
         <Card>
           <CardContent className="flex flex-col items-center gap-3 py-12 text-center">
+            <span className="grid size-14 place-items-center rounded-2xl bg-tint">
+              <ReceiptIndianRupee className="size-7 text-primary" />
+            </span>
             <p className="text-lg font-medium">No bills yet</p>
             <p className="max-w-sm text-sm text-muted-foreground">
               Add your first recurring bill — rent, electricity, a subscription — and never miss a
@@ -254,7 +265,16 @@ function BillsPage() {
               key={bill.id}
               bill={bill}
               today={today}
-              onPay={() => payBill.mutate({ id: bill.id })}
+              onPay={() =>
+                payBill.mutate(
+                  { id: bill.id },
+                  {
+                    onSuccess: () =>
+                      toast.success(`"${bill.name}" marked paid · ${formatINR(bill.amountPaise)}`),
+                    onError: () => toast.error("Couldn't mark paid — try again."),
+                  },
+                )
+              }
               paying={payBill.isPending && payBill.variables?.id === bill.id}
               onEdit={() => {
                 setEditing(bill);

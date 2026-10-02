@@ -172,6 +172,13 @@
   }
 
   button, a { cursor: pointer; }
+
+  /* Visible focus ring for every interactive element, including custom
+     buttons/chips/rows that don't use the shadcn focus styles. */
+  :focus-visible {
+    outline: 2px solid var(--color-ring);
+    outline-offset: 2px;
+  }
 }
 
 @utility max-w-dashboard { max-width: var(--spacing-dashboard); }

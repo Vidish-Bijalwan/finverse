@@ -39,7 +39,7 @@ const MENU_ROWS = [
     icon: WalletCards,
   },
   { label: "Goals", description: "Savings goals and milestones", to: "/goals", icon: Target },
-  { label: "AI Chat", description: "Ask FinVerse about your money", to: "/ai-chat", icon: Bot },
+  { label: "AI Chat", description: "Ask FinVerse about your money", to: "/chat", icon: Bot },
   {
     label: "Screener",
     description: "Screen stocks by fundamentals",
