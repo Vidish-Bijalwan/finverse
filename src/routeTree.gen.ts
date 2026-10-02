@@ -21,6 +21,8 @@ import { Route as NotificationsRouteImport } from './routes/notifications'
 import { Route as PortfolioRouteImport } from './routes/portfolio'
 import { Route as ReadinessRouteImport } from './routes/readiness'
 import { Route as ScreenerRouteImport } from './routes/screener'
+import { Route as SettingsRouteImport } from './routes/settings'
+import { Route as WatchlistRouteImport } from './routes/watchlist'
 import { Route as StocksSymbolRouteImport } from './routes/stocks.$symbol'
 
 const IndexRoute = IndexRouteImport.update({
@@ -83,6 +85,16 @@ const ScreenerRoute = ScreenerRouteImport.update({
   path: '/screener',
   getParentRoute: () => rootRouteImport,
 } as any)
+const SettingsRoute = SettingsRouteImport.update({
+  id: '/settings',
+  path: '/settings',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const WatchlistRoute = WatchlistRouteImport.update({
+  id: '/watchlist',
+  path: '/watchlist',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const StocksSymbolRoute = StocksSymbolRouteImport.update({
   id: '/stocks/$symbol',
   path: '/stocks/$symbol',
@@ -102,6 +114,8 @@ export interface FileRoutesByFullPath {
   '/portfolio': typeof PortfolioRoute
   '/readiness': typeof ReadinessRoute
   '/screener': typeof ScreenerRoute
+  '/settings': typeof SettingsRoute
+  '/watchlist': typeof WatchlistRoute
   '/stocks/$symbol': typeof StocksSymbolRoute
 }
 export interface FileRoutesByTo {
@@ -117,6 +131,8 @@ export interface FileRoutesByTo {
   '/portfolio': typeof PortfolioRoute
   '/readiness': typeof ReadinessRoute
   '/screener': typeof ScreenerRoute
+  '/settings': typeof SettingsRoute
+  '/watchlist': typeof WatchlistRoute
   '/stocks/$symbol': typeof StocksSymbolRoute
 }
 export interface FileRoutesById {
@@ -133,6 +149,8 @@ export interface FileRoutesById {
   '/portfolio': typeof PortfolioRoute
   '/readiness': typeof ReadinessRoute
   '/screener': typeof ScreenerRoute
+  '/settings': typeof SettingsRoute
+  '/watchlist': typeof WatchlistRoute
   '/stocks/$symbol': typeof StocksSymbolRoute
 }
 export interface FileRouteTypes {
@@ -150,6 +168,8 @@ export interface FileRouteTypes {
     | '/portfolio'
     | '/readiness'
     | '/screener'
+    | '/settings'
+    | '/watchlist'
     | '/stocks/$symbol'
   fileRoutesByTo: FileRoutesByTo
   to:
@@ -165,6 +185,8 @@ export interface FileRouteTypes {
     | '/portfolio'
     | '/readiness'
     | '/screener'
+    | '/settings'
+    | '/watchlist'
     | '/stocks/$symbol'
   id:
     | '__root__'
@@ -180,6 +202,8 @@ export interface FileRouteTypes {
     | '/portfolio'
     | '/readiness'
     | '/screener'
+    | '/settings'
+    | '/watchlist'
     | '/stocks/$symbol'
   fileRoutesById: FileRoutesById
 }
@@ -196,6 +220,8 @@ export interface RootRouteChildren {
   PortfolioRoute: typeof PortfolioRoute
   ReadinessRoute: typeof ReadinessRoute
   ScreenerRoute: typeof ScreenerRoute
+  SettingsRoute: typeof SettingsRoute
+  WatchlistRoute: typeof WatchlistRoute
   StocksSymbolRoute: typeof StocksSymbolRoute
 }
 
@@ -285,6 +311,20 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ScreenerRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/settings': {
+      id: '/settings'
+      path: '/settings'
+      fullPath: '/settings'
+      preLoaderRoute: typeof SettingsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/watchlist': {
+      id: '/watchlist'
+      path: '/watchlist'
+      fullPath: '/watchlist'
+      preLoaderRoute: typeof WatchlistRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/stocks/$symbol': {
       id: '/stocks/$symbol'
       path: '/stocks/$symbol'
@@ -308,6 +348,8 @@ const rootRouteChildren: RootRouteChildren = {
   PortfolioRoute: PortfolioRoute,
   ReadinessRoute: ReadinessRoute,
   ScreenerRoute: ScreenerRoute,
+  SettingsRoute: SettingsRoute,
+  WatchlistRoute: WatchlistRoute,
   StocksSymbolRoute: StocksSymbolRoute,
 }
 export const routeTree = rootRouteImport
