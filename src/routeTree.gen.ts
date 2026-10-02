@@ -13,6 +13,7 @@ import { Route as IndexRouteImport } from './routes/index'
 import { Route as BillsRouteImport } from './routes/bills'
 import { Route as BudgetsRouteImport } from './routes/budgets'
 import { Route as ChatRouteImport } from './routes/chat'
+import { Route as ExpensesRouteImport } from './routes/expenses'
 import { Route as GoalsRouteImport } from './routes/goals'
 import { Route as InsightsRouteImport } from './routes/insights'
 import { Route as MoreRouteImport } from './routes/more'
@@ -37,6 +38,11 @@ const ChatRoute = ChatRouteImport.update({
   path: '/chat',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ExpensesRoute = ExpensesRouteImport.update({
+  id: '/expenses',
+  path: '/expenses',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const GoalsRoute = GoalsRouteImport.update({
   id: '/goals',
   path: '/goals',
@@ -58,6 +64,7 @@ export interface FileRoutesByFullPath {
   '/bills': typeof BillsRoute
   '/budgets': typeof BudgetsRoute
   '/chat': typeof ChatRoute
+  '/expenses': typeof ExpensesRoute
   '/goals': typeof GoalsRoute
   '/insights': typeof InsightsRoute
   '/more': typeof MoreRoute
@@ -67,6 +74,7 @@ export interface FileRoutesByTo {
   '/bills': typeof BillsRoute
   '/budgets': typeof BudgetsRoute
   '/chat': typeof ChatRoute
+  '/expenses': typeof ExpensesRoute
   '/goals': typeof GoalsRoute
   '/insights': typeof InsightsRoute
   '/more': typeof MoreRoute
@@ -77,6 +85,7 @@ export interface FileRoutesById {
   '/bills': typeof BillsRoute
   '/budgets': typeof BudgetsRoute
   '/chat': typeof ChatRoute
+  '/expenses': typeof ExpensesRoute
   '/goals': typeof GoalsRoute
   '/insights': typeof InsightsRoute
   '/more': typeof MoreRoute
@@ -84,15 +93,31 @@ export interface FileRoutesById {
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
   fullPaths:
-    '/' | '/bills' | '/budgets' | '/chat' | '/goals' | '/insights' | '/more'
+    | '/'
+    | '/bills'
+    | '/budgets'
+    | '/chat'
+    | '/expenses'
+    | '/goals'
+    | '/insights'
+    | '/more'
   fileRoutesByTo: FileRoutesByTo
-  to: '/' | '/bills' | '/budgets' | '/chat' | '/goals' | '/insights' | '/more'
+  to:
+    | '/'
+    | '/bills'
+    | '/budgets'
+    | '/chat'
+    | '/expenses'
+    | '/goals'
+    | '/insights'
+    | '/more'
   id:
     | '__root__'
     | '/'
     | '/bills'
     | '/budgets'
     | '/chat'
+    | '/expenses'
     | '/goals'
     | '/insights'
     | '/more'
@@ -103,6 +128,7 @@ export interface RootRouteChildren {
   BillsRoute: typeof BillsRoute
   BudgetsRoute: typeof BudgetsRoute
   ChatRoute: typeof ChatRoute
+  ExpensesRoute: typeof ExpensesRoute
   GoalsRoute: typeof GoalsRoute
   InsightsRoute: typeof InsightsRoute
   MoreRoute: typeof MoreRoute
@@ -138,6 +164,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ChatRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/expenses': {
+      id: '/expenses'
+      path: '/expenses'
+      fullPath: '/expenses'
+      preLoaderRoute: typeof ExpensesRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/goals': {
       id: '/goals'
       path: '/goals'
@@ -167,6 +200,7 @@ const rootRouteChildren: RootRouteChildren = {
   BillsRoute: BillsRoute,
   BudgetsRoute: BudgetsRoute,
   ChatRoute: ChatRoute,
+  ExpensesRoute: ExpensesRoute,
   GoalsRoute: GoalsRoute,
   InsightsRoute: InsightsRoute,
   MoreRoute: MoreRoute,
