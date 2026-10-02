@@ -17,6 +17,10 @@ import { Route as ExpensesRouteImport } from './routes/expenses'
 import { Route as GoalsRouteImport } from './routes/goals'
 import { Route as InsightsRouteImport } from './routes/insights'
 import { Route as MoreRouteImport } from './routes/more'
+import { Route as PortfolioRouteImport } from './routes/portfolio'
+import { Route as ReadinessRouteImport } from './routes/readiness'
+import { Route as ScreenerRouteImport } from './routes/screener'
+import { Route as StocksSymbolRouteImport } from './routes/stocks.$symbol'
 
 const IndexRoute = IndexRouteImport.update({
   id: '/',
@@ -58,6 +62,26 @@ const MoreRoute = MoreRouteImport.update({
   path: '/more',
   getParentRoute: () => rootRouteImport,
 } as any)
+const PortfolioRoute = PortfolioRouteImport.update({
+  id: '/portfolio',
+  path: '/portfolio',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ReadinessRoute = ReadinessRouteImport.update({
+  id: '/readiness',
+  path: '/readiness',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ScreenerRoute = ScreenerRouteImport.update({
+  id: '/screener',
+  path: '/screener',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const StocksSymbolRoute = StocksSymbolRouteImport.update({
+  id: '/stocks/$symbol',
+  path: '/stocks/$symbol',
+  getParentRoute: () => rootRouteImport,
+} as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
@@ -68,6 +92,10 @@ export interface FileRoutesByFullPath {
   '/goals': typeof GoalsRoute
   '/insights': typeof InsightsRoute
   '/more': typeof MoreRoute
+  '/portfolio': typeof PortfolioRoute
+  '/readiness': typeof ReadinessRoute
+  '/screener': typeof ScreenerRoute
+  '/stocks/$symbol': typeof StocksSymbolRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
@@ -78,6 +106,10 @@ export interface FileRoutesByTo {
   '/goals': typeof GoalsRoute
   '/insights': typeof InsightsRoute
   '/more': typeof MoreRoute
+  '/portfolio': typeof PortfolioRoute
+  '/readiness': typeof ReadinessRoute
+  '/screener': typeof ScreenerRoute
+  '/stocks/$symbol': typeof StocksSymbolRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -89,6 +121,10 @@ export interface FileRoutesById {
   '/goals': typeof GoalsRoute
   '/insights': typeof InsightsRoute
   '/more': typeof MoreRoute
+  '/portfolio': typeof PortfolioRoute
+  '/readiness': typeof ReadinessRoute
+  '/screener': typeof ScreenerRoute
+  '/stocks/$symbol': typeof StocksSymbolRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
@@ -101,6 +137,10 @@ export interface FileRouteTypes {
     | '/goals'
     | '/insights'
     | '/more'
+    | '/portfolio'
+    | '/readiness'
+    | '/screener'
+    | '/stocks/$symbol'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
@@ -111,6 +151,10 @@ export interface FileRouteTypes {
     | '/goals'
     | '/insights'
     | '/more'
+    | '/portfolio'
+    | '/readiness'
+    | '/screener'
+    | '/stocks/$symbol'
   id:
     | '__root__'
     | '/'
@@ -121,6 +165,10 @@ export interface FileRouteTypes {
     | '/goals'
     | '/insights'
     | '/more'
+    | '/portfolio'
+    | '/readiness'
+    | '/screener'
+    | '/stocks/$symbol'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -132,6 +180,10 @@ export interface RootRouteChildren {
   GoalsRoute: typeof GoalsRoute
   InsightsRoute: typeof InsightsRoute
   MoreRoute: typeof MoreRoute
+  PortfolioRoute: typeof PortfolioRoute
+  ReadinessRoute: typeof ReadinessRoute
+  ScreenerRoute: typeof ScreenerRoute
+  StocksSymbolRoute: typeof StocksSymbolRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -192,6 +244,34 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof MoreRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/portfolio': {
+      id: '/portfolio'
+      path: '/portfolio'
+      fullPath: '/portfolio'
+      preLoaderRoute: typeof PortfolioRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/readiness': {
+      id: '/readiness'
+      path: '/readiness'
+      fullPath: '/readiness'
+      preLoaderRoute: typeof ReadinessRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/screener': {
+      id: '/screener'
+      path: '/screener'
+      fullPath: '/screener'
+      preLoaderRoute: typeof ScreenerRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/stocks/$symbol': {
+      id: '/stocks/$symbol'
+      path: '/stocks/$symbol'
+      fullPath: '/stocks/$symbol'
+      preLoaderRoute: typeof StocksSymbolRouteImport
+      parentRoute: typeof rootRouteImport
+    }
   }
 }
 
@@ -204,6 +284,10 @@ const rootRouteChildren: RootRouteChildren = {
   GoalsRoute: GoalsRoute,
   InsightsRoute: InsightsRoute,
   MoreRoute: MoreRoute,
+  PortfolioRoute: PortfolioRoute,
+  ReadinessRoute: ReadinessRoute,
+  ScreenerRoute: ScreenerRoute,
+  StocksSymbolRoute: StocksSymbolRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
