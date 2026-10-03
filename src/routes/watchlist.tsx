@@ -94,9 +94,23 @@ function WatchlistPage() {
 
   const ready = !isPending && !isError && prices !== null;
 
-  function handleRefresh() {
-    (entries ?? []).forEach((e) => refreshLTP(e.symbol));
-    setTick((t) => t + 1);
+  const [isRefreshing, setIsRefreshing] = useState(false);
+
+  /**
+   * "Refresh prices": jitter fresh demo LTPs AND refetch the watchlist
+   * entries from the server query. Spins the icon while the async refetch is
+   * in flight; the button is only disabled while data is still loading (a
+   * transient skeleton state), never dead with no explanation.
+   */
+  async function handleRefresh() {
+    setIsRefreshing(true);
+    try {
+      (entries ?? []).forEach((e) => refreshLTP(e.symbol));
+      setTick((t) => t + 1);
+      await refetch();
+    } finally {
+      setIsRefreshing(false);
+    }
     toast.success("Prices refreshed.");
   }
 
@@ -159,11 +173,20 @@ function WatchlistPage() {
         <Button
           variant="outline"
           size="sm"
-          onClick={handleRefresh}
-          disabled={!ready}
+          onClick={() => {
+            void handleRefresh();
+          }}
+          disabled={!ready || isRefreshing}
+          aria-busy={isRefreshing}
           className={pressable}
         >
-          <RefreshCw className={cn("size-4", !reducedMotion && "transition-transform")} />
+          <RefreshCw
+            className={cn(
+              "size-4",
+              isRefreshing && "animate-spin",
+              !reducedMotion && "transition-transform",
+            )}
+          />
           Refresh prices
         </Button>
       }

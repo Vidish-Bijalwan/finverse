@@ -4,7 +4,8 @@ import type { FinanceDB } from "./finance/types";
 import { getStock } from "./market/data";
 import { getLTP } from "./market/history";
 import { formatINR } from "./finance/format";
-import { getSupabase } from "@/lib/supabase";
+import { getSessionUserId, getSupabase } from "@/lib/supabase";
+import { FINVERSE_QUERY_DEFAULTS } from "./query";
 
 /**
  * Stock watchlist with price alerts, persisted in Supabase.
@@ -81,12 +82,10 @@ function isAlertDirection(v: unknown): v is AlertKind {
 
 /** Signed-in user id, or a clear error when there is no session. */
 async function requireUserId(): Promise<string> {
-  const { data, error } = await getSupabase().auth.getUser();
-  const id = data.user?.id;
-  if (error || !id) {
-    throw new Error("Sign in to use your watchlist.");
-  }
-  return id;
+  // Session-storage read, no /auth/v1/user round-trip (see getSessionUserId):
+  // the old network call timed out on slow connections and every watchlist
+  // load failed before the table query even ran.
+  return getSessionUserId();
 }
 
 function toPriceAlert(row: PriceAlertRow): PriceAlert {
@@ -345,7 +344,10 @@ function useInvalidateWatchlist() {
 }
 
 export function useWatchlist() {
-  return useQuery({ queryKey: QK_WATCHLIST, queryFn: fetchWatchlist, retry: false });
+  // Bounded retries (not retry:false): a single timed-out request no longer
+  // drops straight to "Couldn't load your watchlist" — transient blips
+  // recover, persistent failures still surface a definitive error.
+  return useQuery({ ...FINVERSE_QUERY_DEFAULTS, queryKey: QK_WATCHLIST, queryFn: fetchWatchlist });
 }
 
 export function useAddToWatchlist() {

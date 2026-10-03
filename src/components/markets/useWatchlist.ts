@@ -7,6 +7,7 @@ import {
   useRemoveFromWatchlist,
   WATCHLIST_QUERY_KEY,
 } from "@/lib/watchlist";
+import { FINVERSE_QUERY_DEFAULTS } from "@/lib/query";
 
 /**
  * Watchlist of stock symbols, backed by Supabase through the shared watchlist
@@ -20,9 +21,9 @@ export function useWatchlist(): {
   toggle: (symbol: string) => void;
 } {
   const { data: entries } = useQuery({
+    ...FINVERSE_QUERY_DEFAULTS,
     queryKey: WATCHLIST_QUERY_KEY,
     queryFn: fetchWatchlist,
-    retry: false,
   });
   const addStock = useAddToWatchlist();
   const removeStock = useRemoveFromWatchlist();

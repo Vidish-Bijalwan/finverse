@@ -99,8 +99,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
         const {
           data: { subscription: sub },
-        } = supabase.auth.onAuthStateChange((_event, session) => {
-          setLoading(true);
+        } = supabase.auth.onAuthStateChange((event, session) => {
+          // Token refreshes (hourly + on tab refocus) must NOT tear down the
+          // UI: the signed-in user hasn't changed, so resolve silently and
+          // keep the current screen and its queries. The old code flipped the
+          // full loading gate (SplashScreen → every query restarting from
+          // skeleton) on every TOKEN_REFRESHED, which read as loading that
+          // never resolved. Only a real sign-in/out re-runs the gate.
+          if (event === "SIGNED_IN" || event === "SIGNED_OUT") {
+            setLoading(true);
+          }
           void resolveSession(session?.user ?? null);
         });
         subscription = sub;

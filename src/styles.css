@@ -1,9 +1,4 @@
 @import url("https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&display=swap");
-/* Editorial serif for major headings. Combined with Space Grotesk for money
-   numerals + sans body, serif+sans+mono-numerals is the editorial signature.
-   NOTE: preconnect <link> tags still need adding to the document head in
-   src/routes/__root.tsx (out of scope for this worker). */
-@import url("https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400..700&display=swap");
 @import "tailwindcss" source(none);
 @source "../src";
 @import "tw-animate-css";
@@ -25,14 +20,12 @@
  */
 
 @theme inline {
-  --font-sans: "Roboto", "Segoe UI", Arial, sans-serif;
-  /* Display grotesque: money numerals + hero numbers ONLY (numerals need
-     its tabular clarity). Loaded via Google Fonts @import above (display=swap).
-     NOTE: preconnect <link> tags still need adding to the document head in
-     src/routes/__root.tsx (out of scope). */
-  --font-display: "Space Grotesk", "Roboto", "Segoe UI", Arial, sans-serif;
-  /* Editorial serif: major HEADINGS (h1–h4). Kills the AI look. */
-  --font-display-serif: "Fraunces", Georgia, "Times New Roman", serif;
+  /* One typeface family for the whole product UI: Space Grotesk, body to
+     headings. Loaded via Google Fonts @import above (display=swap). */
+  --font-sans: "Space Grotesk", "Segoe UI", Arial, sans-serif;
+  /* Display grotesque: headings (h1–h4 base rule below) + money numerals +
+     hero numbers. */
+  --font-display: "Space Grotesk", "Segoe UI", Arial, sans-serif;
   --spacing-dashboard: 78rem;
   --radius-sm: calc(var(--radius) - 4px);
   --radius-md: calc(var(--radius) - 2px);
@@ -272,12 +265,14 @@
     }
   }
 
-  /* Editorial serif for major headings (h1–h4). Money numerals and hero
-     numbers stay in Space Grotesk — use .fv-money / .fv-hero or
+  /* Product headings (h1–h4): Space Grotesk 600, tight tracking. One
+     typeface family across the whole product UI — no serif. Money numerals
+     and hero numbers stay Space Grotesk too — use .fv-money / .fv-hero or
      <NumberDisplay> for those. */
   h1, h2, h3, h4 {
-    font-family: var(--font-display-serif);
-    letter-spacing: -0.015em;
+    font-family: var(--font-display);
+    font-weight: 600;
+    letter-spacing: -0.02em;
   }
 
   button, a { cursor: pointer; }
@@ -345,14 +340,15 @@
   border-top: 3px solid var(--color-primary);
 }
 
-/* Skeleton shimmer tinted with the brand accent. Geometry stays the caller's
-   (rounded-md passthrough) — only the fill animates. */
+/* Skeleton shimmer: neutral gray sweep at ~8% opacity. Quiet by design —
+   geometry stays the caller's (rounded-md passthrough), only the fill
+   animates. */
 @utility fv-shimmer {
   background-color: var(--color-muted);
   background-image: linear-gradient(
     100deg,
     transparent 25%,
-    color-mix(in oklch, var(--color-primary) 30%, transparent) 50%,
+    color-mix(in oklch, var(--color-foreground) 8%, transparent) 50%,
     transparent 75%
   );
   background-size: 220% 100%;
