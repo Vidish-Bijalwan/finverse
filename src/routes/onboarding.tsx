@@ -319,7 +319,7 @@ function OnboardingWizard({ userId }: { userId: string }) {
               id="display-name"
               value={displayName}
               onChange={(e) => setDisplayName(e.target.value)}
-              placeholder="e.g. Vidish Bijalwan"
+              placeholder="e.g. John Doe"
               autoComplete="name"
               maxLength={80}
             />
