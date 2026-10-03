@@ -8,7 +8,7 @@ const TABS = [
   { label: "Home", to: "/", icon: Home },
   { label: "Pay", to: "/payments", icon: Send },
   { label: "Invest", to: "/portfolio", icon: TrendingUp },
-  { label: "Markets", to: "/watchlist", icon: LineChart },
+  { label: "Markets", to: "/markets", icon: LineChart },
   { label: "Activity", to: "/expenses", icon: ReceiptText },
 ] as const;
 

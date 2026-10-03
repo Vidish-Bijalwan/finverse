@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { axisTick, paiseAxisTick } from "./money";
+import { axisTick, paiseAxisTick, paiseTicks } from "./money";
 
 describe("paiseAxisTick", () => {
   it("formats paise as rupees — the Phase 4 review 100× axis bug", () => {
@@ -19,5 +19,37 @@ describe("paiseAxisTick", () => {
 describe("axisTick", () => {
   it("renders compact short-form labels", () => {
     expect(axisTick(4000000)).toBe("₹40K");
+  });
+});
+
+describe("paiseTicks — unique labels", () => {
+  const labels = (ticks: number[]) => ticks.map(paiseAxisTick);
+
+  it("never emits duplicate labels on a flat series (the reported ₹1,578×2 bug)", () => {
+    // Flat ₹1,578 history: recharts auto ticks emitted 157750/157800 paise,
+    // both rounding to "₹1,578".
+    const ticks = paiseTicks([157800, 157800, 157800, 157800]);
+    expect(ticks.length).toBeGreaterThanOrEqual(2);
+    const ls = labels(ticks);
+    expect(new Set(ls).size).toBe(ls.length);
+  });
+
+  it("keeps labels unique on near-flat series", () => {
+    const ticks = paiseTicks([157790, 157795, 157800, 157805, 157810]);
+    const ls = labels(ticks);
+    expect(new Set(ls).size).toBe(ls.length);
+  });
+
+  it("spans the data range on a normal series", () => {
+    const ticks = paiseTicks([140000, 145000, 150000, 160000, 155000]);
+    expect(ticks.length).toBeGreaterThanOrEqual(2);
+    const ls = labels(ticks);
+    expect(new Set(ls).size).toBe(ls.length);
+    expect(Math.min(...ticks)).toBeLessThanOrEqual(140000);
+    expect(Math.max(...ticks)).toBeGreaterThanOrEqual(160000);
+  });
+
+  it("returns [] for empty input", () => {
+    expect(paiseTicks([])).toEqual([]);
   });
 });

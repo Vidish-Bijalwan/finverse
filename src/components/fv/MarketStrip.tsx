@@ -5,8 +5,8 @@ import { TrendingDown, TrendingUp } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { NumberDisplay, pressable } from "@/components/fv";
 import { getStock } from "@/lib/market/data";
-import { getIndex, INDICES } from "@/lib/market/indices";
-import { dayChange, genHistory, getLTP } from "@/lib/market/history";
+import { INDICES } from "@/lib/market/indices";
+import { getQuote } from "@/lib/market/quote";
 import { formatINR } from "@/lib/finance/format";
 
 interface StripItem {
@@ -42,14 +42,17 @@ export function MarketStrip({
   className?: string;
 }) {
   const { indices, stocks }: { indices: StripItem[]; stocks: StripItem[] } = useMemo(() => {
+    // ONE quote source for price + change (see lib/market/quote.ts): the
+    // strip used to derive % from the static listed close while displaying
+    // the jittered LTP, disagreeing with the Market snapshot card.
     const indices: StripItem[] = INDICES.map((idx) => {
-      const change = dayChange(genHistory(idx.symbol, 2));
+      const q = getQuote(idx.symbol)!;
       return {
         symbol: idx.symbol,
         name: idx.name,
-        pricePaise: getLTP(idx.symbol),
-        changePaise: change.changePaise,
-        changePct: change.changePct,
+        pricePaise: q.pricePaise,
+        changePaise: q.changePaise,
+        changePct: q.changePct,
         kind: "index" as const,
       };
     });
@@ -59,13 +62,14 @@ export function MarketStrip({
       const stock = getStock(sym);
       if (!stock || seen.has(stock.symbol)) continue;
       seen.add(stock.symbol);
-      const change = dayChange(genHistory(stock.symbol, 2));
+      const q = getQuote(stock.symbol);
+      if (!q) continue;
       stocks.push({
         symbol: stock.symbol,
         name: stock.name,
-        pricePaise: getLTP(stock.symbol),
-        changePaise: change.changePaise,
-        changePct: change.changePct,
+        pricePaise: q.pricePaise,
+        changePaise: q.changePaise,
+        changePct: q.changePct,
         kind: "stock",
       });
     }

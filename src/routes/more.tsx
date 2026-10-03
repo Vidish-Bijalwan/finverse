@@ -72,7 +72,7 @@ const MENU_ROWS = [
   {
     label: "Watchlist",
     description: "Track stocks and set price alerts",
-    to: "/watchlist",
+    to: "/markets",
     icon: Eye,
   },
   {

@@ -26,7 +26,7 @@ const NAV_ITEMS = [
   { label: "Home", to: "/" },
   { label: "Payments", to: "/payments" },
   { label: "Invest", to: "/portfolio" },
-  { label: "Markets", to: "/watchlist" },
+  { label: "Markets", to: "/markets" },
   { label: "Activity", to: "/expenses" },
 ] as const;
 

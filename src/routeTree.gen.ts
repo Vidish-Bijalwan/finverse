@@ -18,6 +18,7 @@ import { Route as ExpensesRouteImport } from './routes/expenses'
 import { Route as GoalsRouteImport } from './routes/goals'
 import { Route as InsightsRouteImport } from './routes/insights'
 import { Route as LoginRouteImport } from './routes/login'
+import { Route as MarketsRouteImport } from './routes/markets'
 import { Route as MoreRouteImport } from './routes/more'
 import { Route as NotificationsRouteImport } from './routes/notifications'
 import { Route as OnboardingRouteImport } from './routes/onboarding'
@@ -76,6 +77,11 @@ const InsightsRoute = InsightsRouteImport.update({
 const LoginRoute = LoginRouteImport.update({
   id: '/login',
   path: '/login',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const MarketsRoute = MarketsRouteImport.update({
+  id: '/markets',
+  path: '/markets',
   getParentRoute: () => rootRouteImport,
 } as any)
 const MoreRoute = MoreRouteImport.update({
@@ -159,6 +165,7 @@ export interface FileRoutesByFullPath {
   '/goals': typeof GoalsRoute
   '/insights': typeof InsightsRoute
   '/login': typeof LoginRoute
+  '/markets': typeof MarketsRoute
   '/more': typeof MoreRoute
   '/notifications': typeof NotificationsRoute
   '/onboarding': typeof OnboardingRoute
@@ -184,6 +191,7 @@ export interface FileRoutesByTo {
   '/goals': typeof GoalsRoute
   '/insights': typeof InsightsRoute
   '/login': typeof LoginRoute
+  '/markets': typeof MarketsRoute
   '/more': typeof MoreRoute
   '/notifications': typeof NotificationsRoute
   '/onboarding': typeof OnboardingRoute
@@ -210,6 +218,7 @@ export interface FileRoutesById {
   '/goals': typeof GoalsRoute
   '/insights': typeof InsightsRoute
   '/login': typeof LoginRoute
+  '/markets': typeof MarketsRoute
   '/more': typeof MoreRoute
   '/notifications': typeof NotificationsRoute
   '/onboarding': typeof OnboardingRoute
@@ -237,6 +246,7 @@ export interface FileRouteTypes {
     | '/goals'
     | '/insights'
     | '/login'
+    | '/markets'
     | '/more'
     | '/notifications'
     | '/onboarding'
@@ -262,6 +272,7 @@ export interface FileRouteTypes {
     | '/goals'
     | '/insights'
     | '/login'
+    | '/markets'
     | '/more'
     | '/notifications'
     | '/onboarding'
@@ -287,6 +298,7 @@ export interface FileRouteTypes {
     | '/goals'
     | '/insights'
     | '/login'
+    | '/markets'
     | '/more'
     | '/notifications'
     | '/onboarding'
@@ -313,6 +325,7 @@ export interface RootRouteChildren {
   GoalsRoute: typeof GoalsRoute
   InsightsRoute: typeof InsightsRoute
   LoginRoute: typeof LoginRoute
+  MarketsRoute: typeof MarketsRoute
   MoreRoute: typeof MoreRoute
   NotificationsRoute: typeof NotificationsRoute
   OnboardingRoute: typeof OnboardingRoute
@@ -392,6 +405,13 @@ declare module '@tanstack/react-router' {
       path: '/login'
       fullPath: '/login'
       preLoaderRoute: typeof LoginRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/markets': {
+      id: '/markets'
+      path: '/markets'
+      fullPath: '/markets'
+      preLoaderRoute: typeof MarketsRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/more': {
@@ -505,6 +525,7 @@ const rootRouteChildren: RootRouteChildren = {
   GoalsRoute: GoalsRoute,
   InsightsRoute: InsightsRoute,
   LoginRoute: LoginRoute,
+  MarketsRoute: MarketsRoute,
   MoreRoute: MoreRoute,
   NotificationsRoute: NotificationsRoute,
   OnboardingRoute: OnboardingRoute,

@@ -7,7 +7,8 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { fetchWatchlist, WATCHLIST_QUERY_KEY } from "@/lib/watchlist";
 import { FINVERSE_QUERY_DEFAULTS } from "@/lib/query";
 import { getStock } from "@/lib/market/data";
-import { dayChange, genHistory, getLTP } from "@/lib/market/history";
+import { genHistory } from "@/lib/market/history";
+import { getQuote } from "@/lib/market/quote";
 import { changePctLabel, directionForChangePct, sparklineValues } from "@/lib/market/movers";
 import { formatINR } from "@/lib/finance/format";
 import { cn } from "@/lib/utils";
@@ -48,12 +49,15 @@ export function WatchlistCard() {
       (entries ?? []).slice(0, MAX_ROWS).map((e) => {
         const stock = getStock(e.symbol);
         const h = genHistory(e.symbol, 22);
+        // Same single quote source as the strip + snapshot: displayed price
+        // and % can never disagree.
+        const q = getQuote(e.symbol);
         return {
           symbol: e.symbol,
           name: stock?.name ?? e.symbol,
           initial: (stock?.name ?? e.symbol).charAt(0).toUpperCase(),
-          pricePaise: getLTP(e.symbol),
-          changePct: dayChange(h).changePct,
+          pricePaise: q?.pricePaise ?? 0,
+          changePct: q?.changePct ?? 0,
           spark: sparklineValues(h, 20),
         };
       }),
@@ -70,7 +74,7 @@ export function WatchlistCard() {
           </p>
         </div>
         <Link
-          to="/watchlist"
+          to="/markets"
           className="inline-flex shrink-0 items-center gap-1 text-sm font-bold text-primary hover:underline"
         >
           View all <span aria-hidden>→</span>
@@ -101,7 +105,7 @@ export function WatchlistCard() {
           title="Build your watchlist"
           body="Track stocks you care about."
           actionLabel="Explore stocks"
-          onAction={() => void navigate({ to: "/watchlist" })}
+          onAction={() => void navigate({ to: "/markets" })}
         />
       ) : (
         <ul className="divide-y divide-border/60">

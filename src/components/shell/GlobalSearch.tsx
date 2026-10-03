@@ -51,7 +51,7 @@ const FEATURES: { title: string; keywords: string; to: string }[] = [
   {
     title: "Markets · Watchlist",
     keywords: "markets watchlist stocks screener nifty sensex",
-    to: "/watchlist",
+    to: "/markets",
   },
   {
     title: "Activity · Transactions",

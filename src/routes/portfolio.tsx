@@ -35,7 +35,8 @@ import { firstBuyDateBySymbol } from "@/lib/finance/investments";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import { getStock, STOCKS } from "@/lib/market/data";
-import { dayChange, genHistory, getLTP, refreshLTP } from "@/lib/market/history";
+import { genHistory, getLTP, refreshLTP } from "@/lib/market/history";
+import { getQuote } from "@/lib/market/quote";
 import { PageShell } from "@/components/markets/PageShell";
 import { HoldingDialog } from "@/components/markets/HoldingDialog";
 import { SipSheet } from "@/components/markets/SipSheet";
@@ -704,8 +705,10 @@ function PortfolioPage() {
                     {watchlist.map((symbol) => {
                       const stock = getStock(symbol);
                       const name = stock?.name ?? symbol;
-                      const price = priceOf(symbol);
-                      const changePct = dayChange(genHistory(symbol, 22)).changePct;
+                      // Single quote source: price and % share one basis.
+                      const q = getQuote(symbol);
+                      const price = q?.pricePaise ?? priceOf(symbol);
+                      const changePct = q?.changePct ?? 0;
                       return (
                         <li key={symbol}>
                           <MarketRow

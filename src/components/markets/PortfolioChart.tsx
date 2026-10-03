@@ -12,7 +12,7 @@ import {
 
 import { cn } from "@/lib/utils";
 import { formatINR } from "@/lib/finance/format";
-import { paiseAxisTick } from "@/components/charts/money";
+import { paiseAxisTick, paiseTicks } from "@/components/charts/money";
 import { genHistory } from "@/lib/market/history";
 import { usePrefersReducedMotion } from "@/hooks/use-prefers-reduced-motion";
 import { Pill } from "@/components/fv/Pill";
@@ -149,6 +149,13 @@ export function PortfolioChart({
   const up = !first || !last || last.valuePaise >= first.valuePaise;
   const stroke = up ? "var(--gain)" : "var(--loss)";
 
+  // Explicit ticks with deduped labels: recharts' auto ticks on a flat
+  // series emit values that round to identical "₹X" labels. The domain is
+  // pinned to the tick extent so every tick renders inside the axis.
+  const yTicks = useMemo(() => paiseTicks(points.map((p) => p.valuePaise)), [points]);
+  const yDomain: [number, number] | ["auto", "auto"] =
+    yTicks.length >= 2 ? [yTicks[0]!, yTicks[yTicks.length - 1]!] : ["auto", "auto"];
+
   return (
     <div>
       <div className="mb-3 flex flex-wrap items-center justify-end gap-2">
@@ -195,7 +202,8 @@ export function PortfolioChart({
                 minTickGap={48}
               />
               <YAxis
-                domain={["auto", "auto"]}
+                domain={yDomain}
+                {...(yTicks.length >= 2 ? { ticks: yTicks } : {})}
                 tickLine={false}
                 axisLine={false}
                 tick={{ fontSize: 11, fill: "var(--muted-foreground)" }}

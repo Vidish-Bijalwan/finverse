@@ -3,7 +3,7 @@ import { Link } from "@tanstack/react-router";
 import { cn } from "@/lib/utils";
 import { NumberDisplay } from "./NumberDisplay";
 import { STOCKS } from "@/lib/market/data";
-import { dayChange, genHistory, getLTP } from "@/lib/market/history";
+import { getQuote } from "@/lib/market/quote";
 import { usePrefersReducedMotion } from "@/hooks/use-prefers-reduced-motion";
 
 /** Default strip: 12 largest Indian stocks by market cap. */
@@ -55,13 +55,16 @@ export function TickerStrip({
     return (symbols ?? DEFAULT_SYMBOLS).flatMap((sym) => {
       const stock = STOCKS.find((s) => s.symbol === sym);
       if (!stock) return [];
-      const change = dayChange(genHistory(stock.symbol, 2));
+      // Single quote source (lib/market/quote.ts): displayed price and %
+      // share one basis, matching the market strip + snapshot.
+      const q = getQuote(stock.symbol);
+      if (!q) return [];
       return [
         {
           symbol: stock.symbol,
           name: stock.name,
-          pricePaise: getLTP(stock.symbol),
-          changePct: change.changePct,
+          pricePaise: q.pricePaise,
+          changePct: q.changePct,
         },
       ];
     });

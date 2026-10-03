@@ -4,11 +4,11 @@ import { useMemo } from "react";
 import { Sparkline, pressable } from "@/components/fv";
 import { INDICES } from "@/lib/market/indices";
 import { STOCKS } from "@/lib/market/data";
-import { genHistory, getLTP } from "@/lib/market/history";
+import { genHistory } from "@/lib/market/history";
+import { getQuote } from "@/lib/market/quote";
 import {
   changePctLabel,
   directionForChangePct,
-  ltpChangePct,
   mostActive,
   rangePctOf,
   sparklineValues,
@@ -130,16 +130,16 @@ function MoverGroup({ label, rows }: { label: string; rows: MoverRow[] }) {
  */
 export function MarketSnapshot() {
   const { indices, gainers, losers, active } = useMemo(() => {
+    // Index cards read the ONE shared quote (lib/market/quote.ts) — the same
+    // source the market strip uses — so the two can never show different %
+    // values for one index.
     const idx: IndexCard[] = INDICES.map((i) => {
+      const q = getQuote(i.symbol)!;
       const h = genHistory(i.symbol, 22);
-      const ltp = getLTP(i.symbol);
-      const prevClose = h.length > 1 ? h[h.length - 2]!.closePaise : undefined;
       return {
         name: i.name,
-        // One consistent snapshot: the % change is computed against the SAME
-        // jittered LTP that is displayed — never against the static close.
-        pricePaise: ltp,
-        changePct: ltpChangePct(ltp, prevClose),
+        pricePaise: q.pricePaise,
+        changePct: q.changePct,
         spark: sparklineValues(h, 20),
       };
     });
@@ -150,18 +150,16 @@ export function MarketSnapshot() {
       // twice in the mover lists even if the dataset ever duplicates one.
       if (seen.has(s.symbol)) continue;
       seen.add(s.symbol);
-      // genHistory is deterministic per symbol, so the last two points of a
-      // 22-day history match the 2-day dayChange; reuse it for the range.
+      const q = getQuote(s.symbol);
+      if (!q) continue;
+      // genHistory is deterministic per symbol; the 22-day history feeds the
+      // sparkline/range while price + % come from the shared quote.
       const h = genHistory(s.symbol, 22);
-      const ltp = getLTP(s.symbol);
-      const prevClose = h.length > 1 ? h[h.length - 2]!.closePaise : undefined;
       rows.push({
         symbol: s.symbol,
         name: s.name,
-        // Same consistency rule as the index cards: changePct is derived
-        // from the displayed LTP, so price and % always agree.
-        pricePaise: ltp,
-        changePct: ltpChangePct(ltp, prevClose),
+        pricePaise: q.pricePaise,
+        changePct: q.changePct,
         rangePct: rangePctOf(sparklineValues(h, 20)),
       });
     }

@@ -769,3 +769,29 @@ Legacy investment rows guarded with `isInvestmentOrder` in `src/routes/budgets.t
 | `bun x eslint` (touched: login.tsx, index.tsx + earlier 16) | **0 errors** |
 | `bun run build` | ✅ green (TanStack Start + Nitro) |
 | Responsive QA (headless, 5 viewports × /login, /) | **10/10 PASS**, no horizontal overflow; 1 real defect fixed (login height) |
+
+## Post-review fixes — ship-verdict follow-ups (3 issues) — 2026-10-03
+
+The final screenshot review gave a SHIP verdict with 3 remaining real issues. All fixed on `feature/fintech-overhaul`, verified below.
+
+### Fix 1 — Contradictory index % changes (strip vs snapshot)
+**Root cause:** two different formulas for one number. The market strip computed `changePct` from the STATIC listed close (`dayChange(genHistory(sym, 2))`) while DISPLAYING the jittered LTP; the Market snapshot card computed it from the jittered LTP (`ltpChangePct(ltp, prevClose)`). Same index, two % values on one screen (BANK NIFTY +0.10% vs −0.32%). The strip was even internally inconsistent (price and % disagreed with each other).
+**Fix:** new `src/lib/market/quote.ts` — `getQuote(symbol)` is now the ONE sanctioned quote source (jittered LTP vs the deterministic penultimate close, which is identical for any history length since `genHistory` is seeded per symbol). `MarketStrip`, `MarketSnapshot` (index cards + mover rows), `WatchlistCard`, the /markets page rows, `TickerStrip` (/portfolio), the /portfolio watchlist section, and the /screener suggestion + result rows all read price + change from it. (The /stocks/$symbol detail page already derived % from its displayed history — internally consistent, left alone.)
+**Tests:** `src/lib/market/quote.test.ts` (4 tests) — unknown symbol → undefined; session stability (repeated calls identical); % derived from the displayed price basis (the exact reported contradiction); strip-style and snapshot-style call sites agree.
+
+### Fix 2 — /markets was a 404
+**Root cause:** nav label "Markets" pointed at `/watchlist`; no `/markets` route existed.
+**Fix:** `/markets` is now the canonical route (`src/routes/markets.tsx`, page titled "Markets", brief §3 nav intact). The watchlist page component moved there unchanged. `/watchlist` is a `beforeLoad` redirect to `/markets` (no dead route, old deep links/bookmarks/notification links keep working). Nav (AppHeader, BottomTabBar) points at `/markets`; all internal links (WatchlistCard ×2, GlobalSearch "Markets · Watchlist", watchlist price-alert notifications, /more) updated to `/markets`.
+
+### Fix 3 — Portfolio chart duplicate y-axis ticks
+**Root cause:** recharts auto ticks on a flat series emit values like 157750/157800 paise that both round to "₹1,578" via `paiseAxisTick` → two identical labels.
+**Fix:** new `paiseTicks(valuesPaise, targetCount)` in `src/components/charts/money.ts` — spreads ticks across the data range, expands flat series symmetrically (±0.5%, min 100 paise) so the axis never collapses, rounds to whole paise, drops ticks whose formatted label duplicates an earlier one (labels guaranteed unique). `PortfolioChart` passes explicit `ticks` + pins `domain` to the tick extent.
+**Tests:** `src/components/charts/money.test.ts` +4 — flat series (the reported ₹1,578×2 case), near-flat series, normal series (unique + spans data), empty input.
+
+## Verification (post-review fixes — final state)
+| Command | Result |
+|---|---|
+| `bun run test:unit` | **272/272 pass** (31 files): new — quote 4, paiseTicks 4 |
+| `bun x tsc --noEmit` | **52 errors — identical to pre-existing baseline** (0 in any touched file) |
+| `bun x eslint` | **0 errors** |
+| `bun run build` | ✅ green |
