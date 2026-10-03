@@ -35,6 +35,16 @@ export function getSupabase(): SupabaseClient {
     );
   }
 
-  client = createBrowserClient(url, anonKey);
+  // PKCE note: this version of auth-js stores the OAuth code verifier in a
+  // per-flow slot and exchangeCodeForSession() can only find it via the
+  // sb_flow_id query param. Without appendPkceFlowIdToRedirects the param
+  // never travels through the redirect and Google sign-in always fails with
+  // "PKCE code verifier not found in storage". The wildcard redirect URL
+  // (https://<site>/**) in the Supabase dashboard allows the extra param.
+  client = createBrowserClient(url, anonKey, {
+    auth: {
+      experimental: { appendPkceFlowIdToRedirects: true },
+    },
+  });
   return client;
 }
