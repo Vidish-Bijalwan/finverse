@@ -2,7 +2,7 @@ import { Delete } from "lucide-react";
 import { useRef, useState, type ReactNode } from "react";
 import { cn } from "@/lib/utils";
 import { applyBackspace, applyKey } from "@/lib/amount-keys";
-import { usePrefersReducedMotion } from "@/hooks/use-prefers-reduced-motion";
+import { KeyButton } from "./KeyButton";
 
 const KEYS: (string | "back")[] = ["1", "2", "3", "4", "5", "6", "7", "8", "9", "00", "0", "back"];
 
@@ -21,8 +21,6 @@ export function NumericKeypad({
   disabled?: boolean;
   className?: string;
 }) {
-  const reduced = usePrefersReducedMotion();
-
   return (
     <div
       className={cn("grid grid-cols-3 gap-2", className)}
@@ -33,20 +31,15 @@ export function NumericKeypad({
         const isBack = k === "back";
         const label = isBack ? "Backspace" : k === "00" ? "Double zero" : k;
         return (
-          <button
+          <KeyButton
             key={k}
-            type="button"
+            label={label}
             disabled={disabled}
-            aria-label={label}
-            onClick={() => (isBack ? onBackspace() : onKey(k))}
-            className={cn(
-              "grid h-14 place-items-center rounded-2xl bg-keypad text-xl font-semibold text-keypad-foreground tabular-nums",
-              !reduced && "transition-transform active:scale-95",
-              "disabled:cursor-not-allowed disabled:opacity-40",
-            )}
+            onPress={() => (isBack ? onBackspace() : onKey(k))}
+            className="grid h-14 place-items-center rounded-2xl bg-keypad text-xl font-semibold text-keypad-foreground tabular-nums"
           >
             {isBack ? <Delete className="size-6" aria-hidden /> : (k as ReactNode)}
-          </button>
+          </KeyButton>
         );
       })}
     </div>

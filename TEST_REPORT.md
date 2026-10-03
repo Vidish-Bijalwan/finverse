@@ -174,3 +174,76 @@ coordinator's live pass.
 - Lighthouse (no tooling in this environment)
 - Authenticated E2E of the QA fixes (keypad rapid input, portfolio timeout path, undo toasts, swipe actions)
 - RLS live probes + Razorpay live test-mode flow (still need DB owner / test keys — pre-existing)
+
+---
+
+# Hotfix: keypad fast-tap, portfolio first-load, −₹0 (post-polish live QA)
+
+Date: 2026-10-03 · Base: `main@2b9e9efc` (PR #59 merged) · Branch: `feature/keypad-portfolio-fix`
+Workdir: `~/workspace/finverse-hotfix/app`
+
+## Bug 1 — payment keypad STILL dropped fast taps (real, user-visible)
+**Root cause:** the previous fix (ref-mirrored digit state in `amount-keys.ts`) addressed
+React state staleness, but live QA still saw dropped digits because the bug was in
+**event delivery, not state**: on touch devices the browser suppresses the `click`
+of a fast tap when it suspects a double-tap-zoom gesture, so `onClick`-only keypads
+lose taps that arrive in quick succession. Verified by code inspection: the
+ref-mirror wiring was correct, `AmountInput` never remounts between taps, and no
+`key`/`onChange` remount path exists in `src/routes/payments.tsx`.
+**Fix:**
+- New `src/lib/press-events.ts` — `classifyPressEvent(kind, detail)`: single
+  decision point for press routing (unit-tested).
+- New shared `src/components/fv/KeyButton.tsx` — acts on `pointerdown`
+  (fires immediately per tap), `preventDefault()` suppresses the compatibility
+  mouse/click events so a tap is counted exactly once, keyboard Enter/Space and
+  assistive-tech activation (`click` with `detail === 0`) handled via the click
+  path, `touch-manipulation` disables double-tap zoom, pressed visual tracked
+  in state (`data-pressed`) instead of `:active`.
+- `NumericKeypad` (`AmountInput.tsx`) and `PinPad`/`PinKey` (app lock) both
+  rebuilt on `KeyButton`; `KeyButton` exported from the `fv` barrel.
+**Tests:** `src/lib/press-events.test.ts` (4: routing, compat-click dedupe,
+keyboard path, rapid-tap sequence) + `src/components/fv/AmountInput.test.tsx`
+(6: real wired component — rapid 5,0,0 taps register every digit, rapid
+5,0,0,0,0 reaches ₹500, no compat-click double-count, keyboard entry,
+backspace, confirm enablement). Note: keypad digits are **paise** (GPay-style),
+so 5,0,0 = 500 paise = ₹5 displayed — the test asserts the actual semantics.
+`@testing-library/react` + `jsdom` added as devDependencies;
+`vitest.config.ts` now includes `*.test.tsx` with a per-file jsdom pragma and
+the `@` alias; `vitest.setup.ts` stubs `matchMedia`.
+
+## Bug 2 — /portfolio first-load flakiness (timeout error; retry worked)
+**Root cause:** supabase-js issues fetches with **no timeout**, so a stalled
+first-load connection (cold start / flaky mobile network) hangs the query
+promise forever — React Query stays `isPending`, the 12s failsafe fires, and
+only a manual retry recovers. The `ready` flag / prices effect had no race;
+the hang was the unbounded network request.
+**Fix:**
+- `src/lib/supabase.ts`: all client HTTP now goes through `fetchWithTimeout`
+  (`AbortSignal.timeout(10_000)`, composed with any caller signal). A stalled
+  request fails fast at 10s and React Query's built-in retry recovers
+  transparently — the manual-retry path now happens automatically.
+- `src/routes/portfolio.tsx`: the timeout failsafe is now a true last resort —
+  window raised 12s → 20s, and the timer restarts on every failed attempt
+  (`failureCount` in the effect deps), so the error UI only appears on a
+  genuinely silent hang (pending 20s with zero failures), which the fetch
+  timeout makes nearly impossible. Retry still resets everything.
+
+## Bug 3 (nit) — portfolio P&L showed "−₹0" after a buy
+**Root cause:** float P&L math can produce `-0.4` paise; `Math.round(-0.4)` is
+`-0`, and `Intl.NumberFormat` renders `-0` as `"-0"` → `"₹-0"`. Additionally,
+`NumberDisplay`'s sign was computed from the unrounded animation float, so a
+mid-count-up `-0.0001` could flash `−₹0` next to a `₹0` readout.
+**Fix:** `formatINR` now rounds to integer rupees and normalizes `-0` → `0`;
+`formatINRShort` drops the minus sign for values that render as zero;
+`NumberDisplay` bases its sign on the same rounded value it displays (visual
+and `aria-label` agree). `src/lib/finance/format.test.ts` gains a
+negative-zero regression block (incl. nearest-rupee behavior for genuine
+negatives: `-60` paise → `"₹-1"`, `-160` → `"₹-2"`).
+
+## Verification commands run (real outputs)
+| Command | Result |
+|---|---|
+| `bun run test:unit` (vitest run) | **79/79 pass** (10 files; baseline 67/67 + 12 new: press-events 4, AmountInput component 6, format −0 block 2) |
+| `bun x tsc --noEmit` | **53 errors, all pre-existing** in untouched files (market/*, money/*, readiness, budgets, BottomSheet/BottomTabBar, finance/format `monthLabel`, etc.) — **zero new errors** from any hotfix file |
+| `bun x eslint .` | **0 errors**, 9 warnings (all pre-existing `react-refresh/only-export-components` in untouched files) |
+| `bun run build` (vite production) | ✅ green; nitro + wrangler config generated |

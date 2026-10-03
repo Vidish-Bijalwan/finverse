@@ -10,6 +10,7 @@ export { MarketRow } from "./MarketRow";
 export { TickerStrip } from "./TickerStrip";
 export { AmountInput, NumericKeypad } from "./AmountInput";
 export { PinPad } from "./PinPad";
+export { KeyButton } from "./KeyButton";
 export { PaymentSheet } from "./PaymentSheet";
 export { OrderSheet } from "./OrderSheet";
 export type { FvOrder } from "./OrderSheet";
