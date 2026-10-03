@@ -3,12 +3,14 @@ const EN_IN = new Intl.NumberFormat("en-IN", { maximumFractionDigits: 0 });
 
 /**
  * Format integer paise as INR, e.g. 84231000 -> "₹8,42,310".
- * Throws on non-finite input; rounds non-integer paise.
+ * Throws on non-finite input; rounds non-integer paise to the nearest rupee.
+ * Normalizes negative zero: float P&L math can produce -0.4 paise, which
+ * Intl would otherwise render as "-0" ("₹-0", the live-QA "−₹0" nit).
  */
 export function formatINR(paise: number): string {
   if (!Number.isFinite(paise)) throw new Error("formatINR: amount must be a finite number");
-  const rupees = Math.round(paise) / 100;
-  return `₹${EN_IN.format(rupees)}`;
+  const rupeeInt = Math.round(Math.round(paise) / 100);
+  return `₹${EN_IN.format(rupeeInt === 0 ? 0 : rupeeInt)}`;
 }
 
 /**
@@ -17,8 +19,10 @@ export function formatINR(paise: number): string {
  */
 export function formatINRShort(paise: number): string {
   if (!Number.isFinite(paise)) throw new Error("formatINRShort: amount must be a finite number");
-  const rupees = Math.round(paise) / 100;
-  const sign = rupees < 0 ? "-" : "";
+  const rounded = Math.round(paise);
+  const rupees = rounded / 100;
+  // A value that renders as zero must not carry a minus sign (-0 nit).
+  const sign = rupees < 0 && Math.round(Math.abs(rupees)) !== 0 ? "-" : "";
   const abs = Math.abs(rupees);
   const trim = (v: number) => (Number.isInteger(v) ? `${v}` : v.toFixed(1));
   if (abs >= 1_00_00_000) return `${sign}₹${trim(abs / 1_00_00_000)}Cr`;

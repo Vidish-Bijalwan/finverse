@@ -58,15 +58,22 @@ export function NumberDisplay({
     return () => cancelAnimationFrame(raf);
   }, [paise, shouldAnimate]);
 
-  const displayNegative = shownPaise < 0;
-  const displaySign = displayNegative ? "−" : signed && shownPaise > 0 ? "+" : "";
+  // The sign follows the ROUNDED value that is actually rendered: during the
+  // count-up animation shownPaise is a float, and a mid-animation value like
+  // -0.0001 must not flash "−₹0" next to a "₹0" readout. formatINR itself
+  // also normalizes -0, so every path agrees.
+  const roundedShown = Math.round(shownPaise);
+  const displayNegative = roundedShown < 0;
+  const displaySign = displayNegative ? "−" : signed && roundedShown > 0 ? "+" : "";
   const displayText = short
-    ? formatINRShort(Math.abs(Math.round(shownPaise)))
-    : formatINR(Math.abs(Math.round(shownPaise)));
+    ? formatINRShort(Math.abs(roundedShown))
+    : formatINR(Math.abs(roundedShown));
 
-  const negative = paise < 0;
-  const finalSign = negative ? "−" : signed && paise > 0 ? "+" : "";
-  const finalText = short ? formatINRShort(Math.abs(paise)) : formatINR(Math.abs(paise));
+  const roundedPaise = Math.round(paise);
+  const safePaise = roundedPaise === 0 ? 0 : roundedPaise;
+  const negative = safePaise < 0;
+  const finalSign = negative ? "−" : signed && safePaise > 0 ? "+" : "";
+  const finalText = short ? formatINRShort(Math.abs(safePaise)) : formatINR(Math.abs(safePaise));
 
   return (
     <span className={cn("fv-money", className)} aria-label={`${finalSign}${finalText}`}>

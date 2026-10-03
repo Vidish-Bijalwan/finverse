@@ -60,3 +60,22 @@ describe("formatINRShort (Indian units K / L / Cr)", () => {
     expect(() => formatINRShort(Infinity)).toThrow("formatINRShort");
   });
 });
+
+describe("negative-zero normalization (live-QA nit: P&L showed −₹0)", () => {
+  it("formatINR never renders negative zero", () => {
+    expect(formatINR(-0)).toBe("₹0");
+    expect(formatINR(-0.4)).toBe("₹0");
+    expect(formatINR(-0.49)).toBe("₹0");
+    // Nearest-rupee rounding still applies to genuine negatives.
+    expect(formatINR(-0.6)).toBe("₹0"); // -₹0.006 -> ₹0
+    expect(formatINR(-60)).toBe("₹-1"); // -₹0.6 -> -₹1
+    expect(formatINR(-150)).toBe("₹-1"); // Math.round(-1.5) is -1 in JS
+    expect(formatINR(-160)).toBe("₹-2");
+  });
+
+  it("formatINRShort never renders negative zero", () => {
+    expect(formatINRShort(-0)).toBe("₹0");
+    expect(formatINRShort(-0.4)).toBe("₹0");
+    expect(formatINRShort(-60)).toBe("-₹1");
+  });
+});

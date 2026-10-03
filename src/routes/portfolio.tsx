@@ -101,7 +101,7 @@ function useDividendYields() {
 
 function PortfolioPage() {
   const navigate = useNavigate();
-  const { data: holdings, isPending, isError, refetch } = useHoldings();
+  const { data: holdings, isPending, isError, failureCount, refetch } = useHoldings();
   const deleteHolding = useDeleteHolding();
   const { yields: dividendYields, setYield: setDividendYield } = useDividendYields();
 
@@ -120,15 +120,21 @@ function PortfolioPage() {
     setChartsReady(true);
   }, []);
 
-  // Failsafe: skeletons must never spin forever. If holdings are still
-  // pending after 12s, show the error state; Retry restarts the timer.
+  // Failsafe: skeletons must never spin forever. This is a LAST RESORT, not
+  // the common path to it:
+  //  - every Supabase request is bounded by a 10s fetch timeout (see
+  //    src/lib/supabase.ts), so a stalled connection fails fast instead of
+  //    hanging, and React Query's built-in retry recovers transparently;
+  //  - the timer below restarts on every failed attempt (failureCount), so it
+  //    only fires when the query is pending with NO failures for 20s — i.e.
+  //    a genuinely silent hang. Retry resets everything.
   const [loadTimedOut, setLoadTimedOut] = useState(false);
   const [retryNonce, setRetryNonce] = useState(0);
   useEffect(() => {
     if (!isPending) return;
-    const t = window.setTimeout(() => setLoadTimedOut(true), 12_000);
+    const t = window.setTimeout(() => setLoadTimedOut(true), 20_000);
     return () => window.clearTimeout(t);
-  }, [isPending, retryNonce]);
+  }, [isPending, failureCount, retryNonce]);
 
   function retryLoad() {
     setLoadTimedOut(false);

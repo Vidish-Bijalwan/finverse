@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { Delete } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { KeyButton } from "./KeyButton";
 import { usePrefersReducedMotion } from "@/hooks/use-prefers-reduced-motion";
 
 const LENGTH = 6;
@@ -135,29 +136,18 @@ export function PinPad({
 
       <div className="grid w-full max-w-64 grid-cols-3 gap-2" role="group" aria-label="PIN keypad">
         {["1", "2", "3", "4", "5", "6", "7", "8", "9"].map((d) => (
-          <PinKey
-            key={d}
-            label={d}
-            disabled={disabled}
-            onPress={() => press(d)}
-            reduced={reduced}
-          />
+          <PinKey key={d} label={d} disabled={disabled} onPress={() => press(d)} />
         ))}
         <span aria-hidden />
-        <PinKey label="0" disabled={disabled} onPress={() => press("0")} reduced={reduced} />
-        <button
-          type="button"
-          aria-label="Delete last digit"
+        <PinKey label="0" disabled={disabled} onPress={() => press("0")} />
+        <KeyButton
+          label="Delete last digit"
           disabled={disabled || pin.length === 0}
-          onClick={backspace}
-          className={cn(
-            "grid h-14 place-items-center rounded-2xl bg-keypad text-keypad-foreground",
-            !reduced && "transition-transform active:scale-95",
-            "disabled:cursor-not-allowed disabled:opacity-40",
-          )}
+          onPress={backspace}
+          className="grid h-14 place-items-center rounded-2xl bg-keypad text-keypad-foreground"
         >
           <Delete className="size-6" aria-hidden />
-        </button>
+        </KeyButton>
       </div>
     </div>
   );
@@ -167,26 +157,19 @@ function PinKey({
   label,
   disabled,
   onPress,
-  reduced,
 }: {
   label: string;
   disabled: boolean;
   onPress: () => void;
-  reduced: boolean;
 }) {
   return (
-    <button
-      type="button"
-      aria-label={label}
+    <KeyButton
+      label={label}
       disabled={disabled}
-      onClick={onPress}
-      className={cn(
-        "h-14 rounded-2xl bg-keypad text-xl font-semibold text-keypad-foreground tabular-nums",
-        !reduced && "transition-transform active:scale-95",
-        "disabled:cursor-not-allowed disabled:opacity-40",
-      )}
+      onPress={onPress}
+      className="h-14 rounded-2xl bg-keypad text-xl font-semibold text-keypad-foreground tabular-nums"
     >
       {label}
-    </button>
+    </KeyButton>
   );
 }
