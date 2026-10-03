@@ -20,7 +20,7 @@ import { AnimatedProgress } from "@/components/money/AnimatedProgress";
 import { ConfirmDeleteDialog } from "@/components/money/ConfirmDeleteDialog";
 import { AddFundsDialog, GoalFormDialog, type GoalFormInput } from "@/components/money/GoalDialogs";
 import { addMonthsToKey, formatDateLong, monthDiff, monthLabel } from "@/components/money/utils";
-import { pressable } from "@/components/fv";
+import { ErrorState, pressable } from "@/components/fv";
 
 export const Route = createFileRoute("/goals")({
   /** `?add=1` deep-link opens the goal form (dashboard quick action). */
@@ -212,8 +212,18 @@ function GoalsPage() {
   const search = Route.useSearch();
   const navigate = useNavigate();
   const [today] = useState(() => todayISO());
-  const { data: goals = [], isLoading: goalsLoading } = useGoals();
-  const { data: txns = [], isLoading: txnsLoading } = useTransactions();
+  const {
+    data: goals = [],
+    isLoading: goalsLoading,
+    isError: goalsError,
+    refetch: refetchGoals,
+  } = useGoals();
+  const {
+    data: txns = [],
+    isLoading: txnsLoading,
+    isError: txnsError,
+    refetch: refetchTxns,
+  } = useTransactions();
   const addGoal = useAddGoal();
   const updateGoal = useUpdateGoal();
   const deleteGoal = useDeleteGoal();
@@ -238,6 +248,7 @@ function GoalsPage() {
   }, [addParam, navigate]);
 
   const loading = goalsLoading || txnsLoading;
+  const loadFailed = goalsError || txnsError;
 
   const handleSave = (input: GoalFormInput) => {
     const isEdit = Boolean(editing);
@@ -294,6 +305,15 @@ function GoalsPage() {
             <Skeleton key={i} className="h-64 w-full rounded-xl" />
           ))}
         </div>
+      ) : loadFailed ? (
+        <ErrorState
+          title="Couldn't load your goals"
+          body="Your goals and contributions failed to load. Check your connection and try again."
+          onRetry={() => {
+            void refetchGoals();
+            void refetchTxns();
+          }}
+        />
       ) : goals.length === 0 ? (
         <Card>
           <CardContent className="flex flex-col items-center gap-3 py-12 text-center">

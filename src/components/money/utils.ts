@@ -3,6 +3,8 @@
  * All money stays in integer paise; dates are "YYYY-MM-DD" / "YYYY-MM".
  */
 
+import { parseStrictDecimal } from "@/lib/parse-decimal";
+
 const MONTH_SHORT = [
   "Jan",
   "Feb",
@@ -63,12 +65,14 @@ export function monthDiff(keyA: string, keyB: string): number {
   return yb * 12 + mb - (ya * 12 + ma);
 }
 
-/** Parse a "₹12,345.67"-ish string into integer paise. NaN when not parseable. */
+/**
+ * Parse a "₹12,345.67"-ish string into integer paise. NaN when not parseable.
+ * Uses the strict decimal parser: "1e5", "0x10", "12.345" (3 decimals) and
+ * any leading/trailing garbage are rejected instead of silently coerced.
+ */
 export function rupeesToPaise(input: string): number {
-  const cleaned = input.replace(/[,₹\s]/g, "");
-  if (cleaned === "") return NaN;
-  const rupees = Number(cleaned);
-  if (!Number.isFinite(rupees) || rupees < 0) return NaN;
+  const rupees = parseStrictDecimal(input);
+  if (!Number.isFinite(rupees)) return NaN;
   return Math.round(rupees * 100);
 }
 

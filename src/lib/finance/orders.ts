@@ -2,12 +2,14 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 import {
   defaultAccountId,
   deleteHolding,
+  fetchAccountSummaries,
   fetchHoldings,
   insertHolding,
   insertTransaction,
   updateHolding,
 } from "./db";
 import { formatINR, todayISO } from "./format";
+import { canAfford } from "./afford";
 import { applyOrderToHolding } from "./order-math";
 
 export interface PlaceOrderInput {
@@ -61,6 +63,15 @@ export function usePlaceOrder() {
 
       // Pure holdings math (throws on invalid qty/price, oversell, …).
       const outcome = applyOrderToHolding(holding, input.side, qty, pricePaise, symbol);
+
+      // Balance gate for buys: the default cash account must cover the
+      // order cost. Sells always credit, so they never need the gate.
+      if (input.side === "buy" && accountId) {
+        const summary = (await fetchAccountSummaries()).find((s) => s.account.id === accountId);
+        if (!canAfford(summary?.balancePaise ?? 0, costPaise)) {
+          throw new Error(`Insufficient balance in ${summary?.account.name ?? "the account"}.`);
+        }
+      }
 
       if (!holding) {
         // Only reachable on buy — a sell without a holding throws above.

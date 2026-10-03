@@ -130,6 +130,22 @@ export function isValidPin(pin: string): boolean {
   return /^[0-9]{6}$/.test(pin);
 }
 
+/**
+ * True for PINs too predictable to guard the app and worth rejecting at
+ * set/change time: all-same-digit ("000000", "777777") and full
+ * ascending/descending runs ("123456", "654321", "901234", "987654").
+ * Malformed input also returns true (fail closed — format errors are
+ * surfaced separately by `isValidPin`/`assertPinFormat`).
+ */
+export function isWeakPin(pin: string): boolean {
+  if (!isValidPin(pin)) return true;
+  const d = pin.split("").map(Number);
+  if (d.every((x) => x === d[0])) return true; // 000000, 111111, …
+  const ascending = d.every((x, i) => i === 0 || x === (d[i - 1]! + 1) % 10);
+  const descending = d.every((x, i) => i === 0 || x === (d[i - 1]! + 9) % 10);
+  return ascending || descending;
+}
+
 function assertPinFormat(pin: string): void {
   if (!isValidPin(pin)) {
     throw new Error("PIN must be exactly 6 digits.");

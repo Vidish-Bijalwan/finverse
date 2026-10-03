@@ -9,7 +9,7 @@ import { SpendingHeatmap } from "@/components/ai/SpendingHeatmap";
 import { StreakCard } from "@/components/ai/StreakCard";
 import { WeeklyDigest } from "@/components/ai/WeeklyDigest";
 import { Button } from "@/components/ui/button";
-import { pressable } from "@/components/fv";
+import { ErrorState, pressable } from "@/components/fv";
 import { Card, CardContent } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { buildInsights, previousMonth } from "@/lib/ai/engine";
@@ -101,6 +101,14 @@ function InsightsPage() {
               <Skeleton className="h-32 rounded-xl" />
               <Skeleton className="h-32 rounded-xl" />
             </>
+          )}
+
+          {dbQuery.isError && (
+            <ErrorState
+              title="Couldn't load your insights"
+              body="We couldn't read your data to compute insights. Check your connection and try again."
+              onRetry={() => void dbQuery.refetch()}
+            />
           )}
 
           {dbQuery.isSuccess && dbQuery.data && (

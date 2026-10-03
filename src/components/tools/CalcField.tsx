@@ -3,6 +3,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Slider } from "@/components/ui/slider";
 import { cn } from "@/lib/utils";
+import { parseStrictDecimal } from "@/lib/parse-decimal";
 
 export type CalcFieldFormat = "rupees" | "percent" | "months" | "years" | "plain";
 
@@ -54,8 +55,10 @@ export function CalcField({
 
   const commit = (raw: string) => {
     setText(raw);
-    const parsed = Number(raw.replace(/,/g, ""));
-    if (!Number.isFinite(parsed)) return;
+    // Strict decimal parse: "1e5", "0x10", "" and trailing garbage never
+    // commit, so the slider/value only ever see real numbers.
+    const parsed = parseStrictDecimal(raw);
+    if (Number.isNaN(parsed)) return;
     // Commit the raw value; limits live on the slider and in validation text,
     // so free typing never fights the user mid-keystroke.
     onChange(parsed);

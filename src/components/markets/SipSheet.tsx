@@ -5,12 +5,13 @@ import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { useAccounts, useAddRecurringRule } from "@/lib/finance/hooks";
 import { formatINR, todayISO } from "@/lib/finance/format";
+import { parseStrictDecimal } from "@/lib/parse-decimal";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 
 const toPaise = (rupeesText: string): number => {
-  const v = Number.parseFloat(rupeesText);
-  if (!Number.isFinite(v) || v <= 0) return 0;
+  const v = parseStrictDecimal(rupeesText);
+  if (Number.isNaN(v) || v <= 0) return 0;
   return Math.round(v * 100);
 };
 

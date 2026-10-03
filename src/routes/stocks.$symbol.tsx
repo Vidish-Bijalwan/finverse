@@ -41,6 +41,7 @@ import { SipSheet } from "@/components/markets/SipSheet";
 import { useWatchlist } from "@/components/markets/useWatchlist";
 import { usePrefersReducedMotion } from "@/hooks/use-prefers-reduced-motion";
 import { usePlaceOrder } from "@/lib/finance/orders";
+import { useAccountSummaries } from "@/lib/finance/hooks";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import { pressable } from "@/components/fv";
@@ -403,6 +404,10 @@ function StockDetailPage() {
   const stock = getStock(sym);
   const { isWatched, toggle } = useWatchlist();
   const placeOrder = usePlaceOrder();
+  const { data: summaries } = useAccountSummaries();
+  // Buys debit the same default cash account the mutation path checks
+  // (usePlaceOrder gates on the default account's live balance).
+  const fundingSummary = summaries?.find((s) => s.account.isDefault) ?? summaries?.[0];
 
   const [mounted, setMounted] = useState(false);
   const [orderSide, setOrderSide] = useState<"buy" | "sell" | null>(null);
@@ -788,6 +793,13 @@ function StockDetailPage() {
         name={stock.name}
         ltpPaise={displayPrice}
         side={orderSide ?? "buy"}
+        pending={placeOrder.isPending}
+        {...(fundingSummary
+          ? {
+              availableBalancePaise: fundingSummary.balancePaise,
+              availableAccountName: fundingSummary.account.name,
+            }
+          : {})}
         onConfirm={handleConfirm}
       />
 

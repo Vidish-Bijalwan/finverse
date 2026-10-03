@@ -247,6 +247,12 @@ export function useNotifications(): {
   unread: number;
   isRead(id: string): boolean;
   markAllRead(): void;
+  /** True while the backing DB query is first loading. */
+  isLoading: boolean;
+  /** True when the backing DB query failed. */
+  isError: boolean;
+  /** Retry the backing DB query. */
+  refetch: () => Promise<unknown>;
 } {
   const dbQuery = useQuery({
     queryKey: ["finverse", "db"],
@@ -278,5 +284,13 @@ export function useNotifications(): {
     setReadIds(merged);
   };
 
-  return { notifications, unread, isRead, markAllRead };
+  return {
+    notifications,
+    unread,
+    isRead,
+    markAllRead,
+    isLoading: dbQuery.isPending,
+    isError: dbQuery.isError,
+    refetch: dbQuery.refetch,
+  };
 }

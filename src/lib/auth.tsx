@@ -11,6 +11,7 @@ import {
 import type { User } from "@supabase/supabase-js";
 
 import { getSupabase, type Profile } from "./supabase";
+import { validatePassword } from "./auth/password-policy";
 
 interface AuthContextValue {
   user: User | null;
@@ -23,6 +24,41 @@ interface AuthContextValue {
 }
 
 const AuthContext = createContext<AuthContextValue | null>(null);
+
+/**
+ * Client-side signup throttle: max 3 attempts per rolling 10-minute window per
+ * browser, tracked in localStorage (`fv_signup_attempts`, an array of epoch-ms
+ * timestamps). DEFENSE-IN-DEPTH ONLY — localStorage is trivially cleared by
+ * the attacker, so the real rate limit must be enforced Supabase dashboard-side
+ * (Auth → Rate limits). This layer just stops casual abuse from this browser.
+ */
+const SIGNUP_ATTEMPT_KEY = "fv_signup_attempts";
+const SIGNUP_ATTEMPT_LIMIT = 3;
+const SIGNUP_ATTEMPT_WINDOW_MS = 10 * 60 * 1000;
+
+function readSignupAttempts(): number[] {
+  try {
+    const raw = localStorage.getItem(SIGNUP_ATTEMPT_KEY);
+    if (!raw) return [];
+    const parsed: unknown = JSON.parse(raw);
+    if (!Array.isArray(parsed)) return [];
+    const now = Date.now();
+    return parsed.filter(
+      (t): t is number => typeof t === "number" && now - t < SIGNUP_ATTEMPT_WINDOW_MS,
+    );
+  } catch {
+    return [];
+  }
+}
+
+function recordSignupAttempt(): void {
+  try {
+    localStorage.setItem(SIGNUP_ATTEMPT_KEY, JSON.stringify([...readSignupAttempts(), Date.now()]));
+  } catch {
+    // Storage unavailable (private mode etc.) — fail open on the throttle;
+    // the server-side Supabase rate limit still applies.
+  }
+}
 
 /** Fetch the profiles row for `userId`, creating one if it doesn't exist. */
 async function ensureProfile(
@@ -129,9 +165,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const signUp = useCallback(async (email: string, password: string) => {
+    // Policy first — never burn a Supabase signup on a weak password.
+    const policyError = validatePassword(password);
+    if (policyError) throw new Error(policyError);
+    // Throttle second — never hit Supabase when the window is exhausted.
+    if (readSignupAttempts().length >= SIGNUP_ATTEMPT_LIMIT) {
+      throw new Error("Too many signup attempts — try again in a few minutes.");
+    }
     const supabase = getSupabase();
     const { error } = await supabase.auth.signUp({ email, password });
     if (error) throw new Error(error.message || "Sign up failed. Please try again.");
+    // Record failed-attempts too: every submit burns one slot in the window.
+    recordSignupAttempt();
     // The profile row is created by the ensure-profile logic above on first session.
   }, []);
 

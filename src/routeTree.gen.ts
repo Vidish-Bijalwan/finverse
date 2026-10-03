@@ -15,6 +15,7 @@ import { Route as BillsRouteImport } from './routes/bills'
 import { Route as BudgetsRouteImport } from './routes/budgets'
 import { Route as ChatRouteImport } from './routes/chat'
 import { Route as ExpensesRouteImport } from './routes/expenses'
+import { Route as ForgotPasswordRouteImport } from './routes/forgot-password'
 import { Route as GoalsRouteImport } from './routes/goals'
 import { Route as InsightsRouteImport } from './routes/insights'
 import { Route as LoginRouteImport } from './routes/login'
@@ -32,6 +33,7 @@ import { Route as ToolsRouteImport } from './routes/tools'
 import { Route as WatchlistRouteImport } from './routes/watchlist'
 import { Route as ApiRazorpayWebhookRouteImport } from './routes/api.razorpay-webhook'
 import { Route as AuthCallbackRouteImport } from './routes/auth.callback'
+import { Route as AuthResetPasswordRouteImport } from './routes/auth.reset-password'
 import { Route as StocksSymbolRouteImport } from './routes/stocks.$symbol'
 
 const IndexRoute = IndexRouteImport.update({
@@ -62,6 +64,11 @@ const ChatRoute = ChatRouteImport.update({
 const ExpensesRoute = ExpensesRouteImport.update({
   id: '/expenses',
   path: '/expenses',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ForgotPasswordRoute = ForgotPasswordRouteImport.update({
+  id: '/forgot-password',
+  path: '/forgot-password',
   getParentRoute: () => rootRouteImport,
 } as any)
 const GoalsRoute = GoalsRouteImport.update({
@@ -149,6 +156,11 @@ const AuthCallbackRoute = AuthCallbackRouteImport.update({
   path: '/auth/callback',
   getParentRoute: () => rootRouteImport,
 } as any)
+const AuthResetPasswordRoute = AuthResetPasswordRouteImport.update({
+  id: '/auth/reset-password',
+  path: '/auth/reset-password',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const StocksSymbolRoute = StocksSymbolRouteImport.update({
   id: '/stocks/$symbol',
   path: '/stocks/$symbol',
@@ -162,6 +174,7 @@ export interface FileRoutesByFullPath {
   '/budgets': typeof BudgetsRoute
   '/chat': typeof ChatRoute
   '/expenses': typeof ExpensesRoute
+  '/forgot-password': typeof ForgotPasswordRoute
   '/goals': typeof GoalsRoute
   '/insights': typeof InsightsRoute
   '/login': typeof LoginRoute
@@ -179,6 +192,7 @@ export interface FileRoutesByFullPath {
   '/watchlist': typeof WatchlistRoute
   '/api/razorpay-webhook': typeof ApiRazorpayWebhookRoute
   '/auth/callback': typeof AuthCallbackRoute
+  '/auth/reset-password': typeof AuthResetPasswordRoute
   '/stocks/$symbol': typeof StocksSymbolRoute
 }
 export interface FileRoutesByTo {
@@ -188,6 +202,7 @@ export interface FileRoutesByTo {
   '/budgets': typeof BudgetsRoute
   '/chat': typeof ChatRoute
   '/expenses': typeof ExpensesRoute
+  '/forgot-password': typeof ForgotPasswordRoute
   '/goals': typeof GoalsRoute
   '/insights': typeof InsightsRoute
   '/login': typeof LoginRoute
@@ -205,6 +220,7 @@ export interface FileRoutesByTo {
   '/watchlist': typeof WatchlistRoute
   '/api/razorpay-webhook': typeof ApiRazorpayWebhookRoute
   '/auth/callback': typeof AuthCallbackRoute
+  '/auth/reset-password': typeof AuthResetPasswordRoute
   '/stocks/$symbol': typeof StocksSymbolRoute
 }
 export interface FileRoutesById {
@@ -215,6 +231,7 @@ export interface FileRoutesById {
   '/budgets': typeof BudgetsRoute
   '/chat': typeof ChatRoute
   '/expenses': typeof ExpensesRoute
+  '/forgot-password': typeof ForgotPasswordRoute
   '/goals': typeof GoalsRoute
   '/insights': typeof InsightsRoute
   '/login': typeof LoginRoute
@@ -232,6 +249,7 @@ export interface FileRoutesById {
   '/watchlist': typeof WatchlistRoute
   '/api/razorpay-webhook': typeof ApiRazorpayWebhookRoute
   '/auth/callback': typeof AuthCallbackRoute
+  '/auth/reset-password': typeof AuthResetPasswordRoute
   '/stocks/$symbol': typeof StocksSymbolRoute
 }
 export interface FileRouteTypes {
@@ -243,6 +261,7 @@ export interface FileRouteTypes {
     | '/budgets'
     | '/chat'
     | '/expenses'
+    | '/forgot-password'
     | '/goals'
     | '/insights'
     | '/login'
@@ -260,6 +279,7 @@ export interface FileRouteTypes {
     | '/watchlist'
     | '/api/razorpay-webhook'
     | '/auth/callback'
+    | '/auth/reset-password'
     | '/stocks/$symbol'
   fileRoutesByTo: FileRoutesByTo
   to:
@@ -269,6 +289,7 @@ export interface FileRouteTypes {
     | '/budgets'
     | '/chat'
     | '/expenses'
+    | '/forgot-password'
     | '/goals'
     | '/insights'
     | '/login'
@@ -286,6 +307,7 @@ export interface FileRouteTypes {
     | '/watchlist'
     | '/api/razorpay-webhook'
     | '/auth/callback'
+    | '/auth/reset-password'
     | '/stocks/$symbol'
   id:
     | '__root__'
@@ -295,6 +317,7 @@ export interface FileRouteTypes {
     | '/budgets'
     | '/chat'
     | '/expenses'
+    | '/forgot-password'
     | '/goals'
     | '/insights'
     | '/login'
@@ -312,6 +335,7 @@ export interface FileRouteTypes {
     | '/watchlist'
     | '/api/razorpay-webhook'
     | '/auth/callback'
+    | '/auth/reset-password'
     | '/stocks/$symbol'
   fileRoutesById: FileRoutesById
 }
@@ -322,6 +346,7 @@ export interface RootRouteChildren {
   BudgetsRoute: typeof BudgetsRoute
   ChatRoute: typeof ChatRoute
   ExpensesRoute: typeof ExpensesRoute
+  ForgotPasswordRoute: typeof ForgotPasswordRoute
   GoalsRoute: typeof GoalsRoute
   InsightsRoute: typeof InsightsRoute
   LoginRoute: typeof LoginRoute
@@ -339,6 +364,7 @@ export interface RootRouteChildren {
   WatchlistRoute: typeof WatchlistRoute
   ApiRazorpayWebhookRoute: typeof ApiRazorpayWebhookRoute
   AuthCallbackRoute: typeof AuthCallbackRoute
+  AuthResetPasswordRoute: typeof AuthResetPasswordRoute
   StocksSymbolRoute: typeof StocksSymbolRoute
 }
 
@@ -384,6 +410,13 @@ declare module '@tanstack/react-router' {
       path: '/expenses'
       fullPath: '/expenses'
       preLoaderRoute: typeof ExpensesRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/forgot-password': {
+      id: '/forgot-password'
+      path: '/forgot-password'
+      fullPath: '/forgot-password'
+      preLoaderRoute: typeof ForgotPasswordRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/goals': {
@@ -505,6 +538,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthCallbackRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/auth/reset-password': {
+      id: '/auth/reset-password'
+      path: '/auth/reset-password'
+      fullPath: '/auth/reset-password'
+      preLoaderRoute: typeof AuthResetPasswordRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/stocks/$symbol': {
       id: '/stocks/$symbol'
       path: '/stocks/$symbol'
@@ -522,6 +562,7 @@ const rootRouteChildren: RootRouteChildren = {
   BudgetsRoute: BudgetsRoute,
   ChatRoute: ChatRoute,
   ExpensesRoute: ExpensesRoute,
+  ForgotPasswordRoute: ForgotPasswordRoute,
   GoalsRoute: GoalsRoute,
   InsightsRoute: InsightsRoute,
   LoginRoute: LoginRoute,
@@ -539,6 +580,7 @@ const rootRouteChildren: RootRouteChildren = {
   WatchlistRoute: WatchlistRoute,
   ApiRazorpayWebhookRoute: ApiRazorpayWebhookRoute,
   AuthCallbackRoute: AuthCallbackRoute,
+  AuthResetPasswordRoute: AuthResetPasswordRoute,
   StocksSymbolRoute: StocksSymbolRoute,
 }
 export const routeTree = rootRouteImport
