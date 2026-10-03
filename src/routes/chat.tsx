@@ -8,9 +8,9 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { billStatuses, previousMonth } from "@/lib/ai/engine";
 import { ALL_CATEGORIES, categoryById } from "@/lib/finance/categories";
+import { loadFinanceDB } from "@/lib/finance/db";
 import { formatINR, monthKey, monthLabel, todayISO } from "@/lib/finance/format";
-import { getBudgets, listTransactions, seedIfEmpty } from "@/lib/finance/store";
-import type { Category, FinanceDB, Transaction } from "@/lib/finance/types";
+import type { Budget, Category, FinanceDB, Transaction } from "@/lib/finance/types";
 
 export const Route = createFileRoute("/chat")({
   head: () => ({
@@ -33,6 +33,21 @@ export const Route = createFileRoute("/chat")({
 const sumT = (txns: Transaction[]): number => txns.reduce((s, t) => s + t.amountPaise, 0);
 const pctOf = (v: number): string => `${Math.round(v * 100)}%`;
 const catName = (id: string): string => categoryById(id)?.label ?? id;
+
+/**
+ * Local pure replacements for the store.ts helpers this page used.
+ * They operate on the FinanceDB passed in — no storage access.
+ */
+function listTransactions(db: FinanceDB, monthKey?: string): Transaction[] {
+  const txns = monthKey
+    ? db.transactions.filter((t) => t.dateISO.startsWith(monthKey))
+    : db.transactions;
+  return [...txns].sort((a, b) => b.dateISO.localeCompare(a.dateISO));
+}
+
+function getBudgets(db: FinanceDB, month: string): Budget[] {
+  return db.budgets.filter((b) => b.month === month);
+}
 
 /** Find a category mentioned in the query, by id or a label word (len >= 4). */
 function detectCategory(t: string): Category | undefined {
@@ -197,8 +212,8 @@ const nextId = () => `msg-${Date.now()}-${(msgSeq += 1)}`;
 
 function ChatPage() {
   const dbQuery = useQuery({
-    queryKey: ["finverse", "ai-db"],
-    queryFn: () => seedIfEmpty(),
+    queryKey: ["finverse", "db"],
+    queryFn: loadFinanceDB,
   });
 
   const [messages, setMessages] = useState<ChatMsg[]>([

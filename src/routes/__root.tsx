@@ -2,15 +2,19 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import {
   Outlet,
   Link,
+  Navigate,
   createRootRouteWithContext,
   useRouter,
+  useLocation,
   HeadContent,
   Scripts,
 } from "@tanstack/react-router";
 import { useEffect, type ReactNode } from "react";
+import { ChartNoAxesCombined } from "lucide-react";
 
 import appCss from "../styles.css?url";
 import { reportLovableError } from "../lib/lovable-error-reporting";
+import { AuthProvider, useAuth } from "../lib/auth";
 import { Toaster } from "@/components/ui/sonner";
 import { AppHeader } from "@/components/shell/AppHeader";
 import { BottomTabBar } from "@/components/shell/BottomTabBar";
@@ -39,7 +43,7 @@ function NotFoundComponent() {
   );
 }
 
-function ErrorComponent({ error, reset }: { error: Error; reset: () => void }) {
+function ErrorComponent({ error, reset }: { error: unknown; reset: () => void }) {
   console.error(error);
   const router = useRouter();
   useEffect(() => {
@@ -129,18 +133,68 @@ function RootComponent() {
 
   return (
     <QueryClientProvider client={queryClient}>
+      <AuthProvider>
+        <GuardedShell />
+      </AuthProvider>
+    </QueryClientProvider>
+  );
+}
+
+/** Paths that never require a signed-in user. */
+const AUTH_OPEN_PATHS = ["/login", "/auth/callback"];
+/** Focused flows that render without the app chrome (header / bottom tabs). */
+const BARE_CHROME_PATHS = ["/login", "/auth/callback", "/onboarding"];
+
+function SplashScreen() {
+  return (
+    <div
+      className="grid min-h-screen place-items-center bg-background"
+      role="status"
+      aria-label="Loading FinVerse"
+    >
+      <div className="flex flex-col items-center gap-4">
+        <div className="grid size-14 place-items-center rounded-xl bg-primary-dark shadow-logo">
+          <ChartNoAxesCombined className="size-8 text-primary-foreground" strokeWidth={2.5} />
+        </div>
+        <span className="text-2xl font-black text-primary-dark">
+          Fin<span className="text-primary">Verse</span>
+        </span>
+        <div className="size-8 animate-spin rounded-full border-2 border-muted border-t-primary motion-reduce:animate-none" />
+      </div>
+    </div>
+  );
+}
+
+function GuardedShell() {
+  const { user, profile, loading } = useAuth();
+  const { pathname } = useLocation();
+  const bare = BARE_CHROME_PATHS.includes(pathname);
+
+  if (loading) return <SplashScreen />;
+  if (!user && !AUTH_OPEN_PATHS.includes(pathname)) return <Navigate to="/login" />;
+  if (
+    user &&
+    profile &&
+    !profile.onboarding_completed &&
+    !["/onboarding", ...AUTH_OPEN_PATHS].includes(pathname)
+  ) {
+    return <Navigate to="/onboarding" />;
+  }
+
+  return (
+    <>
       <ThemeApplier />
       <div className="min-h-screen bg-background text-foreground">
-        <AppHeader />
-        <main className="pb-24 md:pb-0">
+        {!bare && <AppHeader />}
+        <main className={bare ? undefined : "pb-24 md:pb-0"}>
           <PageTransition>
             {/* Required: nested routes render here. Removing <Outlet /> breaks all child routes. */}
             <Outlet />
           </PageTransition>
         </main>
-        <BottomTabBar />
+        {!bare && <BottomTabBar />}
         <Toaster richColors position="bottom-center" />
       </div>
-    </QueryClientProvider>
+    </>
   );
 }

@@ -175,3 +175,26 @@ bun run build
 No API keys or env vars needed. To evaluate: add an expense and watch the dashboard
 totals update; ask the chat "how much did I spend on food this month?"; pay a bill;
 check the readiness score and its explained factors.
+
+---
+
+## 7. Supabase migration (feature/supabase-auth, 2026-10-03)
+
+The localStorage data layer was replaced with Supabase (Postgres + Auth + Storage). New users start with a genuine empty state — all mock/seed data removed.
+
+### What changed
+- **Auth**: Google OAuth + email/password via `@supabase/supabase-js` + `@supabase/ssr` (browser client, client-side-first; SSR renders the logged-out shell). `AuthProvider` (`src/lib/auth.tsx`) exposes `{ user, profile, loading, signUp, signIn, signInWithGoogle, signOut }`. New routes: `/login`, `/auth/callback` (OAuth code exchange), `/onboarding`, `/profile`.
+- **Onboarding wizard** (`/onboarding`): display name → monthly income + payday (persisted as a monthly income recurring rule) → budget split across default expense categories (must sum to 100%, live validation; creates `budgets` rows for the current month) → ≥1 goal. Finishes by setting `profiles.onboarding_completed = true`.
+- **Profile** (`/profile`): avatar upload to the `avatars` Storage bucket (`{userId}/avatar.<ext>`, upsert), display name, bio, phone, read-only email, logout. Linked from the header account menu and the More menu.
+- **Route guards** (root route): no session → `/login` (except `/login`, `/auth/callback`); session without completed onboarding → `/onboarding`. App chrome hidden on auth/onboarding routes.
+- **Data layer**: `src/lib/finance/db.ts` — Supabase queries for all 8 finance entities, snake_case↔camelCase mappers, per-user scoping (RLS enforces it too), idempotent recurring auto-post, client-side account-balance replay. All 34 hooks in `hooks.ts` keep their names/signatures; components unchanged. `loadFinanceDB()` feeds the deterministic AI engine, chat, notifications, and global search unchanged.
+- **Watchlist**: `watchlist_items` + `price_alerts` tables; hooks rewritten on React Query.
+- **Seed removed**: `store.ts` and `seed.ts` deleted; `buildSeed`/`seedIfEmpty` import chain fully removed. Ephemeral UI state (notification read-ids, streak cache) intentionally stays in localStorage.
+- **SQL**: `supabase/migrations/0001_init.sql` — 11 tables, RLS `owner all` policies on each, `set_updated_at()` triggers, public `avatars` bucket with owner-scoped write policies. Apply via the Supabase Dashboard SQL Editor (or `supabase db push`).
+- **Settings**: CSV export + JSON backup now read from Supabase; restore merges (skips duplicate ids, re-links cross-references); the "reset demo data" control was removed.
+
+### Environment
+Set in Vercel (and `.env.example` documents them): `VITE_SUPABASE_URL`, `VITE_SUPABASE_ANON_KEY`. Google OAuth additionally needs a Google Cloud OAuth client configured in Supabase Dashboard → Authentication → Providers, with redirect URL `<site-url>/auth/callback`.
+
+### Verification
+`bun run lint` 0 errors · `bun x tsc --noEmit` clean on all touched files (remaining errors are pre-existing strict-mode issues in untouched files, byte-identical to main) · `bun run build` green. End-to-end auth flow (signup → onboarding → login) needs a live check once env vars + SQL migration are in place.

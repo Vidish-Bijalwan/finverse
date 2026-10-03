@@ -1,9 +1,9 @@
-import { Link } from "@tanstack/react-router";
-import { ChartNoAxesCombined, RotateCcw, Search } from "lucide-react";
+import { Link, useNavigate } from "@tanstack/react-router";
+import { ChartNoAxesCombined, LogOut, Search, User } from "lucide-react";
 
-import { STORE_KEY } from "@/lib/finance/store";
 import { cn } from "@/lib/utils";
-import { Avatar, AvatarFallback } from "@/components/ui/avatar";
+import { useAuth } from "@/lib/auth";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -38,18 +38,71 @@ function Logo() {
   );
 }
 
-function resetDemoData() {
-  try {
-    window.localStorage.removeItem(STORE_KEY);
-  } catch {
-    // Storage may be unavailable; reload anyway so seeded defaults return.
-  }
-  window.location.reload();
+function initialsOf(name: string | null, email: string | undefined): string {
+  const src = (name ?? "").trim() || (email ?? "").trim();
+  if (!src) return "FV";
+  const parts = src.split(/[\s@._-]+/).filter(Boolean);
+  const first = parts[0]?.[0] ?? "F";
+  const second = parts[1]?.[0] ?? "";
+  return (first + second).toUpperCase();
+}
+
+/** Avatar button that opens the account menu (profile + sign out). */
+function ProfileMenu() {
+  const { user, profile, signOut } = useAuth();
+  const navigate = useNavigate();
+
+  const name = profile?.full_name?.trim() || user?.email || "Account";
+
+  return (
+    <DropdownMenu>
+      <DropdownMenuTrigger asChild>
+        <button
+          type="button"
+          aria-label="Open account menu"
+          className="grid size-10 place-items-center rounded-full transition-colors hover:bg-muted"
+        >
+          <Avatar className="size-8">
+            {profile?.avatar_url && <AvatarImage src={profile.avatar_url} alt={name} />}
+            <AvatarFallback className="bg-primary text-xs font-bold text-primary-foreground">
+              {initialsOf(profile?.full_name ?? null, user?.email)}
+            </AvatarFallback>
+          </Avatar>
+        </button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="end" className="w-56">
+        <DropdownMenuLabel>
+          <span className="block truncate text-sm font-semibold">{name}</span>
+          <span className="block truncate text-xs font-normal text-muted-foreground">
+            {user?.email ?? APP_VERSION}
+          </span>
+        </DropdownMenuLabel>
+        <DropdownMenuSeparator />
+        <DropdownMenuItem onSelect={() => navigate({ to: "/profile" })}>
+          <User className="size-4" />
+          Profile
+        </DropdownMenuItem>
+        <DropdownMenuSeparator />
+        <DropdownMenuItem
+          onSelect={async () => {
+            try {
+              await signOut();
+            } finally {
+              navigate({ to: "/login" });
+            }
+          }}
+        >
+          <LogOut className="size-4" />
+          Log out
+        </DropdownMenuItem>
+      </DropdownMenuContent>
+    </DropdownMenu>
+  );
 }
 
 /**
  * Sticky top header: logo, desktop nav, search (navigates to /expenses),
- * and a profile avatar with a small menu.
+ * and a profile avatar with an account menu.
  */
 export function AppHeader() {
   return (
@@ -62,7 +115,7 @@ export function AppHeader() {
             <Link
               key={item.label}
               to={item.to}
-              activeOptions={item.to === "/" ? { exact: true } : undefined}
+              {...(item.to === "/" ? { activeOptions: { exact: true } } : {})}
               activeProps={{ className: "text-primary" }}
               inactiveProps={{ className: "text-foreground" }}
               className={cn("text-sm font-medium transition-colors hover:text-primary")}
@@ -86,34 +139,7 @@ export function AppHeader() {
 
           <NotificationBell />
 
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <button
-                type="button"
-                aria-label="Open profile menu"
-                className="grid size-10 place-items-center rounded-full transition-colors hover:bg-muted"
-              >
-                <Avatar className="size-8">
-                  <AvatarFallback className="bg-primary text-xs font-bold text-primary-foreground">
-                    FV
-                  </AvatarFallback>
-                </Avatar>
-              </button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end" className="w-56">
-              <DropdownMenuLabel>
-                <span className="block text-sm font-semibold">FinVerse AI</span>
-                <span className="block text-xs font-normal text-muted-foreground">
-                  {APP_VERSION} · Demo build
-                </span>
-              </DropdownMenuLabel>
-              <DropdownMenuSeparator />
-              <DropdownMenuItem onSelect={resetDemoData}>
-                <RotateCcw className="size-4" />
-                Reset demo data
-              </DropdownMenuItem>
-            </DropdownMenuContent>
-          </DropdownMenu>
+          <ProfileMenu />
         </div>
       </div>
     </header>
