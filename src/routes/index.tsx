@@ -115,7 +115,7 @@ function FinVerseDashboard() {
   }, []);
 
   const { data: txns, isLoading: txnsLoading, isError: txnsError } = useTransactions();
-  const { data: holdings } = useHoldings();
+  const { data: holdings, isLoading: holdingsLoading } = useHoldings();
 
   const currentKey = monthKey(new Date());
   const prevKey = shiftMonth(month, -1);
@@ -442,29 +442,37 @@ function FinVerseDashboard() {
                   stat={loading ? "…" : formatINRShort(stats.monthExpense)}
                   statLabel={`Spent in ${monthLabel(month)}`}
                   sub={
-                    stats.topCategory
-                      ? `Top: ${stats.topCategory.label} · ${formatINRShort(stats.topCategory.value)}`
-                      : "No spending recorded yet"
+                    loading
+                      ? "…"
+                      : stats.topCategory
+                        ? `Top: ${stats.topCategory.label} · ${formatINRShort(stats.topCategory.value)}`
+                        : "No spending recorded yet"
                   }
                 />
                 <DeepLinkCard
                   icon={<BriefcaseBusiness className="size-6" />}
                   title="Portfolio"
                   to="/portfolio"
-                  stat={formatINRShort(investedPaise)}
+                  stat={holdingsLoading ? "…" : formatINRShort(investedPaise)}
                   statLabel="Invested value"
-                  sub={`${holdings?.length ?? 0} holding${(holdings?.length ?? 0) === 1 ? "" : "s"} at avg. buy price`}
+                  sub={
+                    holdingsLoading
+                      ? "…"
+                      : `${holdings?.length ?? 0} holding${(holdings?.length ?? 0) === 1 ? "" : "s"} at avg. buy price`
+                  }
                 />
                 <DeepLinkCard
                   icon={<Sparkles className="size-6" />}
                   title="Insights"
                   to="/insights"
-                  stat={stats.mover ? `+${formatINRShort(stats.mover.delta)}` : "—"}
+                  stat={loading ? "…" : stats.mover ? `+${formatINRShort(stats.mover.delta)}` : "—"}
                   statLabel="Biggest riser"
                   sub={
-                    stats.mover
-                      ? `${stats.mover.label} vs ${monthLabel(prevKey)}`
-                      : "No category rose this month"
+                    loading
+                      ? "…"
+                      : stats.mover
+                        ? `${stats.mover.label} vs ${monthLabel(prevKey)}`
+                        : "No category rose this month"
                   }
                 />
               </div>
