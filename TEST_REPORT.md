@@ -357,3 +357,156 @@ Workdir: `~/workspace/finverse-overhaul/app`
 - `upi-qr.test.ts` (9): full pay intent; open-amount QR; non-UPI rejection; non-INR rejection; malformed amounts.
 - `quick-actions.test.ts` (6): unique ids/labels; every route target exists; all 11 actions resolve; dialog targets; deep-link search shapes; unknown id throws.
 - `MarketStrip.test.tsx` (4): 3 indices render with price/abs/% ; exactly one SIMULATED DATA pill; watched stocks appended; AT label.
+
+## Phase 1 fixes (screenshot review) — Worker A (2026-10-03)
+
+Five of the six review defects fixed; the floating-button defect is diagnosed
+but lives in `src/routes/expenses.tsx` (Worker B's file — left untouched).
+
+### 1. Market ticker marquee removed (P0)
+`src/components/fv/MarketStrip.tsx`: the auto-scroll marquee (which rendered the
+first card half-scrolled with overlapping text on load) is deleted entirely —
+including the `fv-marquee` keyframe wrapper, the seamless-loop duplicate card
+set, the pause-on-hover/focus state, and the `usePrefersReducedMotion` branch.
+The strip is now one static row with smooth manual horizontal snap-scroll
+(`snap-x` + `snap-start` cards, thin scrollbar). The single "SIMULATED DATA"
+pill, card content, and stock/index link behavior are unchanged.
+`MarketStrip.test.tsx`: dropped the reduced-motion mock; updated comments;
+added a regression test asserting each symbol renders exactly once (no
+marquee duplicate set).
+
+### 2. Recent activity empty state compressed
+`src/routes/index.tsx` ("Recent activity"): replaced the giant hollow dashed
+box with a compact empty state — small icon + one line ("No transactions yet")
++ small CTA, ~156px tall (≤160px).
+
+### 3. Floating circular button — diagnosed, fix handed to Worker B
+The button is the expenses FAB: `src/routes/expenses.tsx:806`
+(`fixed bottom-6 right-6 z-40 h-14 w-14 rounded-full`, "Add transaction").
+On mobile it sits directly under `BottomTabBar` (`fixed inset-x-0 bottom-0
+z-50`, ~80px tall + safe-area): the FAB occupies 24–80px from the viewport
+bottom while the tab bar covers 0–~80px at higher z-index, so the button
+renders clipped behind the tab bar at the right edge. It is functional (opens
+the add-transaction sheet), not vestigial. Recommended patch for Worker B —
+in `expenses.tsx`, replace `fixed bottom-6 right-6 z-40` with
+`fixed z-40 bottom-[calc(5.5rem+env(safe-area-inset-bottom))] right-[max(1.5rem,env(safe-area-inset-right))] md:bottom-6`
+(clears the tab bar on mobile, keeps desktop position).
+
+### 4. Header search placeholder no longer truncates
+`src/components/shell/GlobalSearch.tsx`: placeholder shortened from
+"Search transactions, contacts, bills, goals, stocks…" to "Search FinVerse…"
+(the searches covered are unchanged: transactions, contacts, bills, goals,
+stocks, app features); input widened `w-36→w-40` / `focus:w-44→w-52` /
+`sm:w-44→sm:w-48` / `sm:focus:w-56→sm:focus:w-64`. No truncation at 1440px
+or 390px (mobile shows the icon-only search link, unchanged).
+
+### 5. Empty states compressed per brief §23
+`src/components/fv/EmptyState.tsx`: compact is now the default — `py-14` →
+`py-5`, `size-16` icon → `size-10` rounded-xl, `text-xl` title → `text-sm`,
+`text-sm` body → `text-xs`, full CTA → `size="sm"`, and the hollow dashed
+treatment is replaced with a subtle solid border. `body` is now optional for
+one-line states. Worst case (title + two-line body + CTA) ≈ 200px ≤ 220px.
+All route-level `EmptyState` usages (`index.tsx` ×2 more, `portfolio.tsx`,
+`screener.tsx`, `stocks.$symbol.tsx`, `watchlist.tsx`) inherit the compact
+render automatically — no mock/demo data added anywhere. `payments.tsx`
+usages untouched (Worker B).
+
+### Verification (real outputs)
+| Command | Result |
+|---|---|
+| `bun run test:unit` | **126/126 pass** (18 files; +1 new: MarketStrip no-duplicate regression) |
+| `bun x tsc --noEmit` | **52 errors, 0 in any touched file** (pre-existing baseline unchanged) |
+| `bun x eslint` (5 touched files) | **0 errors, 0 warnings** |
+| `bun run build` | ✅ green |
+| Pending | Coordinator screenshot re-review (marquee removal, recent-activity empty state, search field at 1440/390) |
+
+### Files modified
+- `src/components/fv/MarketStrip.tsx`, `src/components/fv/MarketStrip.test.tsx`,
+  `src/components/fv/EmptyState.tsx`, `src/routes/index.tsx`,
+  `src/components/shell/GlobalSearch.tsx`
+
+## Phase 2: payments experience (Worker B, 2026-10-03 ~15:00 IST)
+
+**Scope**: dedicated Payments hub (§7) + contacts (§22) on `src/routes/payments.tsx`; new
+`src/components/payments/*` components; new `src/lib/payment-*.ts` helpers; migration
+`supabase/migrations/0003_payment_requests.sql`. No commits pushed (per task).
+
+**Payments hub** (`/payments`, tabs Pay / Razorpay / History)
+- Pay home: "Search people or UPI ID" bar, 7-tile action grid (Scan & Pay, Pay anyone,
+  Bank transfer, UPI ID, Request, Recharge, Bills), recent People strip, pending-request
+  preview, Bills & recharges card. The GIANT "New payment" full-width pill is gone —
+  replaced by a normal-sized primary button (`h-12 px-8`, auto width).
+- Send flow: recipient → amount → optional note → PaymentSheet confirmation → processing
+  → receipt. Success is rendered ONLY after the ledger write resolves (unchanged rule).
+  Amount capped at ₹10,00,000 via `MAX_PAYMENT_PAISE`.
+- Bank transfer (NEW, simulated): beneficiary name + account number + confirm-account +
+  IFSC (real format validation: 9–18 digits, `^[A-Z]{4}0[A-Z0-9]{6}$`) → amount → note →
+  confirmation → processing → receipt. Writes ledger expense with new `bank_test`
+  pay mode ("Bank · Test" rail label).
+- Payment requests (NEW): create (person → amount → note → Pending receipt) → track
+  pending/paid/declined/cancelled in `payment_requests` (RLS, migration 0003).
+  "Mark as paid" records a REAL income transaction and links `settled_txn_id` — nothing
+  auto-settles. Setup-pending ErrorState if migration 0003 not run.
+- Bills & recharges: due bills (unpaid this month) with one-tap Pay via real
+  `usePayBill` ledger write; Recharge tile opens the existing RechargeDialog;
+  "Manage bills" deep-links to `/bills`.
+- Scan & Pay tile opens the real QrScannerDialog; scan success navigates to the
+  amount phase with payee/amount prefilled (same contract as dashboard quick actions).
+- Payment status states are DISTINCT: processing (ledger write / Razorpay poll),
+  success (confirmed write / webhook), failed (write failure / Razorpay failed),
+  pending (request created / Razorpay link open — shown with its own Pending UI, not
+  the processing spinner), refunded (see below). History has status filter pills
+  (All/Successful/Pending/Failed/Refunded — pills used for filters per §17).
+- Refunds (NEW, simulated rails): two-tap "Refund this payment" on UPI/bank receipts
+  and history details → records a reversing income txn linked via new
+  `transactions.refund_of` (migration 0003) → original shows Refunded status.
+  Guarded: expenses only, `upi_test`/`bank_test` only, once only. Missing column →
+  honest setup-pending error, never fake success.
+- Receipts: history rows open a receipt dialog (rail + status + method + note);
+  Download receipt produces a real `.txt` receipt stating test-mode honesty.
+- Search: people/UPI-ID search (direct-pay offer when the query is a valid UPI ID
+  or 10-digit mobile) + history search (name/note/amount).
+- Contacts (§22): `PeopleStrip` — avatar+initials+name, horizontal scroll on mobile,
+  grid on desktop; people derive ONLY from real activity (paid/requested), never seed
+  data. Refund and request-settlement notes are normalized so no phantom "Refund" /
+  "Payment request" people appear (tested).
+
+**Honesty preserved**: Razorpay "not configured" state untouched; every surface keeps
+TestModeBanner; simulated-UPI test-mode language kept; no mock data.
+
+**Deep-links kept**: `flow=recipient|upi-id|upi`, `tab=send|razorpay|history`, `upiId`,
+`name`, `amount` all still work (re-applies if params change, e.g. second QR scan);
+added `flow=bank` and `flow=request` (→ create step).
+
+**Files added**
+- `src/lib/payment-contacts.ts` (+ test): note parse/build contract, UPI/mobile/
+  account/IFSC validators, `extractPeople`, `searchPeople`
+- `src/lib/payment-requests.ts` (+ test): request status state machine
+  (pending→paid|declined|cancelled, terminal states frozen), validation, hooks
+- `src/lib/payment-receipt.ts` (+ test): text receipt builder + download
+- `src/components/payments/{PeopleStrip,PeopleSearch,FlowHeader,BankTransferFlow,RequestMoneyFlow,BillsCard}.tsx`
+  (+ PeopleStrip component test)
+- `supabase/migrations/0003_payment_requests.sql` (payment_requests table +
+  transactions.refund_of; user must run it in the Supabase SQL editor)
+
+**Files modified**
+- `src/routes/payments.tsx` (full hub rewrite; Razorpay tab logic preserved)
+- `src/lib/payments.ts` (`bank_test` rail, refund helpers `refundedTxnIds`/
+  `canRefundPayment`/`paymentDisplayStatus`/`useRefundPayment`, `isBillDue`)
+- `src/lib/upi-qr.ts` (exported `isValidUpiId`), `src/lib/finance/types.ts`
+  (`bank_test` pay mode, `refundOf?`), `src/lib/finance/db.ts` (refund_of mapping),
+  `src/lib/payments.test.ts` (+ refund/bank/isBillDue tests)
+
+**Self-review fixes during build**: refund income no longer creates phantom "Refund"
+person; request-settle note is the person's name; history detail counterparty handles
+refund rows; request draft resets after send; removed `role="listitem"` from strip
+buttons (was overriding button role).
+
+**Verification (real outputs)**
+| Command | Result |
+|---|---|
+| `bun run test:unit` | **157/157 pass** (22 files; baseline 126 + 31 new: payment-contacts 17, payment-requests 5, payment-receipt 2, payments +4 incl. refunds/isBillDue, PeopleStrip 3) |
+| `bun x tsc --noEmit` | **52 errors, 0 in any Phase-2-touched file** (identical to pre-existing baseline) |
+| `bun x eslint` (all touched files) | **0 errors, 0 warnings** |
+| `bun run build` | ✅ green |
+| Pending (needs live browser) | Milestone screenshot review: payments home (search, action grid, people strip), bank-transfer flow, request flow + pending card, refunded status in history, light + dark, mobile 390px strip scroll |

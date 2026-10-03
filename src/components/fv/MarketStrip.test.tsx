@@ -25,20 +25,23 @@ vi.mock("@tanstack/react-router", () => ({
   },
 }));
 
-vi.mock("@/hooks/use-prefers-reduced-motion", () => ({
-  usePrefersReducedMotion: () => true,
-}));
-
 describe("MarketStrip", () => {
   it("renders all three indices with price, absolute move and % move", () => {
     render(<MarketStrip symbols={[]} />);
     for (const symbol of ["NIFTY50", "SENSEX", "BANKNIFTY"]) {
       expect(screen.getByText(symbol)).toBeTruthy();
     }
-    // Reduced-motion row: each of the 3 indices appears exactly once here.
+    // Static strip: each of the 3 indices appears exactly once.
     const section = screen.getByRole("region", { name: /market strip/i });
     expect(section.textContent ?? "").toMatch(/₹[\d,]+/);
     expect(section.textContent ?? "").toMatch(/%/);
+  });
+
+  it("renders each symbol exactly once — no marquee duplicate set", () => {
+    render(<MarketStrip symbols={["RELIANCE"]} />);
+    for (const symbol of ["NIFTY50", "SENSEX", "BANKNIFTY", "RELIANCE"]) {
+      expect(screen.getAllByText(symbol)).toHaveLength(1);
+    }
   });
 
   it("shows exactly one compact SIMULATED DATA pill", () => {

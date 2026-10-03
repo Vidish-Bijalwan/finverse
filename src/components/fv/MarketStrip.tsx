@@ -1,9 +1,8 @@
-import { useEffect, useMemo, useState } from "react";
+import { useMemo } from "react";
 import { Link } from "@tanstack/react-router";
 import { TrendingDown, TrendingUp } from "lucide-react";
 
 import { cn } from "@/lib/utils";
-import { usePrefersReducedMotion } from "@/hooks/use-prefers-reduced-motion";
 import { NumberDisplay, pressable } from "@/components/fv";
 import { getStock } from "@/lib/market/data";
 import { getIndex, INDICES } from "@/lib/market/indices";
@@ -22,15 +21,16 @@ interface StripItem {
 
 /**
  * Market strip: indices + watched instruments in one compact, horizontally
- * scrollable row.
+ * scrollable row with scroll-snap.
  *
  * Each item shows symbol, price, absolute move and % move in muted
  * green/red. One compact "SIMULATED DATA" pill labels the whole strip — the
  * feed is the seeded demo engine (`getLTP` / `genHistory`), never live
  * prices.
  *
- * Motion: the row auto-scrolls as a marquee that pauses on hover or focus;
- * prefers-reduced-motion renders a plain scrollable row instead.
+ * Deliberately static: the old auto-scroll marquee rendered the first card
+ * half-scrolled with overlapping text on load, so manual snap-scroll is the
+ * only motion here.
  */
 export function MarketStrip({
   symbols,
@@ -40,9 +40,6 @@ export function MarketStrip({
   symbols?: string[];
   className?: string;
 }) {
-  const reducedMotion = usePrefersReducedMotion();
-  const [paused, setPaused] = useState(false);
-
   const items: StripItem[] = useMemo(() => {
     const list: StripItem[] = INDICES.map((idx) => {
       const change = dayChange(genHistory(idx.symbol, 2));
@@ -122,70 +119,17 @@ export function MarketStrip({
     );
   };
 
-  // Reduced motion: a plain horizontally-scrollable row, no auto-scroll.
-  if (reducedMotion) {
-    return (
-      <section
-        aria-label="Market strip — simulated data"
-        className={cn("rounded-2xl border border-border/70 bg-card p-3", className)}
-      >
-        <div className="mb-2 flex items-center justify-between px-1">
-          <h2 className="text-sm font-bold text-foreground">Markets</h2>
-          <SimulatedPill />
-        </div>
-        <div className="flex snap-x gap-2 overflow-x-auto pb-1">{items.map(card)}</div>
-      </section>
-    );
-  }
-
   return (
     <section
       aria-label="Market strip — simulated data"
-      className={cn(
-        "group/strip overflow-hidden rounded-2xl border border-border/70 bg-card p-3",
-        className,
-      )}
-      onMouseEnter={() => setPaused(true)}
-      onMouseLeave={() => setPaused(false)}
-      onFocus={() => setPaused(true)}
-      onBlur={() => setPaused(false)}
+      className={cn("rounded-2xl border border-border/70 bg-card p-3", className)}
     >
       <div className="mb-2 flex items-center justify-between px-1">
         <h2 className="text-sm font-bold text-foreground">Markets</h2>
         <SimulatedPill />
       </div>
-      <div className="relative overflow-hidden">
-        <div
-          className={cn(
-            "fv-marquee flex w-max gap-2",
-            paused && "[animation-play-state:paused]",
-            "group-focus-within/strip:[animation-play-state:paused]",
-          )}
-        >
-          {items.map(card)}
-          {/* Seamless-loop duplicate: decorative, never interactive. */}
-          <div aria-hidden="true" className="flex w-max gap-2">
-            {items.map((it) => (
-              <div
-                key={`dup-${it.symbol}`}
-                className="flex w-40 shrink-0 flex-col gap-1 rounded-xl border border-border/70 bg-card px-3 py-2.5"
-              >
-                <span className="flex items-center gap-1.5">
-                  <span className="text-xs font-bold tracking-wide text-foreground">
-                    {it.symbol}
-                  </span>
-                </span>
-                <span className="text-sm font-bold tabular-nums text-foreground">
-                  {formatINR(it.pricePaise)}
-                </span>
-                <span className="text-[11px] tabular-nums text-muted-foreground">
-                  {it.changePct >= 0 ? "+" : "−"}
-                  {Math.abs(it.changePct).toFixed(2)}%
-                </span>
-              </div>
-            ))}
-          </div>
-        </div>
+      <div className="flex snap-x gap-2 overflow-x-auto pb-1 [scrollbar-width:thin]">
+        {items.map(card)}
       </div>
     </section>
   );

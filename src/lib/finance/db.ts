@@ -224,6 +224,7 @@ interface TransactionRow {
   to_account_id: string | null;
   tags: string[] | null;
   recurring_rule_id: string | null;
+  refund_of: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -316,6 +317,7 @@ function toTransaction(row: TransactionRow): Transaction {
     ...(row.to_account_id ? { toAccountId: row.to_account_id } : {}),
     tags: row.tags ?? [],
     ...(row.recurring_rule_id ? { recurringRuleId: row.recurring_rule_id } : {}),
+    ...(row.refund_of ? { refundOf: row.refund_of } : {}),
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   };
@@ -458,6 +460,9 @@ export async function insertTransaction(input: NewTransaction): Promise<Transact
       ...(input.toAccountId ? { to_account_id: input.toAccountId } : {}),
       tags: normalizeTags(input.tags),
       ...(input.recurringRuleId ? { recurring_rule_id: input.recurringRuleId } : {}),
+      // refund_of needs migration 0003; only sent for refund writes, so
+      // every other insert is unaffected when the column doesn't exist yet.
+      ...(input.refundOf ? { refund_of: input.refundOf } : {}),
     })
     .select()
     .single();

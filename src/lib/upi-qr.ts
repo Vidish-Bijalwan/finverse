@@ -18,6 +18,11 @@ export interface UpiPayload {
 
 const UPI_ID_RE = /^[\w.-]{2,256}@[a-zA-Z]{2,64}$/;
 
+/** UPI ID syntax check: local-part@bank-handle (also used by manual entry). */
+export function isValidUpiId(id: string): boolean {
+  return UPI_ID_RE.test(id.trim());
+}
+
 /**
  * Convert a UPI `am` value (rupees, up to 2 decimals) to integer paise.
  * Returns null for malformed values.

@@ -606,7 +606,6 @@ function FinVerseDashboard() {
                 ) : recentTxns.length === 0 ? (
                   <EmptyState
                     title="No transactions yet"
-                    body="Your latest activity will show up here."
                     actionLabel="Add expense"
                     onAction={() => void navigate({ to: "/expenses", search: { add: "1" } })}
                   />

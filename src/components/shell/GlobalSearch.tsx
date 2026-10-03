@@ -211,7 +211,7 @@ function buildResults(query: string, db: FinanceDB | undefined): SearchResult[] 
  * navigates to the right page.
  */
 export function GlobalSearch({
-  placeholder = "Search transactions, contacts, bills, goals, stocks…",
+  placeholder = "Search FinVerse…",
   onNavigate,
 }: {
   placeholder?: string;
@@ -289,7 +289,7 @@ export function GlobalSearch({
           }}
           onFocus={() => setOpen(true)}
           onKeyDown={onKeyDown}
-          className="w-36 bg-transparent text-sm text-foreground outline-none transition-all placeholder:text-muted-foreground focus:w-44 sm:w-44 sm:focus:w-56 [&::-webkit-search-cancel-button]:hidden"
+          className="w-40 bg-transparent text-sm text-foreground outline-none transition-all placeholder:text-muted-foreground focus:w-52 sm:w-48 sm:focus:w-64 [&::-webkit-search-cancel-button]:hidden"
         />
         {query && (
           <button
