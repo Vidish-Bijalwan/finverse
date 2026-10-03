@@ -1,15 +1,14 @@
 import { createFileRoute, Navigate } from "@tanstack/react-router";
 import { useState, type FormEvent } from "react";
-import { ChartNoAxesCombined, Eye, EyeOff, Loader2 } from "lucide-react";
+import { BadgeCheck, ChartNoAxesCombined, Eye, EyeOff, Loader2, PiggyBank } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useAuth } from "@/lib/auth";
-import { usePrefersReducedMotion } from "@/hooks/use-prefers-reduced-motion";
-import { cn } from "@/lib/utils";
-import { pressable } from "@/components/fv";
+import { pressable, Sparkline } from "@/components/fv";
+import { AmbientOrbs } from "@/components/auth/AmbientOrbs";
 
 export const Route = createFileRoute("/login")({
   head: () => ({
@@ -172,7 +171,6 @@ function LoginPage() {
   const [tab, setTab] = useState<"login" | "signup">("login");
   const [googleError, setGoogleError] = useState<string | null>(null);
   const [googleLoading, setGoogleLoading] = useState(false);
-  const reducedMotion = usePrefersReducedMotion();
 
   if (!loading && user) {
     return <Navigate to={profile?.onboarding_completed ? "/" : "/onboarding"} />;
@@ -192,67 +190,142 @@ function LoginPage() {
   };
 
   return (
-    <div className="relative flex min-h-[100dvh] items-center justify-center overflow-hidden px-4 py-10">
-      {/* Brand-hero mesh gradient — login only. Static when reduced motion. */}
-      <div
-        aria-hidden="true"
-        className={cn("fv-mesh fv-mesh-dark", !reducedMotion && "fv-mesh-animated")}
-      />
-      <div className="relative w-full max-w-sm">
-        <div className="mb-6 flex flex-col items-center text-center">
-          <div className="grid size-12 place-items-center rounded-xl bg-primary-dark shadow-logo">
-            <ChartNoAxesCombined className="size-6 text-background" strokeWidth={2.5} />
-          </div>
-          <h1 className="mt-4 text-2xl font-black tracking-tight text-white">
-            Fin<span className="text-primary">Verse</span>
-          </h1>
-          <p className="mt-1 text-sm text-white/70">
-            Clear, explainable insights for your financial life.
-          </p>
-        </div>
+    <div className="relative flex min-h-[100dvh] items-center justify-center overflow-hidden bg-[oklch(0.15_0.025_270)] px-4 py-10">
+      {/* Animated colored light orbs. Static when reduced motion is preferred. */}
+      <AmbientOrbs />
 
-        <div className="rounded-xl border bg-card p-6 text-card-foreground shadow-card">
-          <Tabs value={tab} onValueChange={(v) => setTab(v as "login" | "signup")}>
-            <TabsList className="grid w-full grid-cols-2">
-              <TabsTrigger value="login">Sign in</TabsTrigger>
-              <TabsTrigger value="signup">Sign up</TabsTrigger>
-            </TabsList>
-            <TabsContent value="login" className="pt-4">
-              <AuthForm mode="login" />
-            </TabsContent>
-            <TabsContent value="signup" className="pt-4">
-              <AuthForm mode="signup" />
-            </TabsContent>
-          </Tabs>
+      <div className="relative w-full max-w-md lg:max-w-5xl">
+        <div className="overflow-hidden rounded-3xl border border-white/10 bg-card shadow-2xl lg:grid lg:grid-cols-[400px_1fr]">
+          {/* Form panel */}
+          <div className="p-6 sm:p-8">
+            <div className="mb-6 flex flex-col items-center text-center">
+              <div className="grid size-12 place-items-center rounded-xl bg-primary-dark shadow-logo">
+                <ChartNoAxesCombined className="size-6 text-logo-mark-fg" strokeWidth={2.5} />
+              </div>
+              <h1 className="mt-4 text-2xl font-black tracking-tight text-foreground">
+                Fin<span className="text-primary">Verse</span>
+              </h1>
+              <p className="mt-1 text-sm text-muted-foreground">
+                Clear, explainable insights for your financial life.
+              </p>
+            </div>
 
-          <div className="my-4 flex items-center gap-3">
-            <span className="h-px flex-1 bg-border" />
-            <span className="text-xs text-muted-foreground">or</span>
-            <span className="h-px flex-1 bg-border" />
-          </div>
+            <Tabs value={tab} onValueChange={(v) => setTab(v as "login" | "signup")}>
+              <TabsList className="grid w-full grid-cols-2">
+                <TabsTrigger value="login">Sign in</TabsTrigger>
+                <TabsTrigger value="signup">Sign up</TabsTrigger>
+              </TabsList>
+              <TabsContent value="login" className="pt-4">
+                <AuthForm mode="login" />
+              </TabsContent>
+              <TabsContent value="signup" className="pt-4">
+                <AuthForm mode="signup" />
+              </TabsContent>
+            </Tabs>
 
-          {googleError && (
-            <p
-              role="alert"
-              className="mb-3 rounded-md bg-destructive/10 px-3 py-2 text-xs text-destructive"
-            >
-              {googleError}
-            </p>
-          )}
-          <Button
-            type="button"
-            variant="outline"
-            className={`w-full ${pressable}`}
-            onClick={handleGoogle}
-            disabled={googleLoading || loading}
-          >
-            {googleLoading ? (
-              <Loader2 className="mr-2 size-4 animate-spin" aria-hidden="true" />
-            ) : (
-              <GoogleIcon />
+            <div className="my-4 flex items-center gap-3">
+              <span className="h-px flex-1 bg-border" />
+              <span className="text-xs text-muted-foreground">or</span>
+              <span className="h-px flex-1 bg-border" />
+            </div>
+
+            {googleError && (
+              <p
+                role="alert"
+                className="mb-3 rounded-md bg-destructive/10 px-3 py-2 text-xs text-destructive"
+              >
+                {googleError}
+              </p>
             )}
-            Continue with Google
-          </Button>
+            <Button
+              type="button"
+              variant="outline"
+              className={`w-full ${pressable}`}
+              onClick={handleGoogle}
+              disabled={googleLoading || loading}
+            >
+              {googleLoading ? (
+                <Loader2 className="mr-2 size-4 animate-spin" aria-hidden="true" />
+              ) : (
+                <GoogleIcon />
+              )}
+              Continue with Google
+            </Button>
+          </div>
+
+          {/* Immersive visual panel — decorative illustration of the product. */}
+          <div
+            className="relative hidden min-h-[560px] overflow-hidden lg:block"
+            aria-hidden="true"
+          >
+            <AmbientOrbs />
+            <div className="absolute inset-0 bg-[oklch(0.13_0.02_270/0.45)]" />
+
+            <div className="relative z-10 h-full">
+              {/* Net worth card */}
+              <div className="fv-float-soft absolute left-10 top-12 w-64 rounded-2xl border border-white/10 bg-white/[0.07] p-4 shadow-[0_20px_60px_-15px_rgba(0,0,0,0.6)] backdrop-blur-md">
+                <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-white/50">
+                  Net worth
+                </p>
+                <p className="mt-1 text-[26px] font-black tabular-nums text-white">₹4,82,300</p>
+                <div className="mt-2 flex items-end justify-between gap-2">
+                  <Sparkline
+                    values={[410000, 425000, 418000, 438000, 452000, 446000, 468000, 482300]}
+                    width={110}
+                    height={34}
+                    direction="up"
+                    ariaLabel="Sample net worth trend"
+                  />
+                  <span className="rounded-full bg-emerald-400/15 px-2 py-0.5 text-xs font-bold tabular-nums text-emerald-300">
+                    +12.4%
+                  </span>
+                </div>
+              </div>
+
+              {/* UPI payment card */}
+              <div
+                className="fv-float-soft absolute right-10 top-[40%] w-60 rounded-2xl border border-white/10 bg-white/[0.07] p-4 shadow-[0_20px_60px_-15px_rgba(0,0,0,0.6)] backdrop-blur-md"
+                style={{ animationDelay: "1.6s" }}
+              >
+                <div className="flex items-center gap-3">
+                  <span className="grid size-10 shrink-0 place-items-center rounded-full bg-emerald-400/20">
+                    <BadgeCheck className="size-5 text-emerald-300" />
+                  </span>
+                  <div className="min-w-0">
+                    <p className="text-sm font-bold tabular-nums text-white">₹1,200 sent</p>
+                    <p className="truncate text-xs text-white/55">Aditi Sharma • UPI • Just now</p>
+                  </div>
+                </div>
+              </div>
+
+              {/* SIP card */}
+              <div
+                className="fv-float-soft absolute bottom-16 left-14 w-64 rounded-2xl border border-white/10 bg-white/[0.07] p-4 shadow-[0_20px_60px_-15px_rgba(0,0,0,0.6)] backdrop-blur-md"
+                style={{ animationDelay: "2.8s" }}
+              >
+                <div className="flex items-center gap-3">
+                  <span className="grid size-10 shrink-0 place-items-center rounded-full bg-sky-400/20">
+                    <PiggyBank className="size-5 text-sky-300" />
+                  </span>
+                  <div className="min-w-0">
+                    <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-white/50">
+                      Monthly SIP
+                    </p>
+                    <p className="truncate text-sm font-bold tabular-nums text-white">
+                      ₹10,000 <span className="font-medium text-white/50">• 12.1% XIRR</span>
+                    </p>
+                  </div>
+                </div>
+                <div className="mt-3 h-1.5 overflow-hidden rounded-full bg-white/10">
+                  <div className="h-full w-2/3 rounded-full bg-gradient-to-r from-emerald-400 to-teal-300" />
+                </div>
+              </div>
+
+              <p className="absolute inset-x-0 bottom-5 px-10 text-center text-xs leading-5 text-white/45">
+                Spending, investing and everything between — one calm home for your money.
+              </p>
+            </div>
+          </div>
         </div>
 
         <p className="mt-4 text-center text-xs text-white/60">
