@@ -1,6 +1,7 @@
 import { useRef, useState } from "react";
 import { Clock, Tag, Trash2, XCircle } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { avatarInitials } from "@/lib/names";
 import { NumberDisplay } from "./NumberDisplay";
 import { usePrefersReducedMotion } from "@/hooks/use-prefers-reduced-motion";
 import { pressable } from "./press";
@@ -17,14 +18,13 @@ export interface TxnSwipeActions {
 
 const ACTION_PX = 64;
 
-/** Initials from a display name: "Aarav Sharma" -> "AS". */
+/**
+ * Initials from a display name, via the shared avatar rule
+ * (`@/lib/names`): first letters of the first two words, uppercased.
+ * "QA Test Beneficiary" -> "QT".
+ */
 export function initialsOf(name: string): string {
-  const parts = name.trim().split(/\s+/);
-  const first = parts[0] ?? "";
-  if (first === "") return "•";
-  if (parts.length === 1) return first.slice(0, 2).toUpperCase();
-  const last = parts[parts.length - 1] ?? "";
-  return (first.charAt(0) + last.charAt(0)).toUpperCase();
+  return avatarInitials(name);
 }
 
 /**

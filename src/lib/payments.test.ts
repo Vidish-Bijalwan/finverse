@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   MAX_PAYMENT_PAISE,
   PaymentsSetupPendingError,
+  SETUP_PENDING_CODE,
   buildUpiNote,
   canRefundPayment,
   groupTransactionsByMonth,
@@ -166,8 +167,21 @@ describe("isSetupPendingError", () => {
     expect(isSetupPendingError(new Error('relation "payment_links" does not exist'))).toBe(true);
   });
 
+  it("matches the stable code even when the prototype is lost (re-thrown / serialized)", () => {
+    // Plain object with our code — e.g. after JSON round-trip or cross-realm re-throw.
+    expect(isSetupPendingError({ code: SETUP_PENDING_CODE })).toBe(true);
+    expect(isSetupPendingError({ code: SETUP_PENDING_CODE, message: "boom" })).toBe(true);
+  });
+
+  it("matches the branded message text when the error is re-created as a plain Error", () => {
+    const branded = new PaymentsSetupPendingError();
+    expect(branded.code).toBe(SETUP_PENDING_CODE);
+    expect(isSetupPendingError(new Error(branded.message))).toBe(true);
+  });
+
   it("ignores unrelated errors", () => {
     expect(isSetupPendingError(new Error("network down"))).toBe(false);
+    expect(isSetupPendingError({ code: "PGRST301" })).toBe(false);
     expect(isSetupPendingError(null)).toBe(false);
     expect(isSetupPendingError(undefined)).toBe(false);
   });

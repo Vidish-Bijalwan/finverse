@@ -510,3 +510,147 @@ buttons (was overriding button role).
 | `bun x eslint` (all touched files) | **0 errors, 0 warnings** |
 | `bun run build` | ✅ green |
 | Pending (needs live browser) | Milestone screenshot review: payments home (search, action grid, people strip), bank-transfer flow, request flow + pending card, refunded status in history, light + dark, mobile 390px strip scroll |
+
+---
+
+# Screenshot-review bug fixes (6 issues) — 2026-10-03
+
+Date: 2026-10-03 · Branch: `feature/fintech-overhaul` · Base: `main@3841647d` (HEAD `99082921`)
+Workdir: `~/workspace/finverse-overhaul3/app` (bug-fix subagent; NOT pushed)
+
+## Fix #1 — floating button clipped at right viewport edge (~1920px)
+
+**Root cause: NOT found by static analysis — NOT claimed fixed.**
+- Exhaustive sweep of every `fixed`/`sticky`/`absolute` element found only one
+  fixed-position rounded button: the expenses FAB (`src/routes/expenses.tsx:806`,
+  `right-[max(1.5rem,env(safe-area-inset-right))] md:right-6` → at 1920px
+  `md:right-6` wins = `right: 1.5rem`, i.e. inset from the edge, not clipped;
+  no transformed/filtered ancestors, no negative offsets, no `100vw`/`w-screen`,
+  no custom breakpoints (`md` = 768px default). BottomTabBar is `md:hidden`;
+  Toaster is bottom-center; dialogs/sheets are centered or full-screen.
+- No second fixed rounded-full button exists anywhere in the codebase.
+- **Regression note**: this environment has no live-browser control, so the
+  clipping could not be reproduced. Needs a real 1920px render (parent/root
+  with browser tools) or the parent's screenshot details (which page/state).
+  Do not mark fixed until then.
+
+## Fix #2 — "SIMULATED"/"SIMULATED DATA" badges plastered everywhere
+
+**Root cause**: the honesty disclosure (brief §5) was over-applied as a
+shouting pill (`TestModeBanner`, 19 usages; `SimulatedPill` in MarketStrip).
+**Change**: pills removed everywhere; one quiet muted disclosure line per page/flow header:
+- Deleted `src/components/fv/TestModeBanner.tsx`; removed its barrel export
+  (`src/components/fv/index.ts`).
+- `src/routes/payments.tsx` (11 usages): header keeps the existing quiet line
+  "Simulated rails — no real money moves"; send-amount + New-payment screens get
+  one quiet line "Simulated UPI — no real money moves."; processing/receipt/
+  review/history pills removed (receipts already carry quiet "Test mode"
+  lines; Razorpay tab copy already discloses test-mode honestly — the
+  "Simulated" pill was factually wrong there).
+- `src/components/payments/BankTransferFlow.tsx` (5 usages): details phase
+  keeps its quiet line "Transfer to any bank account. Simulated — settles in
+  your FinVerse ledger, no real money moves."; all pills removed.
+- `src/components/payments/RequestMoneyFlow.tsx` (1 usage): pill removed —
+  request tracking writes real DB records, nothing simulated.
+- `src/routes/portfolio.tsx`: pill removed; header subtitle already discloses
+  ("valued at demo last-traded prices…").
+- `src/routes/stocks.$symbol.tsx`: pill replaced with quiet header text
+  "Simulated price — not live market data" (footer brokerage line kept).
+- `src/components/fv/MarketStrip.tsx`: "SIMULATED DATA" pill replaced with
+  quiet text "Simulated prices — not live data"; `SimulatedPill` deleted.
+- `src/routes/screener.tsx`: "Demo dataset · simulated prices — not live"
+  `Badge` converted to quiet muted text (unused import removed).
+- Quiet disclosures that were already calm left untouched (recharge dialog,
+  ticker strip, watchlist subtitle, screener subtitle, dashboard market
+  snapshot sub, receipt lines).
+- Updated `MarketStrip.test.tsx`: pill assertion → quiet-line assertion.
+- Updated stale doc comments in `src/lib/payments.ts` + `MarketStrip.tsx`.
+
+## Fix #3 — name sanitizer too aggressive ("QA Reviewer" → "Qa")
+
+**Root cause**: `greetingName()` in `src/lib/greeting.ts` blanket-lowercased
+every token. **Change**: new `displayToken()` title-cases ONLY all-lowercase
+tokens ("vidish"→"Vidish") and preserves any token that already carries casing
+("QA"→"QA", "QA Reviewer"→"QA Reviewer", "McDonald", "eBay"). Junk rejection
+unchanged ("ee"→"", emails rejected, "X1"→""). +4 unit tests in
+`src/lib/greeting.test.ts`.
+
+## Fix #4 — avatar initials wrong ("QA Test Beneficiary" → "QB")
+
+**Root cause**: `TxnRow.initialsOf` skipped the middle word. **Change**: new
+shared rule in `src/lib/names.ts` — `avatarInitials(name)` = first letters of
+the first two whitespace-separated words, uppercased ("QA Test Beneficiary"→
+"QT", "Aarav Sharma"→"AS"); single word → first two letters ("Aarav"→"AA");
+blank → `"FV"` monogram (`AVATAR_FALLBACK_INITIALS`). `TxnRow.initialsOf` now
+delegates to it (export kept — imported by PaymentSheet, PeopleSearch,
+PeopleStrip, RequestMoneyFlow); local duplicates in
+`src/components/shell/AppHeader.tsx` and `src/routes/profile.tsx` replaced.
+New `src/lib/names.test.ts` (6 tests).
+
+## Fix #5 — Request flow setup-pending state
+
+**Root cause of the reviewer's "Couldn't load requests"**: the
+missing-table (42P01) branch existed, but detection relied solely on
+`instanceof` + Postgrest `{code:"42P01"}` shape + relation-name regex — any
+serialization/re-throw that loses the prototype or code falls through to the
+raw error. (Ruled out as a mechanism: TanStack Query only dehydrates
+successful queries, so SSR serialization isn't the trigger; the true trigger
+was not reproducible without live DB creds.)
+**Change** (`src/lib/payments.ts`): `PaymentsSetupPendingError` now stamps a
+stable `code = "FINVERSE_SETUP_PENDING"` (exported as `SETUP_PENDING_CODE`);
+`isSetupPendingError` additionally matches that code and the branded message
+text as a fallback, keeping the 42P01 + relation-regex paths. Copy softened in
+`src/components/payments/RequestMoneyFlow.tsx`: title "Requests aren't set up
+yet", body "Requests unlock after a quick database update — run
+supabase/migrations/0003_payment_requests.sql in the Supabase SQL editor, then
+try again." Retry is disabled for setup-pending queries (existing behavior).
++3 unit tests in `src/lib/payments.test.ts` (code-match, message-fallback,
+negative for unrelated Postgrest code). Graceful once the migration lands:
+detection only fires when the table is actually missing.
+
+## Fix #6 — dashboard "Request" quick action
+
+**No bug**: keypad "5,0,0 → ₹5" is correct GPay-style paise entry — untouched.
+**Change** (`src/lib/quick-actions.ts`): "Request" target repointed from
+`/payments?tab=razorpay` → `/payments?flow=request` (route validates the
+`flow` param; opens `RequestMoneySection` in create phase). Test expectation
+updated in `src/lib/quick-actions.test.ts`.
+
+## Verification (real outputs)
+| Command | Result |
+|---|---|
+| `bun run test:unit` | **168/168 pass** (23 files): incl. greeting 12 (+4 casing), names 6 (new), MarketStrip 5 (pill→quiet-line), quick-actions 6 (request repoint), payments +3 (setup-pending hardening) |
+| `bun x tsc --noEmit` | **52 errors — identical to pre-existing baseline** (GoalDialogs 17, money/utils 12, readiness 6, market/data 6, market/history 2, BottomSheet 2, BillDialog 2, HoldingDialog 2, budgets 1, finance/format 1, BudgetDialog 1). **0 new errors** |
+| `bun x eslint` (all touched files) | **0 errors, 0 warnings** (2 prettier issues auto-fixed) |
+| `bun run build` | ✅ green (vite + nitro, 2.35s) |
+| Live-browser visual QA | ⚠️ NOT performed — no browser control in this environment (blocks Fix #1 confirmation) |
+
+## Phase 3: markets (brief §8 + §9 + §10 + §21) — Worker C (2026-10-03 ~16:00 IST)
+
+### 1. Market snapshot section (brief §9)
+- New `src/components/home/MarketSnapshot.tsx`: index cards for NIFTY 50 / SENSEX / BANK NIFTY (name, price, % change, tiny sparkline; static — indices have no detail page, same convention as the market strip), then Top Gainers / Top Losers / Most Active lists (3 rows each). Every row shows company name, symbol, price, % movement and is a `Link` to `/stocks/$symbol` (tap → stock detail). One quiet muted line in the section header: "Simulated prices — not live market data" (no per-section badges, per the Step-1 convention change).
+- New pure logic `src/lib/market/movers.ts`: `topGainers` / `topLosers` (deterministic tie-break by symbol), `mostActive` (largest absolute day % move — the demo feed has no traded-volume data, so swing size is the documented activity proxy), `sparklineValues` (downsamples a history to N points, always keeps first+last), `sparklinePath` (SVG path math; flat series → midline, never NaN), `changePctLabel` (Indian minus sign).
+- New `src/components/fv/Sparkline.tsx` (exported from the fv barrel): tiny SVG sparkline with gain/loss direction coloring, SSR-safe (pure path math), `aria-hidden` unless a label is passed.
+- `src/lib/market/movers.test.ts`: 17 unit tests covering gainers/losers/most-active ordering + tie-breaks, empty/short universes, input immutability, sparkline downsampling (length, first/last kept), path Y-inversion, flat-series midline, empty-input guard, and signed % labels.
+
+### 2. Watchlist card (brief §10)
+- New `src/components/home/WatchlistCard.tsx` for the dashboard secondary column: up to 5 compact rows (initial-tile icon, company name, ticker, price, daily change, tiny sparkline). Tapping a row → `/stocks/$symbol`. Shares the watchlist page's React Query cache (same key + fetch), so no duplicate network fetch. Quiet "Simulated prices — not live market data" line in the header. Compact empty state (~175px, ≤220px): "Build your watchlist" / "Track stocks you care about." + one "Explore stocks" CTA → `/watchlist`. Full management (add/remove/alerts) stays on the `/watchlist` page, untouched.
+
+### 3. Stock detail page (brief §21)
+`src/routes/stocks.$symbol.tsx`:
+- Chart ranges extended to 1D / 1W / 1M / 3M / 1Y / 5Y (ChartCard `ranges` prop; `ChartRangeKey` union extended in `ChartCard.tsx`). History now generates 1260 trading days (≈5Y) once, memoized; 1W/1M/3M/1Y slice from it; 1D keeps the deterministic intraday walk.
+- New **Overview** section: data-driven about line (cap band, sector, universe size — no fake company descriptions), sector median P/E and 1Y-return comparison tiles, and sector-peers chips linking to their detail pages.
+- New **Financials** section: honestly-derived per-share/valuation ratios (EPS, earnings yield = EPS ÷ price, dividend per share = yield × price, implied book value per share = EPS ÷ ROE, implied P/B, P/E, ROE, D/E) with footnote "Illustrative ratios derived from the FinVerse demo dataset — not real company financials."
+- One subtle neutral `SIMULATION` pill added next to the ticker badge in the header (quiet line style), alongside the existing "Simulated price — not live market data" line. Buy/Sell wiring untouched (existing simulated order flow).
+
+### 4. Dashboard wiring (Phase-1 desktop IA preserved)
+`src/routes/index.tsx`: the secondary column keeps portfolio snapshot → watchlist → market snapshot order, now rendering `<WatchlistCard />` and `<MarketSnapshot />`. Removed the old 4-row `MarketRow` preview, the `MoverList` helper, and the `topMovers`/`watchPreview` memos; watchlist query retained only for the `MarketStrip` symbols prop. Desktop IA (12-col primary/secondary grid), market strip, and all existing functionality unchanged.
+
+## Verification (real outputs)
+| Command | Result |
+|---|---|
+| `bun run test:unit` | **185/185 pass** (24 files), incl. new `movers.test.ts` 17/17 |
+| `bun x tsc --noEmit` | **52 errors — byte-identical to baseline** (diff of full error lists: empty). **0 new errors** |
+| `bun x eslint` (all 9 touched/new files) | **0 errors** (9 prettier issues auto-fixed with `--fix`; 3 react-refresh warnings in ChartCard.tsx are pre-existing — the file already exported constants alongside the component) |
+| `bun run build` | ✅ green (vite + nitro) |
+| Live-browser visual QA | ⚠️ NOT performed — no browser control in this environment; the Phase 3 milestone screenshot loop belongs to the parent coordinator |

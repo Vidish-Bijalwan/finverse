@@ -35,4 +35,16 @@ describe("greetingName", () => {
   it("accepts a capitalized short name", () => {
     expect(greetingName("Li Wei", null)).toBe("Li");
   });
+  it("preserves all-caps tokens instead of mangling them", () => {
+    expect(greetingName("QA Reviewer", null)).toBe("QA");
+    expect(greetingName("QA Reviewer", "qa@finverse.app")).toBe("QA");
+  });
+  it("preserves mixed-case names exactly", () => {
+    expect(greetingName("McDonald Smith", null)).toBe("McDonald");
+    expect(greetingName("eBay Seller", null)).toBe("eBay");
+  });
+  it("title-cases an all-lowercase name", () => {
+    expect(greetingName("vidish bijalwan", null)).toBe("Vidish");
+    expect(greetingName("  aarav  ", null)).toBe("Aarav");
+  });
 });

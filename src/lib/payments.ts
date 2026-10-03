@@ -4,7 +4,8 @@
  * Two rails:
  *   (a) Simulated UPI — always available. Writes a `transactions` row
  *       (type=expense, pay_mode=`upi_test`) via the existing useAddTransaction
- *       mutation path. No real money moves; every surface shows TestModeBanner.
+ *       mutation path. No real money moves; every surface carries a quiet
+ *       "simulated" disclosure line.
  *   (b) Razorpay test mode — only when the server reports configured
  *       (useRazorpayStatus). Link creation runs in a server function
  *       (src/lib/razorpay.server.ts); the short_url opens in a new tab and
@@ -53,12 +54,21 @@ export interface PaymentRecord {
   createdAt: string;
 }
 
+/** Stable code stamped on every PaymentsSetupPendingError. */
+export const SETUP_PENDING_CODE = "FINVERSE_SETUP_PENDING" as const;
+
+/** Branded message text — matched as a fallback in case the error is ever
+ *  re-created as a plain Error (losing both prototype and `code`). */
+export const SETUP_PENDING_MESSAGE =
+  "Payments database setup pending — run supabase/migrations/0002_revamp.sql in the Supabase SQL editor." as const;
+
 /** Branded error: the payments tables don't exist yet (migration not run). */
 export class PaymentsSetupPendingError extends Error {
+  /** Stable machine-readable marker — survives re-throws and (de)serialization
+   *  where `instanceof` checks break (SSR, worker boundaries, query dehydration). */
+  readonly code = SETUP_PENDING_CODE;
   constructor() {
-    super(
-      "Payments database setup pending — run supabase/migrations/0002_revamp.sql in the Supabase SQL editor.",
-    );
+    super(SETUP_PENDING_MESSAGE);
     this.name = "PaymentsSetupPendingError";
   }
 }
@@ -67,10 +77,15 @@ export class PaymentsSetupPendingError extends Error {
 export function isSetupPendingError(err: unknown): boolean {
   if (err instanceof PaymentsSetupPendingError) return true;
   if (err != null && typeof err === "object") {
-    const code = (err as { code?: unknown }).code;
-    if (code === "42P01") return true;
-    const message = (err as { message?: unknown }).message;
-    if (typeof message === "string" && /relation .* does not exist/i.test(message)) return true;
+    const e = err as { code?: unknown; message?: unknown };
+    // Stable code survives re-throws / serialization where `instanceof` fails.
+    if (e.code === SETUP_PENDING_CODE) return true;
+    // Native Postgrest shape: { code: "42P01", message: 'relation "x" does not exist' }.
+    if (e.code === "42P01") return true;
+    if (typeof e.message === "string") {
+      if (/relation .* does not exist/i.test(e.message)) return true;
+      if (e.message.includes(SETUP_PENDING_MESSAGE)) return true;
+    }
   }
   return false;
 }

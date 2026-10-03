@@ -8,7 +8,6 @@ import {
   ErrorState,
   NumberDisplay,
   Pill,
-  TestModeBanner,
   initialsOf,
   pressable,
 } from "@/components/fv";
@@ -70,8 +69,6 @@ export function RequestMoneySection({
           onBack={() => (phase === "sent" ? onExit() : setPhase("list"))}
         />
       )}
-      <TestModeBanner />
-
       {requestsQuery.isLoading && (
         <div className="flex flex-col gap-2">
           {[0, 1].map((i) => (
@@ -82,8 +79,8 @@ export function RequestMoneySection({
 
       {requestsQuery.isError && isSetupPendingError(requestsQuery.error) && (
         <ErrorState
-          title="Requests database setup pending"
-          body="Run supabase/migrations/0003_payment_requests.sql in the Supabase SQL editor to enable payment requests."
+          title="Requests aren't set up yet"
+          body="Requests unlock after a quick database update — run supabase/migrations/0003_payment_requests.sql in the Supabase SQL editor, then try again."
           onRetry={() => requestsQuery.refetch()}
         />
       )}

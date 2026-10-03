@@ -3,7 +3,7 @@ import { cn } from "@/lib/utils";
 import { formatINR } from "@/lib/finance/format";
 import { usePrefersReducedMotion } from "@/hooks/use-prefers-reduced-motion";
 
-export type ChartRangeKey = "1D" | "1W" | "1M" | "1Y";
+export type ChartRangeKey = "1D" | "1W" | "1M" | "3M" | "1Y" | "5Y";
 
 export const CHART_RANGES: ChartRangeKey[] = ["1D", "1W", "1M", "1Y"];
 

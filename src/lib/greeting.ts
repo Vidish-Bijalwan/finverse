@@ -26,19 +26,31 @@ function capitalize(word: string): string {
 }
 
 /**
+ * Display form of an accepted name token. The token's own casing is
+ * preserved — the only transformation ever applied is title-casing a fully
+ * lowercase token ("vidish" -> "Vidish"). Anything with real casing
+ * ("QA", "McDonald", "eBay") is returned untouched: lowercasing the tail
+ * ("QA" -> "Qa") destroys information and is never done.
+ */
+function displayToken(token: string): string {
+  if (token === token.toLowerCase()) return capitalize(token);
+  return token;
+}
+
+/**
  * Sanitize a candidate display name. Returns the usable first name, or ""
  * when the candidate is not name-like.
  *
  * A token is accepted when it is ≥3 letters, or ≥2 letters with at least one
- * uppercase letter (real short names like "Li" are capitalized; lowercase
+ * uppercase letter (real short names like "Li" are kept as-is; lowercase
  * fragments like "ee" are treated as garbage).
  */
 function sanitizeNameToken(raw: string | null | undefined): string {
   const token = (raw ?? "").trim().split(/\s+/)[0] ?? "";
   if (!token || EMAIL_RE.test(token)) return "";
   const letters = lettersOnly(token);
-  if (letters.length >= 3) return capitalize(letters);
-  if (letters.length >= 2 && letters !== letters.toLowerCase()) return capitalize(letters);
+  if (letters.length >= 3) return displayToken(letters);
+  if (letters.length >= 2 && letters !== letters.toLowerCase()) return displayToken(letters);
   return "";
 }
 

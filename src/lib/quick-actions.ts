@@ -38,12 +38,11 @@ export interface QuickActionDef {
  *
  * - /payments supports `?flow=recipient|upi-id|upi&upiId&name&amount` and
  *   `?tab=send|razorpay|history` (deep-links into its real UPI phases).
+ *   `?flow=request` opens the in-payments Requests tracker (the real
+ *   request-money rail); the Razorpay tab is only for test-mode links.
  * - /accounts supports `?transfer=1` (opens the real TransferDialog).
  * - /expenses supports `?add=1` (opens the real add-expense sheet).
  * - /goals supports `?add=1` (opens the real goal form).
- * - "Request" opens the payments page's Razorpay tab, whose payment-link
- *   flow is the real request-money rail (honest "not configured" state when
- *   test keys are absent).
  */
 export const QUICK_ACTIONS: QuickActionDef[] = [
   { id: "scan-qr", label: "Scan QR", target: { kind: "dialog", dialog: "qr-scan" } },
@@ -67,7 +66,7 @@ export const QUICK_ACTIONS: QuickActionDef[] = [
   {
     id: "request",
     label: "Request",
-    target: { kind: "route", to: "/payments", search: { tab: "razorpay" } },
+    target: { kind: "route", to: "/payments", search: { flow: "request" } },
   },
   { id: "more", label: "More", target: { kind: "route", to: "/more" } },
   { id: "invest", label: "Invest", target: { kind: "route", to: "/portfolio" } },

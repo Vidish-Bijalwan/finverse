@@ -24,7 +24,7 @@ interface StripItem {
  * scrollable row with scroll-snap.
  *
  * Each item shows symbol, price, absolute move and % move in muted
- * green/red. One compact "SIMULATED DATA" pill labels the whole strip — the
+ * green/red. One quiet muted line labels the strip as simulated — the
  * feed is the seeded demo engine (`getLTP` / `genHistory`), never live
  * prices.
  *
@@ -126,20 +126,13 @@ export function MarketStrip({
     >
       <div className="mb-2 flex items-center justify-between px-1">
         <h2 className="text-sm font-bold text-foreground">Markets</h2>
-        <SimulatedPill />
+        <span className="text-[11px] font-medium text-muted-foreground">
+          Simulated prices — not live data
+        </span>
       </div>
       <div className="flex snap-x gap-2 overflow-x-auto pb-1 [scrollbar-width:thin]">
         {items.map(card)}
       </div>
     </section>
-  );
-}
-
-/** One compact pill labels the whole strip — never a full-width disclaimer. */
-function SimulatedPill() {
-  return (
-    <span className="rounded-full border border-border/70 bg-muted/60 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
-      Simulated data
-    </span>
   );
 }

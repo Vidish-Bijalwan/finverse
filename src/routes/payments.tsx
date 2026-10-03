@@ -35,7 +35,6 @@ import {
   PaymentSheet,
   Pill,
   ReceiptView,
-  TestModeBanner,
   TxnRow,
   pressable,
 } from "@/components/fv";
@@ -166,10 +165,7 @@ function PaymentsPage() {
           <Send className="size-5 text-primary" aria-hidden />
         </span>
         <div>
-          <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
-            <h1 className="text-xl font-bold text-foreground">Payments</h1>
-            <TestModeBanner />
-          </div>
+          <h1 className="text-xl font-bold text-foreground">Payments</h1>
           <p className="text-xs text-muted-foreground">Simulated rails — no real money moves</p>
         </div>
       </header>
@@ -417,7 +413,7 @@ function PayTab({ search }: { search: PaymentsSearch }) {
     return (
       <div className="flex flex-col gap-4">
         <FlowHeader title={`Pay ${payeeName || "someone"}`} onBack={goHome} />
-        <TestModeBanner />
+        <p className="text-xs text-muted-foreground">Simulated UPI — no real money moves.</p>
         {accountsLoading ? (
           <Skeleton className="h-14 rounded-2xl" />
         ) : accounts.length === 0 ? (
@@ -502,9 +498,6 @@ function PayTab({ search }: { search: PaymentsSearch }) {
           onProceed={confirmPayment}
           onUseAnotherMethod={() => setSheetOpen(false)}
         >
-          <div className="mt-3">
-            <TestModeBanner />
-          </div>
           {note.trim() && (
             <p className="mt-3 rounded-2xl bg-muted/60 px-4 py-2.5 text-sm text-foreground">
               <span className="font-semibold text-muted-foreground">Note: </span>
@@ -534,7 +527,6 @@ function PayTab({ search }: { search: PaymentsSearch }) {
   if (view.name === "send-processing") {
     return (
       <div className="flex flex-col gap-4">
-        <TestModeBanner />
         <ReceiptView status="processing" amountPaise={amountPaise} counterparty={payeeName} />
       </div>
     );
@@ -544,7 +536,6 @@ function PayTab({ search }: { search: PaymentsSearch }) {
     if (refund) {
       return (
         <div className="flex flex-col gap-4">
-          <TestModeBanner />
           <div className="flex flex-col items-center px-6 py-8 text-center">
             <span
               role="img"
@@ -597,7 +588,6 @@ function PayTab({ search }: { search: PaymentsSearch }) {
       receipt.status === "success" && receipt.txn && canRefundPayment(receipt.txn, refundedIds);
     return (
       <div className="flex flex-col gap-4">
-        <TestModeBanner />
         <ReceiptView
           status={receipt.status}
           amountPaise={amountPaise}
@@ -895,7 +885,7 @@ function RecipientStep({
         </button>
         <h2 className="truncate text-base font-bold text-foreground">New payment</h2>
       </div>
-      <TestModeBanner />
+      <p className="text-xs text-muted-foreground">Simulated UPI — no real money moves.</p>
       <label className="flex flex-col gap-2">
         <span className="text-sm font-bold text-foreground">
           {mode === "name" ? "Recipient name" : "UPI ID or mobile number"}
@@ -1074,8 +1064,6 @@ function RazorpayTab() {
 
   return (
     <div className="flex flex-col gap-5">
-      <TestModeBanner />
-
       {rzPhase === "amount" && (
         <div className="flex flex-col gap-4">
           <div className="rounded-2xl border border-border bg-card p-4 shadow-card">
@@ -1141,7 +1129,6 @@ function RazorpayTab() {
 
       {rzPhase === "waiting" && settled && waitingRecord && (
         <div className="flex flex-col gap-4">
-          <TestModeBanner />
           <ReceiptView
             status={settled === "success" ? "success" : "failure"}
             amountPaise={waitingRecord.amountPaise}
@@ -1162,7 +1149,6 @@ function RazorpayTab() {
 
       {rzPhase === "done" && doneRecord && (
         <div className="flex flex-col gap-4">
-          <TestModeBanner />
           <ReceiptView
             status={
               doneRecord.status === "captured"
@@ -1549,7 +1535,6 @@ function HistoryDetail({
 
   return (
     <div className="flex flex-col gap-3">
-      <TestModeBanner />
       <ReceiptView
         status={receiptStatus}
         amountPaise={txn.amountPaise}

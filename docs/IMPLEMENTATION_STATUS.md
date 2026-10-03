@@ -199,3 +199,22 @@ full per-item table and command outputs.
 - Authenticated E2E of the QA fixes (rapid keypad input, portfolio timeout path,
   undo toasts, swipe actions)
 - Pre-existing: RLS live probes, Razorpay live test-mode flow (need owner / test keys)
+
+## Screenshot-review bug fixes (2026-10-03, bug-fix subagent — NOT pushed)
+
+1. **Floating button clipped at ~1920px** — root cause NOT found by static analysis; NOT claimed fixed. Only fixed-position rounded button (expenses FAB) sits `1.5rem` inset at 1920px — not clipped. Needs a real 1920px render by someone with browser tools (see TEST_REPORT.md regression note).
+2. **SIMULATED badges** — `TestModeBanner` deleted (19 usages across payments/bank-transfer/request/portfolio/stock flows); MarketStrip "SIMULATED DATA" pill → quiet muted text; screener badge → quiet text. One quiet disclosure line per page/flow header retained (e.g. payments "Simulated rails — no real money moves"); Razorpay tab's inaccurate "Simulated" pill removed (it's test-mode, not simulated).
+3. **`greetingName()` casing** — `src/lib/greeting.ts` now title-cases only all-lowercase tokens ("QA Reviewer" preserved); junk rejection unchanged. +4 tests.
+4. **Avatar initials** — new `src/lib/names.ts` `avatarInitials()`: first letters of first two words ("QT"), blank → "FV". Applied in TxnRow + AppHeader + profile. +6 tests.
+5. **Request setup-pending** — `isSetupPendingError` hardened (stable `code="FINVERSE_SETUP_PENDING"` + branded-message fallback, still matching 42P01/relation-regex); copy softened to "Requests aren't set up yet / Requests unlock after a quick database update…". +3 tests.
+6. **Request quick action** — dashboard "Request" now opens `/payments?flow=request` (in-payments Requests tracker). Paise keypad behavior confirmed correct, untouched.
+- Verification: unit 168/168 · tsc 52 pre-existing (0 new) · eslint 0 on touched files · build green. Details: TEST_REPORT.md (Screenshot-review bug fixes section).
+
+## Phase 3 — markets (2026-10-03, feature worker — NOT pushed)
+
+- **Market snapshot** (`src/components/home/MarketSnapshot.tsx`): NIFTY 50 / SENSEX / BANK NIFTY index cards with sparklines + Top Gainers / Top Losers / Most Active (3 rows each); every stock row links to `/stocks/$symbol`. New pure logic in `src/lib/market/movers.ts` (movers, sparkline downsampling/path, signed % labels) + `src/lib/market/movers.test.ts` (17 tests). New `src/components/fv/Sparkline.tsx` kit component (fv barrel). Most Active = largest absolute day % move (no traded-volume data in the demo feed — documented in code).
+- **Watchlist card** (`src/components/home/WatchlistCard.tsx`): dashboard secondary column, ≤5 compact rows (icon, name, ticker, price, change, sparkline), tap → stock detail; shares the watchlist page's query cache. Compact empty state (≤220px): "Build your watchlist" / "Track stocks you care about." + "Explore stocks" CTA.
+- **Stock detail** (`src/routes/stocks.$symbol.tsx`): chart ranges 1D/1W/1M/3M/1Y/5Y (1260-day deterministic history, memoized); new Overview section (cap band, sector medians, peer links — no fake descriptions) + Financials section (honestly-derived per-share ratios, "not real company financials" footnote); subtle neutral SIMULATION pill in the header. Buy/Sell order flow untouched.
+- **Dashboard** (`src/routes/index.tsx`): secondary column now Portfolio snapshot → WatchlistCard → MarketSnapshot; removed the old MarketRow preview + MoverList; desktop IA unchanged.
+- Simulated-data honesty: one quiet muted line per section header; no per-section badges reintroduced.
+- Verification: unit 185/185 · tsc 52 pre-existing, 0 new (error lists byte-identical) · eslint 0 errors on touched files · build green. Live-browser visual QA not performed (no browser control) — milestone screenshot loop belongs to the parent coordinator.

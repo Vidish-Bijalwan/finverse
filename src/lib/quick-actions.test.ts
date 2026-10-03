@@ -59,7 +59,7 @@ describe("quick-actions", () => {
     expect(targetFor("request")).toEqual({
       kind: "route",
       to: "/payments",
-      search: { tab: "razorpay" },
+      search: { flow: "request" },
     });
     expect(targetFor("bank-transfer")).toEqual({
       kind: "route",

@@ -2,7 +2,6 @@ import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useMemo, useState } from "react";
 import { ArrowDown, ArrowUp } from "lucide-react";
 
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import {
@@ -267,9 +266,9 @@ function ScreenerPage() {
             stocks
             {filterCount > 0 && ` · ${filterCount} filter${filterCount > 1 ? "s" : ""} active`}
           </p>
-          <Badge variant="secondary" className="text-[11px]">
+          <p className="text-xs text-muted-foreground">
             Demo dataset · simulated prices — not live
-          </Badge>
+          </p>
         </div>
         <div className="flex items-center gap-2">
           <Label htmlFor="screener-sort" className="sr-only">

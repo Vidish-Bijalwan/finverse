@@ -40,7 +40,6 @@ import {
   PullToRefresh,
   SearchDropdown,
   StatBand,
-  TestModeBanner,
   TickerStrip,
   pressable,
   type StatBandStat,
@@ -282,7 +281,6 @@ function PortfolioPage() {
         active="Portfolio"
         actions={
           <>
-            <TestModeBanner className="mr-1" />
             {rows.length > 0 && (
               <Button
                 variant="outline"

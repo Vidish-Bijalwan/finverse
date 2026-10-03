@@ -3,6 +3,7 @@ import { ChartNoAxesCombined, LogOut, Search, User } from "lucide-react";
 
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/lib/auth";
+import { avatarInitials } from "@/lib/names";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import {
   DropdownMenu,
@@ -40,13 +41,11 @@ function Logo() {
   );
 }
 
+/** Avatar initials via the shared rule (`@/lib/names`): first letters of the
+ * first two words, uppercased — "QA Test Beneficiary" -> "QT". */
 function initialsOf(name: string | null, email: string | undefined): string {
   const src = (name ?? "").trim() || (email ?? "").trim();
-  if (!src) return "FV";
-  const parts = src.split(/[\s@._-]+/).filter(Boolean);
-  const first = parts[0]?.[0] ?? "F";
-  const second = parts[1]?.[0] ?? "";
-  return (first + second).toUpperCase();
+  return avatarInitials(src || null);
 }
 
 /** Avatar button that opens the account menu (profile + sign out). */

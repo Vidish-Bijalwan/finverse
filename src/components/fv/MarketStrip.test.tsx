@@ -44,10 +44,10 @@ describe("MarketStrip", () => {
     }
   });
 
-  it("shows exactly one compact SIMULATED DATA pill", () => {
+  it("shows one quiet simulated-prices disclosure, not a badge", () => {
     render(<MarketStrip symbols={["RELIANCE"]} />);
-    const pills = screen.getAllByText("Simulated data");
-    expect(pills).toHaveLength(1);
+    expect(screen.getByText("Simulated prices — not live data")).toBeTruthy();
+    expect(screen.queryByText("Simulated data")).toBeNull();
   });
 
   it("appends watched stocks after the indices", () => {

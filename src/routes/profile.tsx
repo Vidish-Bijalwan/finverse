@@ -5,6 +5,7 @@ import { toast } from "sonner";
 
 import { useAuth } from "@/lib/auth";
 import { getSupabase } from "@/lib/supabase";
+import { avatarInitials } from "@/lib/names";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -24,13 +25,11 @@ export const Route = createFileRoute("/profile")({
 
 const MAX_AVATAR_BYTES = 5 * 1024 * 1024;
 
+/** Avatar initials via the shared rule (`@/lib/names`): first letters of the
+ * first two words, uppercased — "QA Test Beneficiary" -> "QT". */
 function initialsOf(name: string | null, email: string | undefined): string {
   const src = (name ?? "").trim() || (email ?? "").trim();
-  if (!src) return "FV";
-  const parts = src.split(/[\s@._-]+/).filter(Boolean);
-  const first = parts[0]?.[0] ?? "F";
-  const second = parts[1]?.[0] ?? "";
-  return (first + second).toUpperCase();
+  return avatarInitials(src || null);
 }
 
 function formatMemberSince(createdAt: string | undefined): string {

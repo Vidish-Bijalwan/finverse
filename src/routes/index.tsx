@@ -27,7 +27,6 @@ import {
   ChartCard,
   EmptyState,
   ErrorState,
-  MarketRow,
   MarketStrip,
   NumberDisplay,
   PullToRefresh,
@@ -35,9 +34,10 @@ import {
   pressable,
 } from "@/components/fv";
 import { QuickActions } from "@/components/home/QuickActions";
-import { useWatchlist as useWatchlistUI } from "@/components/markets/useWatchlist";
+import { WatchlistCard } from "@/components/home/WatchlistCard";
+import { MarketSnapshot } from "@/components/home/MarketSnapshot";
 import { categoryById } from "@/lib/finance/categories";
-import { formatINR, formatINRShort, monthKey, monthLabel } from "@/lib/finance/format";
+import { formatINR, monthKey, monthLabel } from "@/lib/finance/format";
 import {
   investmentReturnsPaise,
   monthlyCashFlowPaise,
@@ -53,8 +53,7 @@ import {
   useUpdateTransaction,
 } from "@/lib/finance/hooks";
 import type { Transaction } from "@/lib/finance/types";
-import { getStock, STOCKS } from "@/lib/market/data";
-import { dayChange, genHistory, getLTP } from "@/lib/market/history";
+import { getLTP } from "@/lib/market/history";
 import { fetchWatchlist, WATCHLIST_QUERY_KEY } from "@/lib/watchlist";
 import { FINVERSE_QUERY_DEFAULTS } from "@/lib/query";
 import { greetingFor, greetingName } from "@/lib/greeting";
@@ -174,18 +173,13 @@ function FinVerseDashboard() {
     refetch: refetchAccounts,
   } = useAccountSummaries();
 
-  // Watchlist preview shares the watchlist page's query cache (same key + options).
-  const {
-    data: watchEntries,
-    isLoading: watchLoading,
-    isError: watchError,
-    refetch: refetchWatch,
-  } = useQuery({
+  // Watchlist symbols feed the market strip; the WatchlistCard below runs its
+  // own identical query so both share the same React Query cache entry.
+  const { data: watchEntries, refetch: refetchWatch } = useQuery({
     queryKey: WATCHLIST_QUERY_KEY,
     queryFn: fetchWatchlist,
     ...FINVERSE_QUERY_DEFAULTS,
   });
-  const { toggle: toggleWatch } = useWatchlistUI();
 
   const currentKey = monthKey(new Date());
   const prevKey = shiftMonth(month, -1);
@@ -314,39 +308,8 @@ function FinVerseDashboard() {
     [txns],
   );
 
-  const watchPreview = useMemo(
-    () =>
-      (watchEntries ?? []).slice(0, 4).map((e) => {
-        const stock = getStock(e.symbol);
-        return {
-          symbol: e.symbol,
-          name: stock?.name ?? e.symbol,
-          pricePaise: getLTP(e.symbol),
-          changePct: dayChange(genHistory(e.symbol, 2)).changePct,
-          alerted: e.alerts.length > 0,
-        };
-      }),
-    [watchEntries],
-  );
-
+  // Watchlist symbols feed the market strip.
   const watchSymbols = useMemo(() => (watchEntries ?? []).map((e) => e.symbol), [watchEntries]);
-
-  // Market snapshot: biggest day-movers in the stock universe (simulated feed).
-  const topMovers = useMemo(() => {
-    const rows = STOCKS.map((s) => {
-      const change = dayChange(genHistory(s.symbol, 2));
-      return {
-        symbol: s.symbol,
-        name: s.name,
-        pricePaise: getLTP(s.symbol),
-        changePct: change.changePct,
-      };
-    }).sort((a, b) => b.changePct - a.changePct);
-    return {
-      gainers: rows.slice(0, 3),
-      losers: rows.slice(-3).reverse(),
-    };
-  }, []);
 
   const hasTxns = (txns?.length ?? 0) > 0;
   const statsLoading = txnsLoading || accountsLoading || holdingsLoading;
@@ -778,81 +741,9 @@ function FinVerseDashboard() {
                 )}
               </SectionCard>
 
-              <SectionCard
-                title="Watchlist"
-                action={
-                  <Link
-                    to="/watchlist"
-                    className="inline-flex shrink-0 items-center gap-1 text-sm font-bold text-primary hover:underline"
-                  >
-                    View all <ArrowRight className="size-4" aria-hidden />
-                  </Link>
-                }
-              >
-                {watchLoading ? (
-                  <ul className="space-y-1" aria-label="Loading watchlist">
-                    {Array.from({ length: 4 }).map((_, i) => (
-                      <li key={i} className="flex items-center gap-3 px-3 py-3">
-                        <div className="flex-1 space-y-1.5">
-                          <Skeleton className="h-4 w-1/3 rounded-lg" />
-                          <Skeleton className="h-3 w-1/2 rounded-lg" />
-                        </div>
-                        <Skeleton className="h-4 w-20 rounded-lg" />
-                      </li>
-                    ))}
-                  </ul>
-                ) : watchError ? (
-                  <ErrorState
-                    title="Couldn't load your watchlist"
-                    body="Check your connection and try again."
-                    onRetry={() => void refetchWatch()}
-                  />
-                ) : watchPreview.length === 0 ? (
-                  <EmptyState
-                    title="Your watchlist is empty"
-                    body="Track stocks you care about and they'll appear here."
-                    actionLabel="Browse stocks"
-                    onAction={() => void navigate({ to: "/watchlist" })}
-                  />
-                ) : (
-                  <ul className="divide-y divide-border/60">
-                    {watchPreview.map((w) => (
-                      <li key={w.symbol}>
-                        <MarketRow
-                          symbol={w.symbol}
-                          name={w.name}
-                          pricePaise={w.pricePaise}
-                          changePct={w.changePct}
-                          starred
-                          alerted={w.alerted}
-                          onToggleStar={() => toggleWatch(w.symbol)}
-                          // Alert management (target prices) lives on the watchlist page.
-                          onToggleAlert={() => void navigate({ to: "/watchlist" })}
-                          onClick={() => void navigate({ to: "/watchlist" })}
-                        />
-                      </li>
-                    ))}
-                  </ul>
-                )}
-              </SectionCard>
-
-              <SectionCard
-                title="Market snapshot"
-                sub="Top movers today · simulated"
-                action={
-                  <Link
-                    to="/watchlist"
-                    className="inline-flex shrink-0 items-center gap-1 text-sm font-bold text-primary hover:underline"
-                  >
-                    Markets <ArrowRight className="size-4" aria-hidden />
-                  </Link>
-                }
-              >
-                <div className="space-y-4">
-                  <MoverList label="Gainers" rows={topMovers.gainers} />
-                  <MoverList label="Losers" rows={topMovers.losers} />
-                </div>
-              </SectionCard>
+              {/* Phase 3 cards: compact watchlist + market snapshot. */}
+              <WatchlistCard />
+              <MarketSnapshot />
             </div>
           </div>
         </main>
@@ -902,59 +793,6 @@ function HeroMetric({
           children
         )}
       </dd>
-    </div>
-  );
-}
-
-/** Gainers/losers list inside the market-snapshot card. */
-function MoverList({
-  label,
-  rows,
-}: {
-  label: string;
-  rows: { symbol: string; name: string; pricePaise: number; changePct: number }[];
-}) {
-  return (
-    <div>
-      <h3 className="mb-1.5 text-xs font-bold uppercase tracking-wider text-muted-foreground">
-        {label}
-      </h3>
-      <ul className="space-y-1">
-        {rows.map((r) => {
-          const up = r.changePct >= 0;
-          return (
-            <li key={r.symbol}>
-              <Link
-                to="/stocks/$symbol"
-                params={{ symbol: r.symbol }}
-                className={cn(
-                  pressable,
-                  "flex items-center justify-between gap-2 rounded-lg px-2 py-1.5 hover:bg-muted/60",
-                )}
-                aria-label={`${r.name}, simulated, ${up ? "up" : "down"} ${Math.abs(r.changePct).toFixed(2)} percent`}
-              >
-                <span className="min-w-0">
-                  <span className="block truncate text-sm font-bold text-foreground">
-                    {r.symbol}
-                  </span>
-                  <span className="block truncate text-xs text-muted-foreground">
-                    {formatINRShort(r.pricePaise)}
-                  </span>
-                </span>
-                <span
-                  className={cn(
-                    "shrink-0 text-sm font-bold tabular-nums",
-                    up ? "text-gain" : "text-loss",
-                  )}
-                >
-                  {up ? "+" : "−"}
-                  {Math.abs(r.changePct).toFixed(2)}%
-                </span>
-              </Link>
-            </li>
-          );
-        })}
-      </ul>
     </div>
   );
 }

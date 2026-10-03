@@ -2,14 +2,7 @@ import { useState } from "react";
 import { Landmark } from "lucide-react";
 import { toast } from "sonner";
 
-import {
-  AmountInput,
-  NumberDisplay,
-  PaymentSheet,
-  ReceiptView,
-  TestModeBanner,
-  pressable,
-} from "@/components/fv";
+import { AmountInput, NumberDisplay, PaymentSheet, ReceiptView, pressable } from "@/components/fv";
 import { AccountDialog } from "@/components/money/AccountDialog";
 import { useAccountSummaries, useAddTransaction } from "@/lib/finance/hooks";
 import { formatINR, todayISO } from "@/lib/finance/format";
@@ -112,7 +105,6 @@ export function BankTransferFlow({
       {phase === "details" && (
         <>
           <FlowHeader title="Bank transfer" onBack={onExit} />
-          <TestModeBanner />
           <div className="flex items-center gap-3 rounded-2xl border border-border bg-card px-4 py-3 shadow-card">
             <span
               aria-hidden
@@ -228,7 +220,6 @@ export function BankTransferFlow({
       {phase === "amount" && (
         <>
           <FlowHeader title={`Transfer to ${name.trim()}`} onBack={() => setPhase("details")} />
-          <TestModeBanner />
           {accountsLoading ? (
             <div className="h-14 animate-pulse rounded-2xl bg-muted" />
           ) : accounts.length === 0 ? (
@@ -302,7 +293,6 @@ export function BankTransferFlow({
 
       {phase === "processing" && (
         <>
-          <TestModeBanner />
           <ReceiptView
             status="processing"
             amountPaise={amountPaise}
@@ -313,7 +303,6 @@ export function BankTransferFlow({
 
       {phase === "receipt" && receipt && (
         <>
-          <TestModeBanner />
           <ReceiptView
             status={receipt.status}
             amountPaise={amountPaise}
@@ -361,9 +350,6 @@ export function BankTransferFlow({
         onProceed={confirmTransfer}
         onUseAnotherMethod={() => setSheetOpen(false)}
       >
-        <div className="mt-3">
-          <TestModeBanner />
-        </div>
         {note.trim() && (
           <p className="mt-3 rounded-2xl bg-muted/60 px-4 py-2.5 text-sm text-foreground">
             <span className="font-semibold text-muted-foreground">Note: </span>
