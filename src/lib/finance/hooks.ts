@@ -55,6 +55,7 @@ import {
   type RecurringRulePatch,
 } from "./db";
 import { monthKey as currentMonthKey, todayISO } from "./format";
+import { FINVERSE_QUERY_DEFAULTS } from "../query";
 
 /**
  * React Query layer over the Supabase data-access module (db.ts).
@@ -84,6 +85,7 @@ export function useMonth(): [string, Dispatch<SetStateAction<string>>] {
 
 export function useTransactions(month?: string) {
   return useQuery({
+    ...FINVERSE_QUERY_DEFAULTS,
     queryKey: [...QK.transactions, month ?? "all"],
     queryFn: async () => {
       await ensureRecurringPosted();
@@ -155,6 +157,7 @@ export function useTransfer() {
 
 export function useBudgets(month: string) {
   return useQuery({
+    ...FINVERSE_QUERY_DEFAULTS,
     queryKey: [...QK.budgets, month],
     queryFn: () => fetchBudgets(month),
   });
@@ -171,6 +174,7 @@ export function useSetBudget() {
 
 export function useBills() {
   return useQuery({
+    ...FINVERSE_QUERY_DEFAULTS,
     queryKey: QK.bills,
     queryFn: () => fetchBills(),
   });
@@ -191,6 +195,7 @@ export function usePayBill() {
 
 export function useGoals() {
   return useQuery({
+    ...FINVERSE_QUERY_DEFAULTS,
     queryKey: QK.goals,
     queryFn: () => fetchGoals(),
   });
@@ -236,6 +241,7 @@ export function useAddToGoal() {
 
 export function useHoldings() {
   return useQuery({
+    ...FINVERSE_QUERY_DEFAULTS,
     queryKey: QK.holdings,
     queryFn: () => fetchHoldings(),
   });
@@ -274,6 +280,7 @@ export function useDeleteHolding() {
 
 export function useAccounts() {
   return useQuery({
+    ...FINVERSE_QUERY_DEFAULTS,
     queryKey: QK.accounts,
     queryFn: () => fetchAccounts(),
   });
@@ -283,6 +290,7 @@ export function useAccounts() {
 export function useAccountSummaries(): ReturnType<typeof useQuery<AccountSummary[]>> {
   const qc = useQueryClient();
   return useQuery({
+    ...FINVERSE_QUERY_DEFAULTS,
     queryKey: QK.accountSummaries,
     queryFn: async () => {
       // Share the canonical unfiltered-transactions query instead of firing a
@@ -293,6 +301,7 @@ export function useAccountSummaries(): ReturnType<typeof useQuery<AccountSummary
       const [accounts, transactions] = await Promise.all([
         fetchAccounts(),
         qc.fetchQuery({
+          ...FINVERSE_QUERY_DEFAULTS,
           queryKey: [...QK.transactions, "all"],
           queryFn: async () => {
             await ensureRecurringPosted();
@@ -363,6 +372,7 @@ export function useSetDefaultAccount() {
 
 export function useCustomCategories() {
   return useQuery({
+    ...FINVERSE_QUERY_DEFAULTS,
     queryKey: QK.customCategories,
     // fetchCustomCategories also refreshes the synchronous category lookup cache
     // in categories.ts, so categoryById resolves fresh names everywhere.
@@ -413,6 +423,7 @@ export function useDeleteCustomCategory() {
 
 export function useRecurringRules() {
   return useQuery({
+    ...FINVERSE_QUERY_DEFAULTS,
     queryKey: QK.recurringRules,
     queryFn: () => fetchRecurringRules(),
   });
@@ -456,6 +467,7 @@ export function useToggleRecurringRule() {
 
 export function useAllTags() {
   return useQuery({
+    ...FINVERSE_QUERY_DEFAULTS,
     queryKey: QK.tags,
     queryFn: () => fetchAllTags(),
   });

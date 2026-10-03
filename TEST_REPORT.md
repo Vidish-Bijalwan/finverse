@@ -247,3 +247,49 @@ negatives: `-60` paise → `"₹-1"`, `-160` → `"₹-2"`).
 | `bun x tsc --noEmit` | **53 errors, all pre-existing** in untouched files (market/*, money/*, readiness, budgets, BottomSheet/BottomTabBar, finance/format `monthLabel`, etc.) — **zero new errors** from any hotfix file |
 | `bun x eslint .` | **0 errors**, 9 warnings (all pre-existing `react-refresh/only-export-components` in untouched files) |
 | `bun run build` (vite production) | ✅ green; nitro + wrangler config generated |
+
+---
+
+# "Feel like a real website" pass (2026-10-03)
+
+User verdict on the polish build: "looks shitty, doesn't feel like a real website", plus "where is the dark mode switch". Forensic screenshots of production confirmed 7 legitimate problems. Fixed on `feature/feel-real`.
+
+## P0 — Dashboard stuck on skeletons / watchlist "Couldn't load" for real sessions
+**Root cause (traced through the dashboard's exact loading path, verified against the installed gotrue-js source):** every data call paid a network `auth.getUser()` round-trip first — `uid()` (`src/lib/finance/db.ts`, 37 call sites) and `requireUserId()` (`src/lib/watchlist.ts`) call `auth.getUser()`, which *always* hits `GET /auth/v1/user`, unlike `auth.getSession()` (a storage read). A dashboard mount fired ~8 auth round-trips competing with table queries for the browser's ~6-per-origin connection pool, while each request's 10s abort timer (PR #60) was already ticking. On a slow network, queued requests exceeded 10s → abort → retry → abort → ~47s of shimmer → error; the watchlist (`retry: false`) errored on the first blip. It *looked* permanent because it recurred on every load, and every window-focus refetch restarted the cycle. Additionally, `AuthProvider` tore down the whole UI on `TOKEN_REFRESHED` (full SplashScreen, every query restarting from skeleton), and transient auth aborts were misreported as "Not signed in".
+**Fix:**
+- `src/lib/supabase.ts`: per-request timeout 10s → 15s (exported `SUPABASE_FETCH_TIMEOUT_MS`); new `getSessionUserId()` resolves the uid from the local session via `auth.getSession()` (zero network; gotrue refreshes silently when expired), with honest errors distinguishing connection failure from genuinely-signed-out.
+- `src/lib/query.ts` (new): `FINVERSE_QUERY_DEFAULTS` = `{ retry: 2, retryDelay: capped exp backoff 1s→2s }` — bounded retries, then a definitive error. No infinite shimmer, no retry storms.
+- `src/lib/finance/db.ts` `uid()` and `src/lib/watchlist.ts` `requireUserId()` delegate to `getSessionUserId()`; all 10 `useQuery` calls in `src/lib/finance/hooks.ts`, `useWatchlist`, `src/components/markets/useWatchlist.ts`, and the dashboard watchlist preview (`src/routes/index.tsx`) spread the defaults instead of `retry: false`.
+- `src/lib/auth.tsx`: `onAuthStateChange` only flips the loading gate on `SIGNED_IN`/`SIGNED_OUT`; `TOKEN_REFRESHED` resolves silently without unmounting the app.
+- New regression tests: `src/lib/supabase-loading.test.ts` (7 integration tests — real client + real QueryClient, mocked fetch: stalled query aborts ~15s, uid needs zero `/auth/v1/user` calls, slow-but-healthy query succeeds, RLS 403 fails fast with actionable message, aborted token refresh settles, missing session → "not signed in", exactly 3 attempts then error), `src/lib/auth-loading.test.tsx` (TOKEN_REFRESHED keeps UI mounted).
+
+## Typography — Fraunces removed from all product UI
+The gallery-inspired serif call was wrong for this product: Fraunces headings against geometric sans body read as two templates stitched together. Removed Fraunces everywhere (`src/styles.css` `@import` + `--font-display-serif` var, `src/routes/__root.tsx` font links — also dropped the unused Roboto link). `h1–h4` now Space Grotesk 600, `letter-spacing: -0.02em`; body unified to Space Grotesk. Login hero verified serif-free already (keeps its mesh-gradient brand treatment on the unified type).
+
+## Skeletons — neutral shimmer
+`fv-shimmer` sweep was tinted with the brand accent (toy-like). Now `color-mix(in oklch, var(--color-foreground) 8%, transparent)` on the `bg-muted` base — neutral gray, ~8% opacity, works in both themes. Geometry and 1.8s sweep unchanged.
+
+## "TEST MODE" banners → quiet "Simulated" pill
+`src/components/fv/TestModeBanner.tsx` is now a small muted inline pill (rounded-full, `bg-muted/60`, 11px uppercase, `role="status"` retained). Call sites moved into section headers (payments page header, portfolio PageShell actions, stock-detail header row). No disclosure removed — every "simulated / not live" label stays truthful, just quiet.
+
+## Quick actions grouped
+`src/routes/index.tsx`: the 4 floating pills now live inside one "Quick actions" `SectionCard`. Mobile snap-rail preserved inside the card; desktop grid placement unchanged; press states/icons/destinations untouched.
+
+## Header theme toggle
+New `src/components/shell/ThemeToggle.tsx` (+`theme.ts` pure helpers, 5 component tests): sun/moon button in `AppHeader` between bell and avatar. Writes through the EXISTING settings system (same `finverse:settings:v1` localStorage key as Settings → Appearance), so both controls stay in sync, survives reloads, syncs across tabs. Resolves "system" via matchMedia; SSR-safe; `aria-pressed`.
+
+## /portfolio ticker dedupe + Refresh buttons that work
+Root cause of the doubled list: `TickerStrip` rendered the 12-stock row twice for a CSS-marquee loop. Marquee removed — single scrollable row, each symbol once (shared component, fixes dashboard too). "Refresh prices" (portfolio + watchlist) now actually refetches (awaits query `refetch()`, spinner + `aria-busy`, success toast); hidden when there are no holdings instead of dead-disabled.
+
+## Kept from the polish pass
+1400px grid, 3-up stat bands, tabular numerals, press states, bottom sheets, sticky footers, real Undo toasts, honest simulated-price labels.
+
+## Verification commands run (real outputs)
+| Command | Result |
+|---|---|
+| `bun run test:unit` (vitest run) | **92/92 pass** (13 files; baseline 79/79 + 13 new: supabase-loading 7, auth-loading 1, ThemeToggle 5) |
+| `bun x tsc --noEmit` | **53 errors = pre-existing baseline exactly**, zero in any touched file |
+| `bun x eslint` (all touched files) | **0 errors** (1 pre-existing react-refresh warning in auth.tsx) |
+| `bun run build` (vite production) | ✅ green (2767 modules) |
+| Note | 2 `scratch-harness.test.ts` failures seen mid-pass were concurrent-edit artifacts (Worker A editing `supabase.ts` while B/C ran the suite) — final full run is 92/92 green |
+| Pending (needs live browser) | Visual confirmation of the un-serifed UI, header toggle in both themes, dashboard resolving to data on a real session |

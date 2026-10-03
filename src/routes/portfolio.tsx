@@ -27,6 +27,7 @@ import {
 import { useDeleteHolding, useHoldings } from "@/lib/finance/hooks";
 import { formatINR, formatINRShort } from "@/lib/finance/format";
 import { toast } from "sonner";
+import { cn } from "@/lib/utils";
 import { getStock, STOCKS } from "@/lib/market/data";
 import { getLTP, refreshLTP } from "@/lib/market/history";
 import { PageShell } from "@/components/markets/PageShell";
@@ -242,15 +243,25 @@ function PortfolioPage() {
     },
   ];
 
-  function handleRefresh() {
-    rows.forEach((r) => refreshLTP(r.holding.symbol));
-    setPriceTick((t) => t + 1);
-  }
+  const [isRefreshing, setIsRefreshing] = useState(false);
 
+  /**
+   * "Refresh prices": jitter fresh demo LTPs AND refetch holdings from the
+   * server query — shared by the header button and the PullToRefresh gesture.
+   * Shows a spinner on the header button while the async refetch is in
+   * flight; the button is hidden entirely when there are no holdings, so it
+   * can never sit disabled with nothing to do.
+   */
   const refreshPortfolio = useCallback(async () => {
-    (holdings ?? []).forEach((h) => refreshLTP(h.symbol));
-    setPriceTick((t) => t + 1);
-    await refetch();
+    setIsRefreshing(true);
+    try {
+      (holdings ?? []).forEach((h) => refreshLTP(h.symbol));
+      setPriceTick((t) => t + 1);
+      await refetch();
+      toast.success("Prices refreshed.");
+    } finally {
+      setIsRefreshing(false);
+    }
   }, [holdings, refetch]);
 
   function openInvest() {
@@ -271,15 +282,22 @@ function PortfolioPage() {
         active="Portfolio"
         actions={
           <>
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={handleRefresh}
-              disabled={!ready || rows.length === 0}
-              className={pressable}
-            >
-              <RefreshCw className="size-4" /> Refresh prices
-            </Button>
+            <TestModeBanner className="mr-1" />
+            {rows.length > 0 && (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => {
+                  void refreshPortfolio();
+                }}
+                disabled={!ready || isRefreshing}
+                aria-busy={isRefreshing}
+                className={pressable}
+              >
+                <RefreshCw className={cn("size-4", isRefreshing && "animate-spin")} />
+                Refresh prices
+              </Button>
+            )}
             <Button size="sm" onClick={openInvest} className={pressable}>
               <Plus className="size-4" /> Invest
             </Button>
@@ -287,7 +305,6 @@ function PortfolioPage() {
         }
       >
         <TickerStrip className="mb-5" />
-        <TestModeBanner className="mb-5" />
 
         {isError || loadTimedOut ? (
           <ErrorState

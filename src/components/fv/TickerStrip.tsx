@@ -28,9 +28,8 @@ interface TickerItem {
  * price glides to its new value via NumberDisplay's `animate` prop (both
  * skipped for prefers-reduced-motion).
  *
- * Auto-scrolls via a CSS marquee, but renders as a plain scrollable strip
- * when the user prefers reduced motion (or pauses on hover/focus).
- * Tap/click a symbol → `/stocks/$symbol`.
+ * The strip is a plain horizontally-scrollable row — each symbol appears
+ * exactly once. Tap/click a symbol → `/stocks/$symbol`.
  */
 export function TickerStrip({
   symbols,
@@ -86,19 +85,22 @@ export function TickerStrip({
     return () => window.clearTimeout(t);
   }, [items, reducedMotion]);
 
-  const duration = Math.max(24, items.length * 4);
-
-  const row = (hidden: boolean) => (
-    <div className="flex w-max shrink-0 items-center" aria-hidden={hidden || undefined}>
+  /**
+   * One row, each symbol exactly once. (A previous marquee implementation
+   * rendered the list twice for a seamless loop — visually the same 12 stocks
+   * appeared twice, which read as a bug. The strip is now a plain
+   * horizontally-scrollable row.)
+   */
+  const row = () => (
+    <div className="flex w-max shrink-0 items-center">
       {items.map((it) => {
         const up = it.changePct >= 0;
         const f = flash[it.symbol];
         return (
           <Link
-            key={`${hidden ? "dup-" : ""}${it.symbol}`}
+            key={it.symbol}
             to="/stocks/$symbol"
             params={{ symbol: it.symbol }}
-            tabIndex={hidden ? -1 : 0}
             aria-label={`${it.name} (${it.symbol}), simulated price, ${up ? "up" : "down"} ${Math.abs(it.changePct).toFixed(2)} percent`}
             className={cn(
               "flex shrink-0 items-center gap-2 rounded-full px-3 py-1.5",
@@ -133,20 +135,7 @@ export function TickerStrip({
       aria-label="Market ticker — simulated prices"
       className={cn("rounded-[14px] border border-border bg-card shadow-card", className)}
     >
-      <style>{`@keyframes fv-ticker-scroll { from { transform: translateX(0); } to { transform: translateX(-50%); } }`}</style>
-      {reducedMotion ? (
-        <div className="flex gap-1 overflow-x-auto px-2 py-2">{row(false)}</div>
-      ) : (
-        <div className="overflow-hidden px-2 py-2 [mask-image:linear-gradient(to_right,transparent,black_3%,black_97%,transparent)]">
-          <div
-            className="flex w-max hover:[animation-play-state:paused] focus-within:[animation-play-state:paused]"
-            style={{ animation: `fv-ticker-scroll ${duration}s linear infinite` }}
-          >
-            {row(false)}
-            {row(true)}
-          </div>
-        </div>
-      )}
+      <div className="flex gap-1 overflow-x-auto px-2 py-2">{row()}</div>
       <p className="border-t border-border/60 px-4 py-1.5 text-[11px] font-medium text-muted-foreground">
         Simulated prices — not live market data. For learning, not trading.
       </p>

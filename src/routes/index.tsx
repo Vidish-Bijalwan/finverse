@@ -62,6 +62,7 @@ import type { Transaction } from "@/lib/finance/types";
 import { getStock } from "@/lib/market/data";
 import { dayChange, genHistory, getLTP } from "@/lib/market/history";
 import { fetchWatchlist, WATCHLIST_QUERY_KEY } from "@/lib/watchlist";
+import { FINVERSE_QUERY_DEFAULTS } from "@/lib/query";
 import { useAuth } from "@/lib/auth";
 import { cn } from "@/lib/utils";
 
@@ -168,7 +169,7 @@ function FinVerseDashboard() {
   } = useQuery({
     queryKey: WATCHLIST_QUERY_KEY,
     queryFn: fetchWatchlist,
-    retry: false,
+    ...FINVERSE_QUERY_DEFAULTS,
   });
   const { toggle: toggleWatch } = useWatchlistUI();
 
@@ -469,27 +470,29 @@ function FinVerseDashboard() {
 
           {/* ── Desktop: stats | activity | markets grid ───────────────── */}
           <div className="mt-6 flex flex-col gap-8 xl:grid xl:grid-cols-12 xl:items-start xl:gap-6">
-            {/* ── Quick actions: snap rail on mobile, stacked on xl ────── */}
-            <nav
-              aria-label="Quick actions"
-              className="order-1 -mx-4 overflow-x-auto px-4 pb-1 sm:mx-0 sm:px-0 sm:pb-0 xl:col-span-3 xl:row-start-1 xl:overflow-visible"
-            >
-              <div className="flex snap-x gap-2.5 sm:flex-wrap xl:flex-col xl:items-stretch">
-                {quickActions.map(({ label, icon: Icon, to }) => (
-                  <Link
-                    key={label}
-                    to={to}
-                    className={cn(
-                      pressable,
-                      "inline-flex shrink-0 snap-start items-center gap-2 rounded-full border border-border bg-card px-4 py-2.5 text-sm font-bold text-foreground shadow-card hover:border-primary/40 hover:text-primary",
-                    )}
-                  >
-                    <Icon className="size-4 text-primary" aria-hidden />
-                    {label}
-                  </Link>
-                ))}
-              </div>
-            </nav>
+            {/* ── Quick actions: grouped card; snap rail on mobile inside it ── */}
+            <SectionCard title="Quick actions" className="order-1 xl:col-span-3 xl:row-start-1">
+              <nav
+                aria-label="Quick actions"
+                className="overflow-x-auto pb-1 xl:overflow-visible xl:pb-0"
+              >
+                <div className="flex snap-x gap-2.5 sm:flex-wrap xl:flex-col xl:items-stretch">
+                  {quickActions.map(({ label, icon: Icon, to }) => (
+                    <Link
+                      key={label}
+                      to={to}
+                      className={cn(
+                        pressable,
+                        "inline-flex shrink-0 snap-start items-center gap-2 rounded-full border border-border bg-background px-4 py-2.5 text-sm font-bold text-foreground hover:border-primary/40 hover:text-primary",
+                      )}
+                    >
+                      <Icon className="size-4 text-primary" aria-hidden />
+                      {label}
+                    </Link>
+                  ))}
+                </div>
+              </nav>
+            </SectionCard>
 
             {/* ── Markets: watchlist ───────────────────────────────────── */}
             <SectionCard

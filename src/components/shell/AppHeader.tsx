@@ -14,6 +14,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { GlobalSearch } from "@/components/shell/GlobalSearch";
 import { NotificationBell } from "@/components/shell/NotificationBell";
+import { ThemeToggle } from "@/components/shell/ThemeToggle";
 
 export const APP_VERSION = "v1.0.0";
 
@@ -138,6 +139,8 @@ export function AppHeader() {
           </Link>
 
           <NotificationBell />
+
+          <ThemeToggle />
 
           <ProfileMenu />
         </div>

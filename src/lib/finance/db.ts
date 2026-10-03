@@ -32,7 +32,7 @@
 // Forward reference: src/lib/supabase.ts is provided by the auth worker at
 // integration time. This import is intentional even though the module does
 // not exist yet in this workdir.
-import { getSupabase } from "@/lib/supabase";
+import { getSessionUserId, getSupabase } from "@/lib/supabase";
 import type {
   Account,
   AccountType,
@@ -91,14 +91,12 @@ export interface AccountSummary {
 
 /** Current user id; throws a clear error when there is no signed-in user. */
 async function uid(): Promise<string> {
-  const { data } = await getSupabase().auth.getUser();
-  const id = data.user?.id;
-  if (!id) {
-    throw new Error(
-      "Not signed in: Supabase auth.getUser() returned no user. Sign in before accessing finance data.",
-    );
-  }
-  return id;
+  // Resolved from the local session (no network round-trip) — see
+  // getSessionUserId. Every data function calls this, so an extra
+  // /auth/v1/user request per call used to saturate the browser's
+  // per-origin connection pool and trip the request timeout on slow
+  // networks, which read as endless loading.
+  return getSessionUserId();
 }
 
 function isNoRows(error: { code?: string } | null | undefined): boolean {

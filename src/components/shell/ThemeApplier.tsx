@@ -1,12 +1,7 @@
 import { useEffect } from "react";
 
-import { useSettings, type ThemeMode } from "@/lib/settings";
-
-function resolveIsDark(theme: ThemeMode): boolean {
-  if (theme === "dark") return true;
-  if (theme === "light") return false;
-  return window.matchMedia("(prefers-color-scheme: dark)").matches;
-}
+import { useSettings } from "@/lib/settings";
+import { resolveIsDark } from "./theme";
 
 /**
  * Mounted once at the app root (coordinator wires it into __root__).

@@ -1,23 +1,23 @@
-import { FlaskConical } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 /**
- * Amber banner shown on every simulated-money surface (test-mode payments,
- * simulated market data). role="status" so it is announced.
+ * Quiet disclosure pill for simulated-money surfaces (test-mode payments,
+ * simulated market data). Muted and inline — it sits in the relevant section
+ * header rather than shouting as a full-width banner. The disclosure stays
+ * truthful ("Simulated"); it is only visually quieter. role="status" so it
+ * is announced.
  */
 export function TestModeBanner({ className }: { className?: string }) {
   return (
-    <div
+    <span
       role="status"
       className={cn(
-        "flex items-center justify-center gap-2 rounded-xl border border-warning/40 bg-warning-soft px-3 py-2 text-center",
+        "inline-flex items-center gap-1.5 rounded-full border border-border bg-muted/60 px-2.5 py-1 text-[11px] font-semibold tracking-wide text-muted-foreground uppercase",
         className,
       )}
     >
-      <FlaskConical className="size-4 shrink-0 text-warning" aria-hidden />
-      <p className="text-xs font-bold tracking-wide text-warning uppercase">
-        Test mode — simulated, no real money
-      </p>
-    </div>
+      <span className="size-1.5 rounded-full bg-muted-foreground/60" aria-hidden />
+      Simulated
+    </span>
   );
 }

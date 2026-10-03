@@ -407,6 +407,7 @@ function StockDetailPage() {
         </Link>
         <Badge variant="secondary">{stock.symbol}</Badge>
         <Badge variant="outline">{stock.sector}</Badge>
+        <TestModeBanner />
       </div>
 
       <div className="mb-4 flex flex-wrap items-end justify-between gap-4">
@@ -454,8 +455,6 @@ function StockDetailPage() {
           </div>
         </div>
       </div>
-
-      <TestModeBanner className="mb-6" />
 
       {/* Chart */}
       <ChartCard

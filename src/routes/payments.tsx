@@ -108,12 +108,13 @@ function PaymentsPage() {
           <Send className="size-5 text-primary" aria-hidden />
         </span>
         <div>
-          <h1 className="text-xl font-bold text-foreground">Payments</h1>
+          <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+            <h1 className="text-xl font-bold text-foreground">Payments</h1>
+            <TestModeBanner />
+          </div>
           <p className="text-xs text-muted-foreground">Simulated rails — no real money moves</p>
         </div>
       </header>
-
-      <TestModeBanner className="mt-4" />
 
       <nav
         aria-label="Payments sections"
