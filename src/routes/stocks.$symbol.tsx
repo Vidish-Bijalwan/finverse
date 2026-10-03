@@ -1,10 +1,11 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { useEffect, useMemo, useState } from "react";
-import { ArrowLeft, Bot, Plus, RefreshCw, Star } from "lucide-react";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { ArrowLeft, Bot, RefreshCw, Star } from "lucide-react";
 import {
   Area,
   AreaChart,
   CartesianGrid,
+  ReferenceLine,
   ResponsiveContainer,
   Tooltip,
   XAxis,
@@ -24,20 +25,22 @@ import {
   MCAP_BANDS,
   type StockInfo,
 } from "@/lib/market/data";
+import { dayChange, genHistory, getLTP, refreshLTP, type PricePoint } from "@/lib/market/history";
 import {
-  dayChange,
-  genHistory,
-  getLTP,
-  refreshLTP,
-  sliceRange,
-  type PricePoint,
-  type RangeKey,
-} from "@/lib/market/history";
+  ChartCard,
+  chartTooltipFormatter,
+  type ChartPoint,
+  type ChartRangeKey,
+} from "@/components/fv/ChartCard";
+import { TestModeBanner } from "@/components/fv/TestModeBanner";
+import { OrderSheet, type FvOrder } from "@/components/fv/OrderSheet";
 import { EmptyState } from "@/components/markets/shared";
 import { PageShell } from "@/components/markets/PageShell";
-import { HoldingDialog } from "@/components/markets/HoldingDialog";
+import { SipSheet } from "@/components/markets/SipSheet";
 import { useWatchlist } from "@/components/markets/useWatchlist";
 import { usePrefersReducedMotion } from "@/hooks/use-prefers-reduced-motion";
+import { usePlaceOrder } from "@/lib/finance/orders";
+import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 
 export const Route = createFileRoute("/stocks/$symbol")({
@@ -46,8 +49,6 @@ export const Route = createFileRoute("/stocks/$symbol")({
   }),
   component: StockDetailPage,
 });
-
-const RANGES: RangeKey[] = ["1M", "6M", "1Y"];
 
 /** "2026-09-14" -> "14 Sep". Parsed manually to avoid TZ shifts. */
 function shortDate(iso: string): string {
@@ -66,7 +67,43 @@ function shortDate(iso: string): string {
     "Dec",
   ];
   const [, m, d] = iso.split("-").map(Number);
-  return `${d} ${months[m - 1]}`;
+  return `${d} ${months[(m ?? 1) - 1] ?? ""}`;
+}
+
+/** FNV-1a-ish string hash -> unsigned 32-bit int (for the 1D intraday walk). */
+function hashStr(s: string): number {
+  let h = 2166136261 >>> 0;
+  for (let i = 0; i < s.length; i++) {
+    h ^= s.charCodeAt(i);
+    h = Math.imul(h, 16777619) >>> 0;
+  }
+  return h;
+}
+
+/**
+ * Deterministic intraday (1D) series: a seeded 15-minute walk from the
+ * previous close toward the current price. Demo data — not live ticks.
+ */
+function intradaySeries(sym: string, prevClosePaise: number, endPaise: number): ChartPoint[] {
+  let seed = hashStr(`${sym.toUpperCase()}:1D`);
+  const rand = () => {
+    seed = (Math.imul(seed ^ (seed >>> 15), 1 | seed) + 0x6d2b79f5) | 0;
+    const t = Math.imul(seed ^ (seed >>> 7), 61 | seed) ^ seed;
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+  const steps = 26; // 09:15 -> 15:30 in 15-min steps
+  const points: ChartPoint[] = [];
+  for (let i = 0; i < steps; i++) {
+    const drift = prevClosePaise + ((endPaise - prevClosePaise) * i) / (steps - 1);
+    const noise = (rand() - 0.5) * 2 * 0.004; // ±0.4%
+    const value = Math.max(1, Math.round(drift * (1 + noise)));
+    const minutes = 9 * 60 + 15 + i * 15;
+    const hh = Math.floor(minutes / 60);
+    const mm = String(minutes % 60).padStart(2, "0");
+    points.push({ time: `${hh}:${mm}`, value });
+  }
+  points[steps - 1] = { time: points[steps - 1]!.time, value: endPaise };
+  return points;
 }
 
 type Verdict = "positive" | "neutral" | "negative";
@@ -255,10 +292,11 @@ function StockDetailPage() {
   const sym = symbol.toUpperCase();
   const stock = getStock(sym);
   const { isWatched, toggle } = useWatchlist();
+  const placeOrder = usePlaceOrder();
 
   const [mounted, setMounted] = useState(false);
-  const [range, setRange] = useState<RangeKey>("1Y");
-  const [dialogOpen, setDialogOpen] = useState(false);
+  const [orderSide, setOrderSide] = useState<"buy" | "sell" | null>(null);
+  const [sipOpen, setSipOpen] = useState(false);
   const reducedMotion = usePrefersReducedMotion();
   // Jittered LTP is client-only so SSR/hydration stay identical.
   const [ltp, setLtp] = useState<number | null>(null);
@@ -270,8 +308,23 @@ function StockDetailPage() {
   }, [stock, sym]);
 
   const history = useMemo(() => genHistory(sym), [sym]);
-  const visible = useMemo(() => sliceRange(history, range), [history, range]);
   const change = useMemo(() => dayChange(history), [history]);
+  const prevClose = history.length >= 2 ? history[history.length - 2]!.closePaise : undefined;
+
+  const displayPrice = ltp ?? stock?.pricePaise ?? 0;
+
+  const seriesForRange = useCallback(
+    (range: ChartRangeKey): ChartPoint[] => {
+      if (range === "1D") {
+        return intradaySeries(sym, prevClose ?? displayPrice, displayPrice);
+      }
+      const days = range === "1W" ? 5 : range === "1M" ? 22 : 252;
+      return history
+        .slice(-days)
+        .map((p: PricePoint) => ({ time: shortDate(p.date), value: p.closePaise }));
+    },
+    [sym, history, prevClose, displayPrice],
+  );
 
   if (!stock) {
     return (
@@ -291,7 +344,6 @@ function StockDetailPage() {
 
   const analysis = analyze(stock);
   const watched = isWatched(sym);
-  const displayPrice = ltp ?? stock.pricePaise;
   const posInRange =
     stock.high52wPaise > stock.low52wPaise
       ? Math.max(
@@ -307,35 +359,40 @@ function StockDetailPage() {
     setLtp(refreshLTP(sym));
   }
 
-  const chartData = visible.map((p: PricePoint) => ({
-    ...p,
-    label: shortDate(p.date),
-    rupees: p.closePaise / 100,
-  }));
-  const first = visible[0]?.closePaise ?? displayPrice;
-  const up = displayPrice >= first;
-  const stroke = up ? "var(--success)" : "var(--destructive)";
+  function handleConfirm(order: FvOrder) {
+    if (placeOrder.isPending || orderSide === null) return;
+    const side = orderSide;
+    placeOrder.mutate(
+      { side, symbol: sym, qty: order.qty, pricePaise: order.pricePaise },
+      {
+        onSuccess: () => {
+          toast.success(
+            `Simulated ${side} order placed · ${sym} × ${order.qty} @ ${formatINR(order.pricePaise)}`,
+          );
+          setOrderSide(null);
+        },
+        onError: (e) => toast.error(e.message || "Order failed — try again."),
+      },
+    );
+  }
+
+  const gradId = `priceFill-${sym}`;
 
   return (
     <PageShell
       title={stock.name}
       active="Screener"
       actions={
-        <>
-          <Button
-            variant="outline"
-            size="sm"
-            aria-pressed={watched}
-            aria-label={watched ? "Remove from watchlist" : "Add to watchlist"}
-            onClick={() => toggle(sym)}
-          >
-            <Star className={watched ? "size-4 fill-amber-400 text-amber-400" : "size-4"} />
-            <span className="hidden sm:inline">{watched ? "Watching" : "Watch"}</span>
-          </Button>
-          <Button size="sm" onClick={() => setDialogOpen(true)}>
-            <Plus className="size-4" /> Add to portfolio
-          </Button>
-        </>
+        <Button
+          variant="outline"
+          size="sm"
+          aria-pressed={watched}
+          aria-label={watched ? "Remove from watchlist" : "Add to watchlist"}
+          onClick={() => toggle(sym)}
+        >
+          <Star className={watched ? "size-4 fill-amber-400 text-amber-400" : "size-4"} />
+          <span className="hidden sm:inline">{watched ? "Watching" : "Watch"}</span>
+        </Button>
       }
     >
       {/* Header */}
@@ -350,7 +407,7 @@ function StockDetailPage() {
         <Badge variant="outline">{stock.sector}</Badge>
       </div>
 
-      <div className="mb-6 flex flex-wrap items-end justify-between gap-4">
+      <div className="mb-4 flex flex-wrap items-end justify-between gap-4">
         <div>
           <div className="flex items-center gap-2">
             {ltp === null ? (
@@ -396,92 +453,120 @@ function StockDetailPage() {
         </div>
       </div>
 
+      <TestModeBanner className="mb-6" />
+
       {/* Chart */}
-      <section className="mb-6 rounded-lg border border-border bg-card p-5 shadow-card">
-        <div className="mb-4 flex items-center justify-between">
-          <h2 className="text-base font-bold text-primary-dark">Price history</h2>
-          <div className="flex gap-1" role="tablist" aria-label="Chart range">
-            {RANGES.map((r) => (
-              <button
-                key={r}
-                role="tab"
-                aria-selected={range === r}
-                onClick={() => setRange(r)}
-                className={cn(
-                  "rounded-md px-3 py-1.5 text-xs font-bold transition-colors",
-                  range === r
-                    ? "bg-primary text-primary-foreground"
-                    : "text-muted-foreground hover:bg-muted",
-                )}
-              >
-                {r}
-              </button>
-            ))}
-          </div>
-        </div>
-        {mounted ? (
-          <div className="h-72">
-            <ResponsiveContainer width="100%" height="100%">
-              <AreaChart data={chartData} margin={{ top: 5, right: 8, bottom: 0, left: 8 }}>
-                <defs>
-                  <linearGradient id="priceFill" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="0%" stopColor={stroke} stopOpacity={0.35} />
-                    <stop offset="100%" stopColor={stroke} stopOpacity={0.02} />
-                  </linearGradient>
-                </defs>
-                <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" vertical={false} />
-                <XAxis
-                  dataKey="label"
-                  tickLine={false}
-                  axisLine={false}
-                  tick={{ fontSize: 11, fill: "var(--muted-foreground)" }}
-                  minTickGap={40}
-                />
-                <YAxis
-                  domain={["auto", "auto"]}
-                  tickLine={false}
-                  axisLine={false}
-                  tick={{ fontSize: 11, fill: "var(--muted-foreground)" }}
-                  tickFormatter={(v: number) => `₹${Math.round(v).toLocaleString("en-IN")}`}
-                  width={70}
-                />
-                <Tooltip
-                  formatter={(v: number | undefined) => [
-                    v !== undefined
-                      ? `₹${v.toLocaleString("en-IN", { maximumFractionDigits: 2 })}`
-                      : "",
-                    "Close",
-                  ]}
-                  labelFormatter={(label: string) => label}
-                  contentStyle={{ borderRadius: 8, fontSize: 13 }}
-                />
-                <Area
-                  type="monotone"
-                  dataKey="rupees"
-                  stroke={stroke}
-                  strokeWidth={2}
-                  fill="url(#priceFill)"
-                  isAnimationActive={!reducedMotion}
-                />
-              </AreaChart>
-            </ResponsiveContainer>
-          </div>
-        ) : (
-          <Skeleton className="h-72 rounded-lg" />
-        )}
-        <p className="mt-3 text-xs text-muted-foreground">
-          Demo series generated deterministically per stock — not live market data.
-        </p>
-      </section>
+      <ChartCard
+        title="Price history"
+        defaultRange="1D"
+        seriesForRange={seriesForRange}
+        {...(prevClose !== undefined ? { prevClose } : {})}
+        className="mb-6"
+      >
+        {(ctx) => {
+          const pts = ctx.points;
+          const first = pts[0]?.value ?? displayPrice;
+          const last = pts[pts.length - 1]?.value ?? displayPrice;
+          const up = last >= first;
+          const stroke = up ? "var(--gain)" : "var(--loss)";
+          const data = pts.map((p) => ({ ...p, rupees: p.value / 100 }));
+          const firstLabel = pts[0]?.time ?? "";
+          const lastLabel = pts[pts.length - 1]?.time ?? "";
+          return (
+            <>
+              {!mounted ? (
+                <Skeleton className="h-72 rounded-xl" />
+              ) : (
+                <div
+                  className="h-72"
+                  role="img"
+                  aria-label={`${stock.name} price ${ctx.range}, ${firstLabel} to ${lastLabel}, ${up ? "up" : "down"} from ${formatINR(first)} to ${formatINR(last)}. Demo data, not live prices.`}
+                >
+                  <ResponsiveContainer width="100%" height="100%">
+                    <AreaChart data={data} margin={{ top: 5, right: 8, bottom: 0, left: 8 }}>
+                      <defs>
+                        <linearGradient id={gradId} x1="0" y1="0" x2="0" y2="1">
+                          <stop offset="0%" stopColor={stroke} stopOpacity={0.35} />
+                          <stop offset="100%" stopColor={stroke} stopOpacity={0.02} />
+                        </linearGradient>
+                      </defs>
+                      <CartesianGrid
+                        strokeDasharray="3 3"
+                        stroke="var(--border)"
+                        vertical={false}
+                      />
+                      <XAxis
+                        dataKey="time"
+                        tickLine={false}
+                        axisLine={false}
+                        tick={{ fontSize: 11, fill: "var(--muted-foreground)" }}
+                        minTickGap={40}
+                      />
+                      <YAxis
+                        domain={["auto", "auto"]}
+                        tickLine={false}
+                        axisLine={false}
+                        tick={{ fontSize: 11, fill: "var(--muted-foreground)" }}
+                        tickFormatter={(v: number) => `₹${Math.round(v).toLocaleString("en-IN")}`}
+                        width={70}
+                      />
+                      <Tooltip
+                        formatter={(_v, _name, item) =>
+                          chartTooltipFormatter(
+                            pts,
+                            (
+                              item as
+                                | { payload?: { time?: string } & Record<string, unknown> }
+                                | undefined
+                            )?.payload,
+                          )
+                        }
+                        labelFormatter={(label: string) => label}
+                        contentStyle={{ borderRadius: 12, fontSize: 13 }}
+                      />
+                      {ctx.prevClose !== undefined && (
+                        <ReferenceLine
+                          y={ctx.prevClose / 100}
+                          stroke="var(--muted-foreground)"
+                          strokeDasharray="5 4"
+                          strokeWidth={1.5}
+                          label={{
+                            value: "Prev close",
+                            position: "insideTopRight",
+                            fontSize: 11,
+                            fill: "var(--muted-foreground)",
+                          }}
+                        />
+                      )}
+                      <Area
+                        type="monotone"
+                        dataKey="rupees"
+                        stroke={stroke}
+                        strokeWidth={2}
+                        fill={`url(#${gradId})`}
+                        isAnimationActive={!ctx.reducedMotion && !reducedMotion}
+                      />
+                    </AreaChart>
+                  </ResponsiveContainer>
+                </div>
+              )}
+              <p className="mt-3 text-xs text-muted-foreground">
+                Demo series generated deterministically per stock — not live market data. Dashed
+                line marks the previous close.
+              </p>
+            </>
+          );
+        }}
+      </ChartCard>
 
       {/* Fundamentals */}
-      <section className="mb-6 rounded-lg border border-border bg-card p-5 shadow-card sm:p-6">
+      <section className="mb-6 rounded-2xl border border-border bg-card p-5 shadow-card sm:p-6">
         <h2 className="mb-4 text-base font-bold text-primary-dark">Fundamentals</h2>
         <Fundamentals stock={stock} />
       </section>
 
       {/* AI analysis */}
-      <section className="rounded-lg border border-border bg-card p-5 shadow-card sm:p-6">
+      <section className="rounded-2xl border border-border bg-card p-5 shadow-card sm:p-6">
         <div className="mb-1 flex items-center gap-2">
           <span className="grid size-8 place-items-center rounded-md bg-tint">
             <Bot className="size-4.5 text-primary" />
@@ -529,16 +614,47 @@ function StockDetailPage() {
         </p>
       </section>
 
-      <div className="mt-6 flex flex-wrap items-center gap-3">
-        <Button onClick={() => setDialogOpen(true)}>
-          <Plus className="size-4" /> Add {sym} to portfolio
-        </Button>
-        <Link to="/portfolio" className="text-sm font-bold text-primary hover:underline">
-          View portfolio →
-        </Link>
+      {/* Sticky Buy / Sell / SIP bar */}
+      <div className="sticky bottom-[calc(76px+env(safe-area-inset-bottom))] z-30 mt-8 md:bottom-6">
+        <div className="flex gap-3 rounded-2xl border border-border bg-card/95 p-3 shadow-modal backdrop-blur">
+          <button
+            type="button"
+            onClick={() => setOrderSide("buy")}
+            className="h-13 flex-1 rounded-full bg-gain py-3.5 text-base font-bold text-white transition-opacity hover:opacity-90"
+          >
+            Buy
+          </button>
+          <button
+            type="button"
+            onClick={() => setOrderSide("sell")}
+            className="h-13 flex-1 rounded-full border border-loss/40 py-3.5 text-base font-bold text-loss transition-colors hover:bg-loss/10"
+          >
+            Sell
+          </button>
+          <button
+            type="button"
+            onClick={() => setSipOpen(true)}
+            className="h-13 rounded-full border border-border px-5 py-3.5 text-base font-bold text-foreground transition-colors hover:bg-muted/60"
+          >
+            Start SIP
+          </button>
+        </div>
+        <p className="mt-2 text-center text-[11px] text-muted-foreground">
+          Simulated brokerage · demo prices, not live market data
+        </p>
       </div>
 
-      <HoldingDialog open={dialogOpen} onOpenChange={setDialogOpen} defaultSymbol={sym} />
+      <OrderSheet
+        open={orderSide !== null}
+        onOpenChange={(o) => !o && setOrderSide(null)}
+        symbol={sym}
+        name={stock.name}
+        ltpPaise={displayPrice}
+        side={orderSide ?? "buy"}
+        onConfirm={handleConfirm}
+      />
+
+      <SipSheet open={sipOpen} onOpenChange={setSipOpen} symbol={sym} name={stock.name} />
     </PageShell>
   );
 }

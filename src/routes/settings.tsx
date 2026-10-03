@@ -1,13 +1,15 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useQueryClient } from "@tanstack/react-query";
 import { downloadFile } from "@/lib/utils";
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   AlertTriangle,
   CheckCircle2,
   DatabaseBackup,
   Download,
+  Fingerprint,
   Info,
+  Lock,
   MonitorSmartphone,
   Moon,
   Palette,
@@ -28,7 +30,16 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
+import { Skeleton } from "@/components/ui/skeleton";
+import { Switch } from "@/components/ui/switch";
 import {
   Select,
   SelectContent,
@@ -40,6 +51,21 @@ import { Separator } from "@/components/ui/separator";
 import { SectionCard } from "@/components/markets/shared";
 import { PageShell } from "@/components/markets/PageShell";
 import { APP_VERSION } from "@/components/shell/AppHeader";
+import { PinPad } from "@/components/fv";
+import { useAuth } from "@/lib/auth";
+import { APP_LOCK_TIMEOUTS, isLockEnabled } from "@/lib/applock";
+import {
+  useAppLock,
+  useChangePin,
+  useDisableLock,
+  useSetPin,
+  useUpdateLockSettings,
+} from "@/lib/applock-hooks";
+import {
+  clearBiometricCredential,
+  platformBiometricAvailable,
+  registerBiometric,
+} from "@/lib/applock-webauthn";
 import {
   insertAccount,
   insertBill,
@@ -514,6 +540,9 @@ function SettingsPage() {
           </div>
         </SectionCard>
 
+        {/* App lock */}
+        <AppLockSection />
+
         {/* About */}
         <SectionCard title="About FinVerse">
           <div className="flex items-start gap-4">
@@ -575,5 +604,379 @@ function SettingsPage() {
         </AlertDialogContent>
       </AlertDialog>
     </PageShell>
+  );
+}
+
+// ---------------------------------------------------------------------------
+
+type PinDialogMode = "set" | "change";
+type PinStep = "current" | "new" | "confirm";
+
+/**
+ * App lock settings section (PIN + auto-lock timeout + biometrics).
+ *
+ * Honest states: if the `app_lock` table is missing (migration not run) the
+ * section says so plainly instead of faking a toggle. The biometric switch
+ * renders only when the device actually has a user-verifying authenticator.
+ */
+function AppLockSection() {
+  const { user } = useAuth();
+  const lock = useAppLock();
+  const setPin = useSetPin();
+  const changePin = useChangePin();
+  const disableLock = useDisableLock();
+  const updateLock = useUpdateLockSettings();
+
+  const [bioSupported, setBioSupported] = useState(false);
+  const [bioBusy, setBioBusy] = useState(false);
+  const [mode, setMode] = useState<PinDialogMode | null>(null);
+  const [step, setStep] = useState<PinStep>("new");
+  const [firstPin, setFirstPin] = useState("");
+  const [currentPin, setCurrentPin] = useState("");
+  const [pinError, setPinError] = useState<string | null>(null);
+  const [pinBusy, setPinBusy] = useState(false);
+  const [showDisableConfirm, setShowDisableConfirm] = useState(false);
+
+  const row = lock.data?.row ?? null;
+  const tableMissing = lock.data?.tableMissing ?? false;
+  const enabled = isLockEnabled(row);
+
+  useEffect(() => {
+    void platformBiometricAvailable().then(setBioSupported);
+  }, []);
+
+  function openDialog(m: PinDialogMode) {
+    setMode(m);
+    setStep(m === "change" ? "current" : "new");
+    setFirstPin("");
+    setCurrentPin("");
+    setPinError(null);
+    setPinBusy(false);
+  }
+
+  /** Close the dialog and wipe every PIN buffer from memory. */
+  function closeDialog() {
+    setMode(null);
+    setStep("new");
+    setFirstPin("");
+    setCurrentPin("");
+    setPinError(null);
+    setPinBusy(false);
+  }
+
+  async function handlePinComplete(pin: string) {
+    setPinError(null);
+    if (mode === "set") {
+      if (step === "new") {
+        setFirstPin(pin);
+        setStep("confirm");
+        return;
+      }
+      if (pin !== firstPin) {
+        setPinError("Passcodes didn't match — enter it once more.");
+        setStep("new");
+        setFirstPin("");
+        return;
+      }
+      setPinBusy(true);
+      try {
+        await setPin.mutateAsync(pin);
+        toast.success("Passcode set — app lock is on.");
+        closeDialog();
+      } catch (e) {
+        setPinError(e instanceof Error ? e.message : "Couldn't save your passcode.");
+        setPinBusy(false);
+      }
+      return;
+    }
+    if (mode === "change") {
+      if (step === "current") {
+        setCurrentPin(pin);
+        setStep("new");
+        return;
+      }
+      if (step === "new") {
+        setFirstPin(pin);
+        setStep("confirm");
+        return;
+      }
+      if (pin !== firstPin) {
+        setPinError("New passcodes didn't match — enter it once more.");
+        setStep("new");
+        setFirstPin("");
+        return;
+      }
+      setPinBusy(true);
+      try {
+        await changePin.mutateAsync({ currentPin, newPin: pin });
+        toast.success("Passcode changed.");
+        closeDialog();
+      } catch (e) {
+        setPinError(e instanceof Error ? e.message : "Couldn't change your passcode.");
+        setStep("current");
+        setCurrentPin("");
+        setFirstPin("");
+        setPinBusy(false);
+      }
+    }
+  }
+
+  async function handleBioToggle(on: boolean) {
+    if (!user) return;
+    if (on) {
+      setBioBusy(true);
+      try {
+        await registerBiometric(user.id, user.email ?? "FinVerse user");
+        await updateLock.mutateAsync({ biometric_enabled: true });
+        toast.success("Biometric unlock enabled on this device.");
+      } catch (e) {
+        // Honest fallback: setup failed → toggle stays off, PIN still works.
+        toast.error(
+          e instanceof Error ? e.message : "Biometric setup failed — your passcode still works.",
+        );
+      } finally {
+        setBioBusy(false);
+      }
+      return;
+    }
+    try {
+      await updateLock.mutateAsync({ biometric_enabled: false });
+      clearBiometricCredential(user.id);
+      toast.info("Biometric unlock turned off.");
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Couldn't turn off biometrics.");
+    }
+  }
+
+  async function handleDisable() {
+    setShowDisableConfirm(false);
+    try {
+      await disableLock.mutateAsync();
+      if (user) clearBiometricCredential(user.id);
+      toast.info("App lock disabled.");
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Couldn't disable app lock.");
+    }
+  }
+
+  const dialogTitle =
+    mode === "set"
+      ? step === "confirm"
+        ? "Confirm your passcode"
+        : "Set a passcode"
+      : step === "current"
+        ? "Enter your current passcode"
+        : step === "new"
+          ? "Enter a new passcode"
+          : "Confirm the new passcode";
+
+  return (
+    <>
+      <SectionCard title="App lock">
+        {tableMissing ? (
+          <div
+            role="note"
+            className="flex items-start gap-2.5 rounded-xl border border-warning/40 bg-warning/5 p-4"
+          >
+            <AlertTriangle className="mt-0.5 size-4 shrink-0 text-warning" />
+            <p className="text-sm leading-6 text-foreground">
+              <span className="font-bold">
+                App lock unavailable until the database update is applied.
+              </span>{" "}
+              The <span className="font-mono text-xs">app_lock</span> table doesn't exist yet — run{" "}
+              <span className="font-mono text-xs">supabase/migrations/0002_revamp.sql</span> in the
+              Supabase SQL editor, then come back here.
+            </p>
+          </div>
+        ) : lock.isLoading ? (
+          <div className="grid gap-3" aria-label="Loading app-lock settings">
+            <Skeleton className="h-16 rounded-xl" />
+            <Skeleton className="h-16 rounded-xl" />
+          </div>
+        ) : lock.isError ? (
+          <div
+            role="alert"
+            className="flex items-start gap-2.5 rounded-xl border border-danger/40 bg-danger/5 p-4"
+          >
+            <AlertTriangle className="mt-0.5 size-4 shrink-0 text-danger" />
+            <div className="text-sm">
+              <p className="font-bold text-foreground">Couldn't load app-lock settings</p>
+              <p className="mt-0.5 text-muted-foreground">
+                {lock.error?.message ?? "Check your connection and try again."}
+              </p>
+              <Button
+                variant="outline"
+                size="sm"
+                className="mt-2"
+                onClick={() => void lock.refetch()}
+              >
+                Try again
+              </Button>
+            </div>
+          </div>
+        ) : !enabled ? (
+          <div className="flex items-center justify-between gap-3 rounded-xl border border-border p-4">
+            <div className="flex items-center gap-3">
+              <span className="grid size-10 place-items-center rounded-xl bg-primary/10 text-primary">
+                <Lock className="size-5" />
+              </span>
+              <div>
+                <p className="text-sm font-semibold text-foreground">Passcode lock</p>
+                <p className="text-xs text-muted-foreground">
+                  Require a 6-digit passcode when you return to the app after being away.
+                </p>
+              </div>
+            </div>
+            <Button variant="outline" size="sm" onClick={() => openDialog("set")}>
+              Set passcode
+            </Button>
+          </div>
+        ) : (
+          <div className="grid gap-3">
+            <div className="flex items-center justify-between gap-3 rounded-xl border border-border p-4">
+              <div className="flex items-center gap-3">
+                <span className="grid size-10 place-items-center rounded-xl bg-success/10 text-success">
+                  <Lock className="size-5" />
+                </span>
+                <div>
+                  <div className="flex items-center gap-2">
+                    <p className="text-sm font-semibold text-foreground">Passcode lock</p>
+                    <Badge variant="secondary">On</Badge>
+                  </div>
+                  <p className="text-xs text-muted-foreground">
+                    Locks when you're away longer than the timeout below.
+                  </p>
+                </div>
+              </div>
+              <Button variant="outline" size="sm" onClick={() => openDialog("change")}>
+                Change
+              </Button>
+            </div>
+
+            <div className="flex items-center justify-between gap-3 rounded-xl border border-border p-4">
+              <div>
+                <p className="text-sm font-semibold text-foreground">Auto-lock after</p>
+                <p className="text-xs text-muted-foreground">
+                  How long the app can sit in the background before locking.
+                </p>
+              </div>
+              <Select
+                value={String(row?.timeout_secs ?? 120)}
+                onValueChange={(v) => {
+                  const secs = Number(v) as 30 | 60 | 120 | 300 | 600;
+                  updateLock.mutate(
+                    { timeout_secs: secs },
+                    {
+                      onError: (e) =>
+                        toast.error(e instanceof Error ? e.message : "Couldn't save the timeout."),
+                    },
+                  );
+                }}
+              >
+                <SelectTrigger className="w-36" aria-label="Auto-lock timeout">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {APP_LOCK_TIMEOUTS.map((t) => (
+                    <SelectItem key={t.value} value={String(t.value)}>
+                      {t.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
+            {bioSupported && (
+              <div className="flex items-center justify-between gap-3 rounded-xl border border-border p-4">
+                <div className="flex items-center gap-3">
+                  <span className="grid size-10 place-items-center rounded-xl bg-primary/10 text-primary">
+                    <Fingerprint className="size-5" />
+                  </span>
+                  <div>
+                    <p className="text-sm font-semibold text-foreground">Biometric unlock</p>
+                    <p className="text-xs text-muted-foreground">
+                      Use this device's biometrics instead of the passcode.
+                    </p>
+                  </div>
+                </div>
+                <Switch
+                  checked={!!row?.biometric_enabled}
+                  disabled={bioBusy || updateLock.isPending}
+                  onCheckedChange={(on) => void handleBioToggle(on)}
+                  aria-label="Biometric unlock"
+                />
+              </div>
+            )}
+
+            <div className="flex flex-wrap gap-2">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => {
+                  window.dispatchEvent(new CustomEvent("finverse:lock-now"));
+                  toast.info("FinVerse locked.");
+                }}
+              >
+                <Lock className="size-4" /> Lock now
+              </Button>
+              <Button
+                variant="ghost"
+                size="sm"
+                className="text-danger hover:text-danger"
+                onClick={() => setShowDisableConfirm(true)}
+              >
+                Disable app lock
+              </Button>
+            </div>
+          </div>
+        )}
+      </SectionCard>
+
+      {/* PIN set / change dialog — the PIN buffer lives only in this dialog's
+          state and is wiped on close; it is never persisted or logged. */}
+      <Dialog open={mode !== null} onOpenChange={(o) => !o && closeDialog()}>
+        <DialogContent className="sm:max-w-sm">
+          <DialogHeader>
+            <DialogTitle>{dialogTitle}</DialogTitle>
+            <DialogDescription>
+              {mode === "change" && step === "current"
+                ? "Verify your current passcode first."
+                : "Your 6-digit passcode. It never leaves this device."}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="py-2">
+            <PinPad
+              key={`${mode}-${step}`}
+              title={dialogTitle}
+              onComplete={(pin) => void handlePinComplete(pin)}
+              error={pinError}
+              disabled={pinBusy}
+            />
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Disable confirm */}
+      <AlertDialog open={showDisableConfirm} onOpenChange={setShowDisableConfirm}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Disable app lock?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This removes your passcode and any biometric enrollment on this device. Anyone with
+              access to the device and your signed-in session will be able to open FinVerse.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Keep it on</AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-danger text-danger-foreground hover:bg-danger/90"
+              onClick={() => void handleDisable()}
+            >
+              Disable
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+    </>
   );
 }

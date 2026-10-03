@@ -1,34 +1,8 @@
-import { Inbox } from "lucide-react";
 import type { ReactNode } from "react";
-import { Button } from "@/components/ui/button";
 
-/** Friendly empty state with an optional call-to-action. */
-export function EmptyState({
-  title,
-  body,
-  actionLabel,
-  onAction,
-}: {
-  title: string;
-  body: string;
-  actionLabel?: string;
-  onAction?: () => void;
-}) {
-  return (
-    <div className="grid place-items-center rounded-lg border border-dashed border-border bg-card px-6 py-14 text-center shadow-card">
-      <div className="grid size-14 place-items-center rounded-full bg-tint">
-        <Inbox className="size-6 text-primary" />
-      </div>
-      <h3 className="mt-4 text-lg font-bold text-primary-dark">{title}</h3>
-      <p className="mt-2 max-w-sm text-sm leading-6 text-muted-foreground">{body}</p>
-      {actionLabel && onAction && (
-        <Button className="mt-5" onClick={onAction}>
-          {actionLabel}
-        </Button>
-      )}
-    </div>
-  );
-}
+// EmptyState lives in components/fv/ now; re-exported here so existing
+// imports keep working.
+export { EmptyState } from "@/components/fv/EmptyState";
 
 /** Coloured P&L pill: "+ ₹4,210 (+3.2%)". */
 export function PnlBadge({ pnlPaise, pct }: { pnlPaise: number; pct: number }) {

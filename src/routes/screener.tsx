@@ -1,10 +1,9 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useMemo, useState } from "react";
-import { ArrowDown, ArrowUp, ArrowUpDown, Search, Star } from "lucide-react";
+import { ArrowDown, ArrowUp } from "lucide-react";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
   Select,
@@ -14,14 +13,6 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Slider } from "@/components/ui/slider";
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
 import { formatINR, formatINRShort } from "@/lib/finance/format";
 import {
   MCAP_BANDS,
@@ -31,7 +22,8 @@ import {
   type McapBand,
   type StockInfo,
 } from "@/lib/market/data";
-import { EmptyState } from "@/components/markets/shared";
+import { dayChange, genHistory, getLTP } from "@/lib/market/history";
+import { EmptyState, MarketRow, SearchDropdown, type SearchResultGroup } from "@/components/fv";
 import { PageShell } from "@/components/markets/PageShell";
 import { useWatchlist } from "@/components/markets/useWatchlist";
 import { cn } from "@/lib/utils";
@@ -83,6 +75,31 @@ function ScreenerPage() {
     }
   }
 
+  /** Symbol search suggestions for the SearchDropdown (top 8 matches). */
+  const searchGroups: SearchResultGroup[] = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    if (!q) return [];
+    const matches = STOCKS.filter(
+      (s) => s.symbol.toLowerCase().includes(q) || s.name.toLowerCase().includes(q),
+    ).slice(0, 8);
+    return [
+      {
+        label: "Stocks",
+        items: matches.map((s) => {
+          const changePct = dayChange(genHistory(s.symbol, 2)).changePct;
+          const up = changePct >= 0;
+          return {
+            id: s.symbol,
+            title: s.symbol,
+            subtitle: `${s.name} · ${s.sector}`,
+            right: `${formatINR(getLTP(s.symbol))} ${up ? "+" : "−"}${Math.abs(changePct).toFixed(2)}%`,
+            rightTone: (up ? "gain" : "loss") as "gain" | "loss",
+          };
+        }),
+      },
+    ];
+  }, [query]);
+
   const results = useMemo(() => {
     const q = query.trim().toLowerCase();
     const filtered = STOCKS.filter((s) => {
@@ -98,8 +115,28 @@ function ScreenerPage() {
     return [...filtered].sort((a, b) => (a[sortKey] - b[sortKey]) * dir);
   }, [query, sectors, maxPE, minYield, band, sortKey, sortDir]);
 
+  /** Simulated LTP + day-change per result, computed once per filter change. */
+  const live = useMemo(() => {
+    const map = new Map<string, { pricePaise: number; changePct: number }>();
+    for (const s of results) {
+      map.set(s.symbol, {
+        pricePaise: getLTP(s.symbol),
+        changePct: dayChange(genHistory(s.symbol, 2)).changePct,
+      });
+    }
+    return map;
+  }, [results]);
+
   function openStock(symbol: string) {
     navigate({ to: "/stocks/$symbol", params: { symbol } });
+  }
+
+  function resetFilters() {
+    setSectors([]);
+    setMaxPE(MAX_PE);
+    setMinYield("0");
+    setBand("all");
+    setQuery("");
   }
 
   const filterCount =
@@ -115,20 +152,17 @@ function ScreenerPage() {
       active="Screener"
     >
       {/* Filter bar */}
-      <section className="mb-6 rounded-lg border border-border bg-card p-5 shadow-card">
+      <section className="mb-6 rounded-2xl border border-border bg-card p-5 shadow-card">
         <div className="grid gap-5 lg:grid-cols-[1.2fr_1fr_1fr_1fr]">
           <div className="grid gap-2">
             <Label htmlFor="screener-search">Search</Label>
-            <div className="relative">
-              <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
-              <Input
-                id="screener-search"
-                placeholder="Symbol or company name…"
-                value={query}
-                onChange={(e) => setQuery(e.target.value)}
-                className="pl-9"
-              />
-            </div>
+            <SearchDropdown
+              groups={searchGroups}
+              value={query}
+              onChange={setQuery}
+              placeholder="Symbol or company name…"
+              onSelect={(item) => openStock(item.id)}
+            />
           </div>
 
           <div className="grid gap-2">
@@ -144,7 +178,7 @@ function ScreenerPage() {
               max={MAX_PE}
               step={1}
               value={[maxPE]}
-              onValueChange={([v]) => setMaxPE(v)}
+              onValueChange={([v]) => setMaxPE(v ?? MAX_PE)}
               className="mt-2.5"
               aria-label="Maximum P/E ratio"
             />
@@ -219,28 +253,49 @@ function ScreenerPage() {
         </div>
       </section>
 
-      {/* Results */}
-      <div className="mb-3 flex items-center justify-between">
-        <p className="text-sm text-muted-foreground" aria-live="polite">
-          <span className="font-bold text-foreground">{results.length}</span> of {STOCKS.length}{" "}
-          stocks
-          {filterCount > 0 && ` · ${filterCount} filter${filterCount > 1 ? "s" : ""} active`}
-        </p>
-        {filterCount > 0 && (
+      {/* Results header */}
+      <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+        <div className="flex flex-wrap items-center gap-2">
+          <p className="text-sm text-muted-foreground" aria-live="polite">
+            <span className="font-bold text-foreground">{results.length}</span> of {STOCKS.length}{" "}
+            stocks
+            {filterCount > 0 && ` · ${filterCount} filter${filterCount > 1 ? "s" : ""} active`}
+          </p>
+          <Badge variant="secondary" className="text-[11px]">
+            Demo dataset · simulated prices — not live
+          </Badge>
+        </div>
+        <div className="flex items-center gap-2">
+          <Label htmlFor="screener-sort" className="sr-only">
+            Sort results by
+          </Label>
+          <Select value={sortKey} onValueChange={(v: SortKey) => toggleSort(v)}>
+            <SelectTrigger id="screener-sort" className="h-9 w-36 text-xs">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {SORT_COLUMNS.map(({ key, label }) => (
+                <SelectItem key={key} value={key}>
+                  {label}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
           <Button
-            variant="ghost"
-            size="sm"
-            onClick={() => {
-              setSectors([]);
-              setMaxPE(MAX_PE);
-              setMinYield("0");
-              setBand("all");
-              setQuery("");
-            }}
+            variant="outline"
+            size="icon"
+            className="size-9"
+            onClick={() => setSortDir((d) => (d === "asc" ? "desc" : "asc"))}
+            aria-label={sortDir === "desc" ? "Sort ascending" : "Sort descending"}
           >
-            Reset filters
+            {sortDir === "desc" ? <ArrowDown className="size-4" /> : <ArrowUp className="size-4" />}
           </Button>
-        )}
+          {filterCount > 0 && (
+            <Button variant="ghost" size="sm" onClick={resetFilters}>
+              Reset filters
+            </Button>
+          )}
+        </div>
       </div>
 
       {results.length === 0 ? (
@@ -248,113 +303,35 @@ function ScreenerPage() {
           title="No stocks match"
           body="Try widening the P/E range, lowering the dividend-yield bar, or clearing a sector chip."
           actionLabel="Reset filters"
-          onAction={() => {
-            setSectors([]);
-            setMaxPE(MAX_PE);
-            setMinYield("0");
-            setBand("all");
-            setQuery("");
-          }}
+          onAction={resetFilters}
         />
       ) : (
-        <div className="overflow-x-auto rounded-lg border border-border bg-card shadow-card">
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead className="w-12" />
-                <TableHead>Stock</TableHead>
-                <TableHead>Sector</TableHead>
-                {SORT_COLUMNS.map(({ key, label }) => (
-                  <TableHead key={key} className="text-right">
-                    <button
-                      onClick={() => toggleSort(key)}
-                      className={cn(
-                        "inline-flex items-center gap-1 font-semibold transition-colors hover:text-primary",
-                        sortKey === key && "text-primary",
-                      )}
-                      aria-label={`Sort by ${label} ${sortKey === key && sortDir === "desc" ? "ascending" : "descending"}`}
-                    >
-                      {label}
-                      {sortKey === key ? (
-                        sortDir === "desc" ? (
-                          <ArrowDown className="size-3.5" />
-                        ) : (
-                          <ArrowUp className="size-3.5" />
-                        )
-                      ) : (
-                        <ArrowUpDown className="size-3.5 opacity-40" />
-                      )}
-                    </button>
-                  </TableHead>
-                ))}
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {results.map((s: StockInfo) => {
-                const watched = isWatched(s.symbol);
-                return (
-                  <TableRow
-                    key={s.symbol}
-                    className="cursor-pointer"
-                    onClick={() => openStock(s.symbol)}
-                  >
-                    <TableCell onClick={(e) => e.stopPropagation()}>
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        aria-label={
-                          watched
-                            ? `Remove ${s.symbol} from watchlist`
-                            : `Add ${s.symbol} to watchlist`
-                        }
-                        aria-pressed={watched}
-                        onClick={() => toggle(s.symbol)}
-                      >
-                        <Star
-                          className={cn(
-                            "size-4",
-                            watched ? "fill-amber-400 text-amber-400" : "text-muted-foreground",
-                          )}
-                        />
-                      </Button>
-                    </TableCell>
-                    <TableCell>
-                      <span className="font-bold text-primary">{s.symbol}</span>
-                      <div className="max-w-44 truncate text-xs text-muted-foreground">
-                        {s.name}
-                      </div>
-                    </TableCell>
-                    <TableCell>
-                      <Badge variant="secondary" className="whitespace-nowrap">
-                        {s.sector}
-                      </Badge>
-                    </TableCell>
-                    <TableCell className="text-right font-semibold tabular-nums">
-                      {formatINR(s.pricePaise)}
-                    </TableCell>
-                    <TableCell className="text-right tabular-nums">{s.pe.toFixed(1)}</TableCell>
-                    <TableCell className="text-right tabular-nums">
-                      {formatINRShort(s.marketCapCr * 1_00_00_00_000)}
-                    </TableCell>
-                    <TableCell className="text-right tabular-nums">
-                      {s.divYield.toFixed(2)}%
-                    </TableCell>
-                    <TableCell
-                      className={cn(
-                        "text-right font-semibold tabular-nums",
-                        s.oneYReturnPct >= 0 ? "text-success" : "text-destructive",
-                      )}
-                    >
-                      {s.oneYReturnPct >= 0 ? "+" : "−"}
-                      {Math.abs(s.oneYReturnPct).toFixed(1)}%
-                    </TableCell>
-                  </TableRow>
-                );
-              })}
-            </TableBody>
-          </Table>
-        </div>
+        <ul className="grid gap-2">
+          {results.map((s: StockInfo) => {
+            const watched = isWatched(s.symbol);
+            const m = live.get(s.symbol);
+            return (
+              <li key={s.symbol}>
+                <MarketRow
+                  symbol={s.symbol}
+                  name={`${s.name} · ${s.sector} · P/E ${s.pe.toFixed(1)} · MCap ${formatINRShort(s.marketCapCr * 1_00_00_00_000)}`}
+                  pricePaise={m?.pricePaise ?? s.pricePaise}
+                  changePct={m?.changePct ?? 0}
+                  starred={watched}
+                  onToggleStar={() => toggle(s.symbol)}
+                  onClick={() => openStock(s.symbol)}
+                  className="border border-border/60 bg-card shadow-card"
+                />
+              </li>
+            );
+          })}
+        </ul>
       )}
+
+      <p className="mt-4 text-xs leading-5 text-muted-foreground">
+        Prices shown are simulated from the FinVerse demo dataset — not live market data. For
+        learning, not trading.
+      </p>
     </PageShell>
   );
 }

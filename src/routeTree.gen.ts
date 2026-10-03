@@ -21,6 +21,7 @@ import { Route as LoginRouteImport } from './routes/login'
 import { Route as MoreRouteImport } from './routes/more'
 import { Route as NotificationsRouteImport } from './routes/notifications'
 import { Route as OnboardingRouteImport } from './routes/onboarding'
+import { Route as PaymentsRouteImport } from './routes/payments'
 import { Route as PortfolioRouteImport } from './routes/portfolio'
 import { Route as ProfileRouteImport } from './routes/profile'
 import { Route as ReadinessRouteImport } from './routes/readiness'
@@ -28,6 +29,7 @@ import { Route as ScreenerRouteImport } from './routes/screener'
 import { Route as SettingsRouteImport } from './routes/settings'
 import { Route as ToolsRouteImport } from './routes/tools'
 import { Route as WatchlistRouteImport } from './routes/watchlist'
+import { Route as ApiRazorpayWebhookRouteImport } from './routes/api.razorpay-webhook'
 import { Route as AuthCallbackRouteImport } from './routes/auth.callback'
 import { Route as StocksSymbolRouteImport } from './routes/stocks.$symbol'
 
@@ -91,6 +93,11 @@ const OnboardingRoute = OnboardingRouteImport.update({
   path: '/onboarding',
   getParentRoute: () => rootRouteImport,
 } as any)
+const PaymentsRoute = PaymentsRouteImport.update({
+  id: '/payments',
+  path: '/payments',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const PortfolioRoute = PortfolioRouteImport.update({
   id: '/portfolio',
   path: '/portfolio',
@@ -126,6 +133,11 @@ const WatchlistRoute = WatchlistRouteImport.update({
   path: '/watchlist',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ApiRazorpayWebhookRoute = ApiRazorpayWebhookRouteImport.update({
+  id: '/api/razorpay-webhook',
+  path: '/api/razorpay-webhook',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const AuthCallbackRoute = AuthCallbackRouteImport.update({
   id: '/auth/callback',
   path: '/auth/callback',
@@ -150,6 +162,7 @@ export interface FileRoutesByFullPath {
   '/more': typeof MoreRoute
   '/notifications': typeof NotificationsRoute
   '/onboarding': typeof OnboardingRoute
+  '/payments': typeof PaymentsRoute
   '/portfolio': typeof PortfolioRoute
   '/profile': typeof ProfileRoute
   '/readiness': typeof ReadinessRoute
@@ -157,6 +170,7 @@ export interface FileRoutesByFullPath {
   '/settings': typeof SettingsRoute
   '/tools': typeof ToolsRoute
   '/watchlist': typeof WatchlistRoute
+  '/api/razorpay-webhook': typeof ApiRazorpayWebhookRoute
   '/auth/callback': typeof AuthCallbackRoute
   '/stocks/$symbol': typeof StocksSymbolRoute
 }
@@ -173,6 +187,7 @@ export interface FileRoutesByTo {
   '/more': typeof MoreRoute
   '/notifications': typeof NotificationsRoute
   '/onboarding': typeof OnboardingRoute
+  '/payments': typeof PaymentsRoute
   '/portfolio': typeof PortfolioRoute
   '/profile': typeof ProfileRoute
   '/readiness': typeof ReadinessRoute
@@ -180,6 +195,7 @@ export interface FileRoutesByTo {
   '/settings': typeof SettingsRoute
   '/tools': typeof ToolsRoute
   '/watchlist': typeof WatchlistRoute
+  '/api/razorpay-webhook': typeof ApiRazorpayWebhookRoute
   '/auth/callback': typeof AuthCallbackRoute
   '/stocks/$symbol': typeof StocksSymbolRoute
 }
@@ -197,6 +213,7 @@ export interface FileRoutesById {
   '/more': typeof MoreRoute
   '/notifications': typeof NotificationsRoute
   '/onboarding': typeof OnboardingRoute
+  '/payments': typeof PaymentsRoute
   '/portfolio': typeof PortfolioRoute
   '/profile': typeof ProfileRoute
   '/readiness': typeof ReadinessRoute
@@ -204,6 +221,7 @@ export interface FileRoutesById {
   '/settings': typeof SettingsRoute
   '/tools': typeof ToolsRoute
   '/watchlist': typeof WatchlistRoute
+  '/api/razorpay-webhook': typeof ApiRazorpayWebhookRoute
   '/auth/callback': typeof AuthCallbackRoute
   '/stocks/$symbol': typeof StocksSymbolRoute
 }
@@ -222,6 +240,7 @@ export interface FileRouteTypes {
     | '/more'
     | '/notifications'
     | '/onboarding'
+    | '/payments'
     | '/portfolio'
     | '/profile'
     | '/readiness'
@@ -229,6 +248,7 @@ export interface FileRouteTypes {
     | '/settings'
     | '/tools'
     | '/watchlist'
+    | '/api/razorpay-webhook'
     | '/auth/callback'
     | '/stocks/$symbol'
   fileRoutesByTo: FileRoutesByTo
@@ -245,6 +265,7 @@ export interface FileRouteTypes {
     | '/more'
     | '/notifications'
     | '/onboarding'
+    | '/payments'
     | '/portfolio'
     | '/profile'
     | '/readiness'
@@ -252,6 +273,7 @@ export interface FileRouteTypes {
     | '/settings'
     | '/tools'
     | '/watchlist'
+    | '/api/razorpay-webhook'
     | '/auth/callback'
     | '/stocks/$symbol'
   id:
@@ -268,6 +290,7 @@ export interface FileRouteTypes {
     | '/more'
     | '/notifications'
     | '/onboarding'
+    | '/payments'
     | '/portfolio'
     | '/profile'
     | '/readiness'
@@ -275,6 +298,7 @@ export interface FileRouteTypes {
     | '/settings'
     | '/tools'
     | '/watchlist'
+    | '/api/razorpay-webhook'
     | '/auth/callback'
     | '/stocks/$symbol'
   fileRoutesById: FileRoutesById
@@ -292,6 +316,7 @@ export interface RootRouteChildren {
   MoreRoute: typeof MoreRoute
   NotificationsRoute: typeof NotificationsRoute
   OnboardingRoute: typeof OnboardingRoute
+  PaymentsRoute: typeof PaymentsRoute
   PortfolioRoute: typeof PortfolioRoute
   ProfileRoute: typeof ProfileRoute
   ReadinessRoute: typeof ReadinessRoute
@@ -299,6 +324,7 @@ export interface RootRouteChildren {
   SettingsRoute: typeof SettingsRoute
   ToolsRoute: typeof ToolsRoute
   WatchlistRoute: typeof WatchlistRoute
+  ApiRazorpayWebhookRoute: typeof ApiRazorpayWebhookRoute
   AuthCallbackRoute: typeof AuthCallbackRoute
   StocksSymbolRoute: typeof StocksSymbolRoute
 }
@@ -389,6 +415,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof OnboardingRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/payments': {
+      id: '/payments'
+      path: '/payments'
+      fullPath: '/payments'
+      preLoaderRoute: typeof PaymentsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/portfolio': {
       id: '/portfolio'
       path: '/portfolio'
@@ -438,6 +471,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof WatchlistRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/api/razorpay-webhook': {
+      id: '/api/razorpay-webhook'
+      path: '/api/razorpay-webhook'
+      fullPath: '/api/razorpay-webhook'
+      preLoaderRoute: typeof ApiRazorpayWebhookRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/auth/callback': {
       id: '/auth/callback'
       path: '/auth/callback'
@@ -468,6 +508,7 @@ const rootRouteChildren: RootRouteChildren = {
   MoreRoute: MoreRoute,
   NotificationsRoute: NotificationsRoute,
   OnboardingRoute: OnboardingRoute,
+  PaymentsRoute: PaymentsRoute,
   PortfolioRoute: PortfolioRoute,
   ProfileRoute: ProfileRoute,
   ReadinessRoute: ReadinessRoute,
@@ -475,6 +516,7 @@ const rootRouteChildren: RootRouteChildren = {
   SettingsRoute: SettingsRoute,
   ToolsRoute: ToolsRoute,
   WatchlistRoute: WatchlistRoute,
+  ApiRazorpayWebhookRoute: ApiRazorpayWebhookRoute,
   AuthCallbackRoute: AuthCallbackRoute,
   StocksSymbolRoute: StocksSymbolRoute,
 }

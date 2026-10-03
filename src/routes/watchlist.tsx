@@ -1,20 +1,17 @@
-import { createFileRoute, Link } from "@tanstack/react-router";
+import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useEffect, useMemo, useState } from "react";
-import {
-  ArrowDownRight,
-  ArrowUpRight,
-  Bell,
-  BellRing,
-  Eye,
-  Plus,
-  RefreshCw,
-  Trash2,
-  X,
-} from "lucide-react";
+import { Bell, BellRing, Clock3, Eye, Plus, RefreshCw, Trash2, X } from "lucide-react";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
@@ -25,7 +22,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
-import { EmptyState, SectionCard } from "@/components/markets/shared";
+import { EmptyState, ErrorState, MarketRow } from "@/components/fv";
 import { PageShell } from "@/components/markets/PageShell";
 import { formatINR } from "@/lib/finance/format";
 import { STOCKS, getStock } from "@/lib/market/data";
@@ -38,6 +35,7 @@ import {
   useRemovePriceAlert,
   useWatchlist,
   type AlertKind,
+  type WatchlistEntry,
 } from "@/lib/watchlist";
 import { usePrefersReducedMotion } from "@/hooks/use-prefers-reduced-motion";
 import { toast } from "sonner";
@@ -58,7 +56,8 @@ function parseRupeesToPaise(raw: string): number | null {
 }
 
 function WatchlistPage() {
-  const { data: entries, isPending } = useWatchlist();
+  const navigate = useNavigate();
+  const { data: entries, isPending, isError, error, refetch } = useWatchlist();
   const addStock = useAddToWatchlist();
   const removeStock = useRemoveFromWatchlist();
   const addAlert = useAddPriceAlert();
@@ -68,13 +67,21 @@ function WatchlistPage() {
   const [query, setQuery] = useState("");
   const [tick, setTick] = useState(0);
   const [prices, setPrices] = useState<Record<string, number> | null>(null);
-  // Per-stock inline alert form state: symbol -> {kind, price}
+  /** When alert conditions were last evaluated (ms epoch). */
+  const [lastEvaluatedAt, setLastEvaluatedAt] = useState<number | null>(null);
+  /** Which symbol's price-alert dialog is open. */
+  const [alertDialogSymbol, setAlertDialogSymbol] = useState<string | null>(null);
+  // Per-stock alert form state: symbol -> {kind, price}
   const [alertForm, setAlertForm] = useState<Record<string, { kind: AlertKind; price: string }>>(
     {},
   );
 
+  // Alert conditions are evaluated ONLY here — on mount and on explicit price
+  // refresh — never tick-by-tick, so a jittered simulated price can't flicker
+  // an alert between met/unmet on its own.
   useEffect(() => {
     setPrices(Object.fromEntries((entries ?? []).map((e) => [e.symbol, getLTP(e.symbol)])));
+    setLastEvaluatedAt(Date.now());
   }, [entries, tick]);
 
   const watched = useMemo(() => new Set((entries ?? []).map((e) => e.symbol)), [entries]);
@@ -91,7 +98,7 @@ function WatchlistPage() {
     ).slice(0, 6);
   }, [query, watched]);
 
-  const ready = !isPending && prices !== null;
+  const ready = !isPending && !isError && prices !== null;
 
   function handleRefresh() {
     (entries ?? []).forEach((e) => refreshLTP(e.symbol));
@@ -113,6 +120,16 @@ function WatchlistPage() {
     });
   }
 
+  function handleRemove(symbol: string) {
+    removeStock.mutateRemove(symbol, {
+      onSuccess: () => {
+        if (alertDialogSymbol === symbol) setAlertDialogSymbol(null);
+        toast.success(`${symbol} removed from your watchlist.`);
+      },
+      onError: () => toast.error("Couldn't remove — try again."),
+    });
+  }
+
   function handleAddAlert(symbol: string) {
     const form = alertForm[symbol] ?? { kind: "above" as AlertKind, price: "" };
     const paise = parseRupeesToPaise(form.price);
@@ -131,10 +148,18 @@ function WatchlistPage() {
     });
   }
 
+  const dialogEntry: WatchlistEntry | undefined = (entries ?? []).find(
+    (e) => e.symbol === alertDialogSymbol,
+  );
+  const dialogForm = alertDialogSymbol
+    ? (alertForm[alertDialogSymbol] ?? { kind: "above" as AlertKind, price: "" })
+    : null;
+  const dialogLtp = alertDialogSymbol != null ? (prices?.[alertDialogSymbol] ?? 0) : 0;
+
   return (
     <PageShell
       title="Watchlist"
-      subtitle="Track stocks you care about at mock live prices. Set above/below price alerts and FinVerse flags them for you."
+      subtitle="Track stocks you care about. All prices are simulated — not live market data. Set above/below price alerts and FinVerse flags them for you."
       active="Watchlist"
       actions={
         <Button variant="outline" size="sm" onClick={handleRefresh} disabled={!ready}>
@@ -148,7 +173,7 @@ function WatchlistPage() {
         <Label htmlFor="watchlist-add" className="sr-only">
           Add a stock to your watchlist
         </Label>
-        <div className="flex items-center gap-2 rounded-xl border border-input bg-card px-3 py-2.5 shadow-tile focus-within:border-ring">
+        <div className="flex items-center gap-2 rounded-2xl border border-input bg-card px-4 py-2 shadow-tile focus-within:border-ring">
           <Eye className="size-4 shrink-0 text-muted-foreground" aria-hidden />
           <input
             id="watchlist-add"
@@ -160,7 +185,7 @@ function WatchlistPage() {
             role="combobox"
             aria-expanded={suggestions.length > 0}
             aria-label="Add a stock to your watchlist"
-            className="w-full bg-transparent text-sm text-foreground outline-none placeholder:text-muted-foreground"
+            className="h-9 w-full bg-transparent text-sm text-foreground outline-none placeholder:text-muted-foreground"
           />
           {query && (
             <button
@@ -201,181 +226,184 @@ function WatchlistPage() {
         )}
       </div>
 
-      {!ready ? (
-        <div className="grid gap-4">
-          {[0, 1].map((i) => (
-            <Skeleton key={i} className="h-40 rounded-xl" />
+      {/* Alert-evaluation honesty note */}
+      <p className="mb-4 flex items-start gap-1.5 text-xs leading-5 text-muted-foreground">
+        <Clock3 className="mt-0.5 size-3.5 shrink-0" aria-hidden />
+        <span>
+          Price alerts are evaluated only when prices refresh — never tick-by-tick — so simulated
+          price jitter can&apos;t flicker an alert on and off.{" "}
+          {lastEvaluatedAt != null && (
+            <span className="font-semibold text-foreground">
+              Last checked{" "}
+              {new Date(lastEvaluatedAt).toLocaleTimeString("en-IN", {
+                hour: "2-digit",
+                minute: "2-digit",
+                second: "2-digit",
+              })}
+              .
+            </span>
+          )}
+        </span>
+      </p>
+
+      {isPending || prices === null ? (
+        <div className="grid gap-2" aria-label="Loading watchlist">
+          {[0, 1, 2].map((i) => (
+            <Skeleton key={i} className="h-16 rounded-2xl" />
           ))}
         </div>
+      ) : isError ? (
+        <ErrorState
+          title="Couldn't load your watchlist"
+          body={error instanceof Error ? error.message : "Check your connection and try again."}
+          onRetry={() => refetch()}
+        />
       ) : (entries ?? []).length === 0 ? (
         <EmptyState
           title="Your watchlist is empty"
-          body="Add stocks from the 41-stock FinVerse universe and set price alerts so you never miss a move."
+          body="Add stocks from the FinVerse universe and set price alerts so you never miss a move."
           actionLabel="Try adding RELIANCE"
           onAction={() => handleAdd("RELIANCE")}
         />
       ) : (
-        <div className="grid gap-4">
+        <ul className="grid gap-2">
           {(entries ?? []).map((entry) => {
             const stock = getStock(entry.symbol);
             const ltp = prices?.[entry.symbol] ?? stock?.pricePaise ?? 0;
             const change = dayChange(genHistory(entry.symbol, 2));
-            const up = change.changePaise >= 0;
-            const form = alertForm[entry.symbol] ?? { kind: "above" as AlertKind, price: "" };
             return (
-              <SectionCard
-                key={entry.symbol}
-                title={entry.symbol}
-                action={
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    aria-label={`Remove ${entry.symbol} from watchlist`}
-                    onClick={() =>
-                      removeStock.mutateRemove(entry.symbol, {
-                        onSuccess: () => toast.success(`${entry.symbol} removed.`),
-                        onError: () => toast.error("Couldn't remove — try again."),
-                      })
-                    }
-                  >
-                    <Trash2 className="size-4 text-destructive" />
-                  </Button>
-                }
-              >
-                <div className="flex flex-wrap items-baseline justify-between gap-2">
-                  <div>
-                    <Link
-                      to="/stocks/$symbol"
-                      params={{ symbol: entry.symbol }}
-                      className="font-bold text-primary hover:underline"
-                    >
-                      {entry.symbol}
-                    </Link>
-                    <p className="text-xs text-muted-foreground">
-                      {stock?.name ?? entry.symbol}
-                      {stock ? ` · ${stock.sector}` : ""}
-                    </p>
-                  </div>
-                  <div className="text-right">
-                    <p className="text-xl font-black tabular-nums text-foreground">
-                      {formatINR(ltp)}
-                    </p>
-                    <p
-                      className={cn(
-                        "flex items-center justify-end gap-1 text-xs font-bold tabular-nums",
-                        up ? "text-success" : "text-destructive",
-                      )}
-                    >
-                      {up ? (
-                        <ArrowUpRight className="size-3.5" />
-                      ) : (
-                        <ArrowDownRight className="size-3.5" />
-                      )}
-                      {up ? "+" : "−"}₹
-                      {Math.abs(Math.round(change.changePaise / 100)).toLocaleString("en-IN")} (
-                      {up ? "+" : ""}
-                      {change.changePct.toFixed(2)}%)
-                    </p>
-                  </div>
-                </div>
-
-                {/* Alerts */}
-                <div className="mt-4 border-t border-border/60 pt-4">
-                  <p className="mb-2 flex items-center gap-1.5 text-xs font-bold uppercase tracking-wider text-muted-foreground">
-                    <Bell className="size-3.5" /> Price alerts ({entry.alerts.length})
-                  </p>
-                  {entry.alerts.length > 0 && (
-                    <ul className="mb-3 grid gap-2">
-                      {entry.alerts.map((a) => {
-                        const met = isAlertMet(a, ltp);
-                        return (
-                          <li
-                            key={a.id}
-                            className={cn(
-                              "flex items-center justify-between gap-2 rounded-lg border px-3 py-2",
-                              met ? "border-success/50 bg-success-soft/60" : "border-border",
-                            )}
-                          >
-                            <span className="flex items-center gap-2 text-sm">
-                              {met ? (
-                                <BellRing className="size-4 shrink-0 text-success" />
-                              ) : (
-                                <Bell className="size-4 shrink-0 text-muted-foreground" />
-                              )}
-                              <span className="font-semibold text-foreground">
-                                {a.kind === "above" ? "Above" : "Below"}{" "}
-                                <span className="tabular-nums">{formatINR(a.pricePaise)}</span>
-                              </span>
-                              {met && <Badge className="bg-success text-white">Triggered</Badge>}
-                            </span>
-                            <Button
-                              variant="ghost"
-                              size="icon"
-                              aria-label={`Delete alert ${a.kind} ${formatINR(a.pricePaise)}`}
-                              onClick={() =>
-                                removeAlert.mutateRemoveAlert(entry.symbol, a.id, {
-                                  onError: () => toast.error("Couldn't delete the alert."),
-                                })
-                              }
-                            >
-                              <Trash2 className="size-3.5 text-destructive" />
-                            </Button>
-                          </li>
-                        );
-                      })}
-                    </ul>
-                  )}
-                  <div className="flex flex-wrap items-end gap-2">
-                    <div>
-                      <Label className="sr-only" htmlFor={`alert-kind-${entry.symbol}`}>
-                        Alert direction
-                      </Label>
-                      <Select
-                        value={form.kind}
-                        onValueChange={(v: AlertKind) =>
-                          setAlertForm((f) => ({
-                            ...f,
-                            [entry.symbol]: { ...form, kind: v },
-                          }))
-                        }
-                      >
-                        <SelectTrigger id={`alert-kind-${entry.symbol}`} className="w-28">
-                          <SelectValue />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="above">Above ₹</SelectItem>
-                          <SelectItem value="below">Below ₹</SelectItem>
-                        </SelectContent>
-                      </Select>
-                    </div>
-                    <div>
-                      <Label className="sr-only" htmlFor={`alert-price-${entry.symbol}`}>
-                        Alert price in rupees
-                      </Label>
-                      <Input
-                        id={`alert-price-${entry.symbol}`}
-                        inputMode="decimal"
-                        placeholder="e.g. 1600"
-                        value={form.price}
-                        onChange={(e) =>
-                          setAlertForm((f) => ({
-                            ...f,
-                            [entry.symbol]: { ...form, price: e.target.value },
-                          }))
-                        }
-                        className="w-32"
-                      />
-                    </div>
-                    <Button size="sm" onClick={() => handleAddAlert(entry.symbol)}>
-                      <Plus className="size-4" /> Set alert
-                    </Button>
-                  </div>
-                </div>
-              </SectionCard>
+              <li key={entry.symbol}>
+                <MarketRow
+                  symbol={entry.symbol}
+                  name={stock?.name ?? entry.symbol}
+                  pricePaise={ltp}
+                  changePct={change.changePct}
+                  starred
+                  alerted={entry.alerts.length > 0}
+                  onToggleStar={() => handleRemove(entry.symbol)}
+                  onToggleAlert={() => setAlertDialogSymbol(entry.symbol)}
+                  onClick={() =>
+                    navigate({ to: "/stocks/$symbol", params: { symbol: entry.symbol } })
+                  }
+                  className="border border-border/60 bg-card shadow-card"
+                />
+              </li>
             );
           })}
-        </div>
+        </ul>
       )}
+
+      {/* Price-alert dialog */}
+      <Dialog
+        open={alertDialogSymbol !== null}
+        onOpenChange={(open) => {
+          if (!open) setAlertDialogSymbol(null);
+        }}
+      >
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>
+              Price alerts{alertDialogSymbol ? ` · ${alertDialogSymbol}` : ""}
+            </DialogTitle>
+            <DialogDescription>
+              FinVerse flags an alert the next time prices refresh and the condition is met.
+              Simulated prices — not live market data.
+            </DialogDescription>
+          </DialogHeader>
+
+          {dialogEntry && dialogForm && (
+            <div>
+              {dialogEntry.alerts.length > 0 && (
+                <ul className="mb-4 grid gap-2">
+                  {dialogEntry.alerts.map((a) => {
+                    const met = isAlertMet(a, dialogLtp);
+                    return (
+                      <li
+                        key={a.id}
+                        className={cn(
+                          "flex items-center justify-between gap-2 rounded-xl border px-3 py-2",
+                          met ? "border-success/50 bg-success-soft/60" : "border-border",
+                        )}
+                      >
+                        <span className="flex items-center gap-2 text-sm">
+                          {met ? (
+                            <BellRing className="size-4 shrink-0 text-success" aria-hidden />
+                          ) : (
+                            <Bell className="size-4 shrink-0 text-muted-foreground" aria-hidden />
+                          )}
+                          <span className="font-semibold text-foreground">
+                            {a.kind === "above" ? "Above" : "Below"}{" "}
+                            <span className="tabular-nums">{formatINR(a.pricePaise)}</span>
+                          </span>
+                          {met && <Badge className="bg-success text-white">Triggered</Badge>}
+                        </span>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          aria-label={`Delete alert ${a.kind} ${formatINR(a.pricePaise)}`}
+                          onClick={() =>
+                            removeAlert.mutateRemoveAlert(dialogEntry.symbol, a.id, {
+                              onError: () => toast.error("Couldn't delete the alert."),
+                            })
+                          }
+                        >
+                          <Trash2 className="size-3.5 text-destructive" />
+                        </Button>
+                      </li>
+                    );
+                  })}
+                </ul>
+              )}
+
+              <div className="flex flex-wrap items-end gap-2">
+                <div>
+                  <Label className="sr-only" htmlFor="alert-kind">
+                    Alert direction
+                  </Label>
+                  <Select
+                    value={dialogForm.kind}
+                    onValueChange={(v: AlertKind) =>
+                      setAlertForm((f) => ({
+                        ...f,
+                        [dialogEntry.symbol]: { ...dialogForm, kind: v },
+                      }))
+                    }
+                  >
+                    <SelectTrigger id="alert-kind" className="w-28">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="above">Above ₹</SelectItem>
+                      <SelectItem value="below">Below ₹</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div>
+                  <Label className="sr-only" htmlFor="alert-price">
+                    Alert price in rupees
+                  </Label>
+                  <Input
+                    id="alert-price"
+                    inputMode="decimal"
+                    placeholder="e.g. 1600"
+                    value={dialogForm.price}
+                    onChange={(e) =>
+                      setAlertForm((f) => ({
+                        ...f,
+                        [dialogEntry.symbol]: { ...dialogForm, price: e.target.value },
+                      }))
+                    }
+                    className="w-32"
+                  />
+                </div>
+                <Button size="sm" onClick={() => handleAddAlert(dialogEntry.symbol)}>
+                  <Plus className="size-4" aria-hidden /> Set alert
+                </Button>
+              </div>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
 
       <Card className="mt-5 shadow-card">
         <CardContent className="py-4 text-xs leading-5 text-muted-foreground">

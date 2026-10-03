@@ -1,0 +1,72 @@
+/**
+ * Shared server-side helpers for the Razorpay integration.
+ *
+ * No node:crypto here and no createServerFn — safe to import from both the
+ * server-function module (src/lib/razorpay.server.ts) and the webhook module
+ * (src/lib/razorpay-webhook.ts).
+ */
+
+import { createClient, type SupabaseClient } from "@supabase/supabase-js";
+
+/** Razorpay test-mode credentials (server-only env). Throws when missing. */
+export function razorpayCredentials(): { keyId: string; keySecret: string } {
+  const keyId = process.env["RAZORPAY_KEY_ID"];
+  const keySecret = process.env["RAZORPAY_KEY_SECRET"];
+  if (!keyId || !keySecret) {
+    throw new Error(
+      "Razorpay test keys are not configured. Set RAZORPAY_KEY_ID and " +
+        "RAZORPAY_KEY_SECRET in the server environment (server-only, test mode keys only).",
+    );
+  }
+  return { keyId, keySecret };
+}
+
+export function supabaseUrl(): string {
+  const url = process.env["SUPABASE_URL"] ?? process.env["VITE_SUPABASE_URL"];
+  if (!url) throw new Error("Supabase URL is not configured (SUPABASE_URL / VITE_SUPABASE_URL).");
+  return url;
+}
+
+function supabaseAnonKey(): string {
+  const key = process.env["VITE_SUPABASE_ANON_KEY"];
+  if (!key) throw new Error("VITE_SUPABASE_ANON_KEY is not configured.");
+  return key;
+}
+
+/** Supabase client scoped to the caller via their access token (RLS enforced). */
+export function getUserSupabase(accessToken: string): SupabaseClient {
+  return createClient(supabaseUrl(), supabaseAnonKey(), {
+    auth: { persistSession: false, autoRefreshToken: false },
+    global: { headers: { Authorization: `Bearer ${accessToken}` } },
+  });
+}
+
+/**
+ * Service-role client for the webhook (no user session on webhooks).
+ * Bypasses RLS — only ever used to write rows attributed via the
+ * signature-verified webhook payload's notes.
+ */
+export function getServiceSupabase(): SupabaseClient {
+  const key = process.env["SUPABASE_SERVICE_ROLE_KEY"];
+  if (!key) {
+    throw new Error(
+      "Webhook is not configured: set SUPABASE_SERVICE_ROLE_KEY in the server " +
+        "environment (server-only). It lets the webhook write payments/ledger rows " +
+        "for the paying user, since webhooks carry no user session.",
+    );
+  }
+  return createClient(supabaseUrl(), key, {
+    auth: { persistSession: false, autoRefreshToken: false },
+  });
+}
+
+/** True when a Supabase error means the table doesn't exist (42P01). */
+export function isMissingTable(err: unknown): boolean {
+  return err != null && typeof err === "object" && (err as { code?: unknown }).code === "42P01";
+}
+
+export function missingTableError(): Error {
+  return new Error(
+    "Payments database setup pending — run supabase/migrations/0002_revamp.sql in the Supabase SQL editor.",
+  );
+}
