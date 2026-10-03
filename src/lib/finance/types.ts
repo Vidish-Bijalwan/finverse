@@ -10,7 +10,7 @@
 
 export type TransactionType = "expense" | "income" | "transfer";
 
-export type PayMode = "UPI" | "Cash" | "Card" | "Bank";
+export type PayMode = "UPI" | "Cash" | "Card" | "Bank" | "upi_test" | "razorpay_test";
 
 export type CategoryKind = "expense" | "income";
 

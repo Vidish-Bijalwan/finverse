@@ -1,51 +1,58 @@
-import { Link, createFileRoute } from "@tanstack/react-router";
+import { Link, createFileRoute, useNavigate } from "@tanstack/react-router";
+import { useQuery } from "@tanstack/react-query";
 import {
   ArrowRight,
-  Bot,
   BriefcaseBusiness,
-  Calculator,
-  ChartNoAxesCombined,
   ChevronLeft,
   ChevronRight,
-  Eye,
-  Headphones,
-  Lightbulb,
   Plus,
-  Receipt,
-  ShieldCheck,
+  Send,
   Sparkles,
   Target,
-  TrendingDown,
   TrendingUp,
   Wallet,
-  WalletCards,
 } from "lucide-react";
 import { useEffect, useMemo, useState, type ReactNode } from "react";
 
-import { Button } from "@/components/ui/button";
+import { Skeleton } from "@/components/ui/skeleton";
 import { CountUp } from "@/components/charts/CountUp";
 import { MonthBars, type MonthFlow } from "@/components/charts/MonthBars";
 import { NetWorthSpark, type NetWorthPoint } from "@/components/charts/NetWorthSpark";
 import { SpendDonut, type DonutSlice } from "@/components/charts/SpendDonut";
-import { ChartSkeleton } from "@/components/charts/shared";
+import {
+  ChartCard,
+  EmptyState,
+  ErrorState,
+  MarketRow,
+  NumberDisplay,
+  StatBand,
+  TickerStrip,
+  TxnRow,
+  type StatBandStat,
+} from "@/components/fv";
+import { useWatchlist as useWatchlistUI } from "@/components/markets/useWatchlist";
 import { categoryById } from "@/lib/finance/categories";
 import { formatINR, formatINRShort, monthKey, monthLabel } from "@/lib/finance/format";
-import { useHoldings, useMonth, useTransactions } from "@/lib/finance/hooks";
+import { useAccountSummaries, useHoldings, useMonth, useTransactions } from "@/lib/finance/hooks";
+import { getStock } from "@/lib/market/data";
+import { dayChange, genHistory, getLTP } from "@/lib/market/history";
+import { fetchWatchlist, WATCHLIST_QUERY_KEY } from "@/lib/watchlist";
+import { useAuth } from "@/lib/auth";
 import { cn } from "@/lib/utils";
 
 export const Route = createFileRoute("/")({
   head: () => ({
     meta: [
-      { title: "FinVerse AI — Your Money, Clearly Explained" },
+      { title: "FinVerse AI — Dashboard" },
       {
         name: "description",
         content:
-          "Track spending, understand investments, and make clearer financial decisions with explainable AI.",
+          "Your money in one clear view: net worth, monthly P&L, investments, and recent activity.",
       },
-      { property: "og:title", content: "FinVerse AI — Your Money, Clearly Explained" },
+      { property: "og:title", content: "FinVerse AI — Dashboard" },
       {
         property: "og:description",
-        content: "One clear view of your spending, investments, goals, and financial health.",
+        content: "Net worth, spending, investments, and AI insights in one clear view.",
       },
       { property: "og:type", content: "website" },
       { name: "twitter:card", content: "summary_large_image" },
@@ -56,75 +63,99 @@ export const Route = createFileRoute("/")({
 
 /** "2026-10" shifted by delta months, e.g. shiftMonth("2026-10", -1) -> "2026-09". */
 function shiftMonth(key: string, delta: number): string {
-  const [y, m] = key.split("-").map(Number);
+  const parts = key.split("-").map(Number);
+  const y = parts[0] ?? 0;
+  const m = parts[1] ?? 1;
   const d = new Date(y, m - 1 + delta, 1);
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
 }
 
 /** "2026-10" -> "Oct" for compact chart axis labels. */
 function shortMonthLabel(key: string): string {
-  return monthLabel(key).split(" ")[0];
+  return monthLabel(key).split(" ")[0] ?? "";
 }
 
-function signFormat(paise: number): string {
-  return `${paise >= 0 ? "+ " : "− "}${formatINR(Math.abs(paise))}`;
+/** "2026-10-03" -> "3 Oct 2026". */
+function dateLabel(dateISO: string): string {
+  return new Date(`${dateISO}T00:00:00`).toLocaleDateString("en-IN", {
+    day: "numeric",
+    month: "short",
+    year: "numeric",
+  });
+}
+
+function greetingFor(date: Date): string {
+  const h = date.getHours();
+  if (h < 12) return "Good morning";
+  if (h < 17) return "Good afternoon";
+  return "Good evening";
 }
 
 const quickActions = [
-  { label: "Add Expense", icon: Plus, to: "/expenses" },
-  { label: "Budgets", icon: WalletCards, to: "/budgets" },
-  { label: "Bills", icon: Receipt, to: "/bills" },
-  { label: "Goals", icon: Target, to: "/goals" },
-  { label: "Portfolio", icon: BriefcaseBusiness, to: "/portfolio" },
-  { label: "AI Chat", icon: Bot, to: "/chat" },
-  { label: "Accounts", icon: Wallet, to: "/accounts" },
-  { label: "Calculators", icon: Calculator, to: "/tools" },
-  { label: "Watchlist", icon: Eye, to: "/watchlist" },
-];
-
-function Logo() {
-  return (
-    <div className="flex items-center gap-2.5" aria-label="FinVerse home">
-      <div className="grid size-9 place-items-center rounded-md bg-primary-dark shadow-logo">
-        <ChartNoAxesCombined className="size-5 text-primary-foreground" strokeWidth={2.5} />
-      </div>
-      <span className="text-xl font-black text-primary-dark">
-        Fin<span className="text-primary">Verse</span>
-      </span>
-    </div>
-  );
-}
+  { label: "Add expense", icon: Plus, to: "/expenses" },
+  { label: "Pay", icon: Send, to: "/payments" },
+  { label: "Invest", icon: TrendingUp, to: "/portfolio" },
+  { label: "Add goal", icon: Target, to: "/goals" },
+] as const;
 
 interface Mover {
-  id: string;
   label: string;
-  color: string;
   delta: number;
-  current: number;
-  previous: number;
   pct: number | null;
 }
 
 function FinVerseDashboard() {
   const [month, setMonth] = useMonth();
   const [chartsReady, setChartsReady] = useState(false);
+  const navigate = useNavigate();
+  const { profile } = useAuth();
 
   // Recharts needs layout measurements; mount charts client-side only (SSR-safe).
   useEffect(() => {
     setChartsReady(true);
   }, []);
 
-  const { data: txns, isLoading: txnsLoading, isError: txnsError } = useTransactions();
-  const { data: holdings, isLoading: holdingsLoading } = useHoldings();
+  const {
+    data: txns,
+    isLoading: txnsLoading,
+    isError: txnsError,
+    refetch: refetchTxns,
+  } = useTransactions();
+  const {
+    data: holdings,
+    isLoading: holdingsLoading,
+    isError: holdingsError,
+    refetch: refetchHoldings,
+  } = useHoldings();
+  const {
+    data: summaries,
+    isLoading: accountsLoading,
+    isError: accountsError,
+    refetch: refetchAccounts,
+  } = useAccountSummaries();
+
+  // Watchlist preview shares the watchlist page's query cache (same key + options).
+  const {
+    data: watchEntries,
+    isLoading: watchLoading,
+    isError: watchError,
+    refetch: refetchWatch,
+  } = useQuery({
+    queryKey: WATCHLIST_QUERY_KEY,
+    queryFn: fetchWatchlist,
+    retry: false,
+  });
+  const { toggle: toggleWatch } = useWatchlistUI();
 
   const currentKey = monthKey(new Date());
   const prevKey = shiftMonth(month, -1);
   const canGoForward = month < currentKey;
 
+  const firstName = profile?.full_name?.trim().split(/\s+/)[0];
+  const greeting = greetingFor(new Date());
+
   const stats = useMemo(() => {
     const all = txns ?? [];
-    let lifetimeIncome = 0;
-    let lifetimeExpenses = 0;
     const byMonth = new Map<string, { income: number; expense: number }>();
     const monthCatSpend = new Map<string, number>();
     const prevCatSpend = new Map<string, number>();
@@ -137,10 +168,8 @@ function FinVerseDashboard() {
         byMonth.set(key, entry);
       }
       if (t.type === "income") {
-        lifetimeIncome += t.amountPaise;
         entry.income += t.amountPaise;
       } else if (t.type === "expense") {
-        lifetimeExpenses += t.amountPaise;
         entry.expense += t.amountPaise;
         if (key === month)
           monthCatSpend.set(t.category, (monthCatSpend.get(t.category) ?? 0) + t.amountPaise);
@@ -174,7 +203,7 @@ function FinVerseDashboard() {
       bars.push({ key, label: shortMonthLabel(key), income: e.income, expense: e.expense });
     }
 
-    // Cumulative (income − expenses) by month, last six months up to the selection.
+    // Cumulative (income − expenses) by month, up to the selection.
     const keys = [...byMonth.keys()].filter((k) => k <= month).sort();
     const spark: NetWorthPoint[] = [];
     let running = 0;
@@ -184,7 +213,6 @@ function FinVerseDashboard() {
       running += e.income - e.expense;
       spark.push({ key, label: shortMonthLabel(key), net: running });
     }
-    const spark6 = spark.slice(-6);
 
     // Biggest month-over-month category increase.
     let mover: Mover | null = null;
@@ -195,12 +223,8 @@ function FinVerseDashboard() {
       if (delta > 0 && (!mover || delta > mover.delta)) {
         const cat = categoryById(id);
         mover = {
-          id,
           label: cat?.label ?? id,
-          color: cat?.color ?? "#64748B",
           delta,
-          current,
-          previous,
           pct: previous > 0 ? Math.round((delta / previous) * 100) : null,
         };
       }
@@ -209,354 +233,465 @@ function FinVerseDashboard() {
     const topSlice = donut[0];
 
     return {
-      balance: lifetimeIncome - lifetimeExpenses,
       pnl: monthIncome - monthExpense,
-      monthIncome,
       monthExpense,
       donut,
       bars,
-      spark: spark6,
+      spark: spark.slice(-6),
       mover,
       topCategory: topSlice ? { label: topSlice.label, value: topSlice.value } : null,
     };
   }, [txns, month, prevKey]);
 
+  // Net worth = derived account balances + holdings at session LTP.
+  const accountsTotal = useMemo(
+    () => (summaries ?? []).reduce((sum, s) => sum + s.balancePaise, 0),
+    [summaries],
+  );
+  const holdingsLtpValue = useMemo(
+    () => (holdings ?? []).reduce((sum, h) => sum + h.qty * getLTP(h.symbol), 0),
+    [holdings],
+  );
   const investedPaise = useMemo(
     () => (holdings ?? []).reduce((sum, h) => sum + h.qty * h.avgPricePaise, 0),
     [holdings],
   );
+  const netWorth = accountsTotal + holdingsLtpValue;
 
-  const loading = txnsLoading;
+  const recentTxns = useMemo(
+    () =>
+      [...(txns ?? [])]
+        .sort((a, b) => b.dateISO.localeCompare(a.dateISO) || b.id.localeCompare(a.id))
+        .slice(0, 5),
+    [txns],
+  );
+
+  const watchPreview = useMemo(
+    () =>
+      (watchEntries ?? []).slice(0, 3).map((e) => {
+        const stock = getStock(e.symbol);
+        return {
+          symbol: e.symbol,
+          name: stock?.name ?? e.symbol,
+          pricePaise: getLTP(e.symbol),
+          changePct: dayChange(genHistory(e.symbol, 2)).changePct,
+          alerted: e.alerts.length > 0,
+        };
+      }),
+    [watchEntries],
+  );
+
+  const hasTxns = (txns?.length ?? 0) > 0;
+  const statsLoading = txnsLoading || accountsLoading || holdingsLoading;
+  const lastSpark = stats.spark[stats.spark.length - 1];
+
+  const statBandStats: StatBandStat[] = [
+    {
+      label: "Net worth",
+      tone: netWorth < 0 ? "loss" : "neutral",
+      value: statsLoading ? (
+        <Skeleton className="h-7 w-24 rounded-lg" />
+      ) : accountsError || holdingsError ? (
+        <span className="text-base text-muted-foreground">—</span>
+      ) : (
+        <CountUp value={netWorth} />
+      ),
+      sub:
+        accountsError || holdingsError ? (
+          <button
+            type="button"
+            onClick={() => {
+              if (accountsError) void refetchAccounts();
+              if (holdingsError) void refetchHoldings();
+            }}
+            className="font-bold text-primary hover:underline"
+          >
+            Couldn&apos;t load · Retry
+          </button>
+        ) : (
+          "Accounts + investments"
+        ),
+    },
+    {
+      label: `${monthLabel(month)} P&L`,
+      tone: stats.pnl >= 0 ? "gain" : "loss",
+      value: txnsLoading ? (
+        <Skeleton className="h-7 w-24 rounded-lg" />
+      ) : (
+        <NumberDisplay paise={stats.pnl} signed />
+      ),
+      sub: "Income minus expenses",
+    },
+    {
+      label: "Invested value",
+      value: holdingsLoading ? (
+        <Skeleton className="h-7 w-24 rounded-lg" />
+      ) : holdingsError ? (
+        <span className="text-base text-muted-foreground">—</span>
+      ) : (
+        <NumberDisplay paise={investedPaise} />
+      ),
+      sub: holdingsError ? (
+        <button
+          type="button"
+          onClick={() => void refetchHoldings()}
+          className="font-bold text-primary hover:underline"
+        >
+          Couldn&apos;t load · Retry
+        </button>
+      ) : (
+        `${holdings?.length ?? 0} holding${(holdings?.length ?? 0) === 1 ? "" : "s"}`
+      ),
+    },
+  ];
+
+  // A failed transactions query breaks the whole dashboard — full-page error.
+  if (txnsError) {
+    return (
+      <div className="min-h-screen bg-background text-foreground">
+        <main className="mx-auto max-w-dashboard px-4 pb-16 pt-10 sm:px-6 lg:px-8">
+          <ErrorState
+            title="Couldn't load your dashboard"
+            body="Your transactions failed to load. Check your connection and try again."
+            onRetry={() => void refetchTxns()}
+          />
+        </main>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-background text-foreground">
-      <main>
-        {/* ── Hero: balance + month selector ─────────────────────────── */}
-        <section className="border-b border-border bg-surface-soft">
-          <div className="mx-auto grid max-w-dashboard gap-8 px-5 py-10 lg:grid-cols-[1.15fr_.85fr] lg:px-8 lg:py-12">
-            <div className="self-center">
-              <div className="mb-3 flex items-center gap-2 text-sm font-bold text-primary">
-                <Sparkles className="size-4" /> YOUR FINANCIAL OVERVIEW
-              </div>
-              <h1 className="max-w-2xl text-3xl font-black leading-tight text-primary-dark sm:text-4xl">
-                Your money, in one clear view.
-              </h1>
-              <p className="mt-4 max-w-xl text-base leading-7 text-muted-foreground">
-                Track spending, understand your investments, and make confident decisions with AI
-                that always explains why.
-              </p>
-              <div className="mt-7 flex flex-wrap gap-3">
-                <Button size="lg" asChild>
-                  <Link to="/expenses">
-                    <Plus className="size-4" /> Add Expense
-                  </Link>
-                </Button>
-                <Button variant="outline" size="lg" asChild>
-                  <Link to="/insights">
-                    View AI Insights <ArrowRight className="size-4" />
-                  </Link>
-                </Button>
-              </div>
-            </div>
-
-            <div className="rounded-lg border border-border bg-card p-6 shadow-card sm:p-7">
-              <div className="flex items-start justify-between gap-3">
-                <div className="min-w-0">
-                  <p className="text-xs font-medium text-muted-foreground">TOTAL BALANCE</p>
-                  {loading ? (
-                    <ChartSkeleton className="mt-2 h-9 w-48" />
-                  ) : (
-                    <CountUp
-                      value={stats.balance}
-                      className="mt-2 block text-3xl font-black text-primary-dark"
-                    />
-                  )}
-                  <p className="mt-1 text-xs text-muted-foreground">
-                    Lifetime income minus lifetime expenses
-                  </p>
-                </div>
-                <div
-                  className="flex items-center gap-1 rounded-md border border-border bg-background px-1 py-0.5"
-                  aria-label="Select month"
-                >
-                  <button
-                    type="button"
-                    onClick={() => setMonth(shiftMonth(month, -1))}
-                    className="grid size-7 place-items-center rounded-sm text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
-                    aria-label="Previous month"
-                  >
-                    <ChevronLeft className="size-4" />
-                  </button>
-                  <span className="min-w-20 px-1 text-center text-sm font-bold text-foreground">
-                    {monthLabel(month)}
-                  </span>
-                  <button
-                    type="button"
-                    onClick={() => setMonth(shiftMonth(month, 1))}
-                    disabled={!canGoForward}
-                    className="grid size-7 place-items-center rounded-sm text-muted-foreground transition-colors hover:bg-muted hover:text-foreground disabled:cursor-not-allowed disabled:opacity-30"
-                    aria-label="Next month"
-                  >
-                    <ChevronRight className="size-4" />
-                  </button>
-                </div>
-              </div>
-
-              <div className="mt-4 flex items-center gap-2">
-                {loading ? (
-                  <ChartSkeleton className="h-5 w-40" />
-                ) : (
-                  <>
-                    <span
-                      className={cn(
-                        "flex items-center gap-1 font-bold",
-                        stats.pnl >= 0 ? "text-success" : "text-destructive",
-                      )}
-                    >
-                      {stats.pnl >= 0 ? (
-                        <TrendingUp className="size-4" />
-                      ) : (
-                        <TrendingDown className="size-4" />
-                      )}
-                      <CountUp value={stats.pnl} format={signFormat} duration={700} />
-                    </span>
-                    <span className="text-sm text-muted-foreground">
-                      {monthLabel(month)} P&amp;L
-                    </span>
-                  </>
-                )}
-              </div>
-
-              <div className="mt-5 border-t border-border pt-5">
-                <div className="mb-2 flex items-center justify-between">
-                  <p className="text-xs font-medium text-muted-foreground">
-                    NET WORTH · LAST 6 MONTHS
-                  </p>
-                  {!loading && stats.spark.length > 0 && (
-                    <span
-                      className={cn(
-                        "text-sm font-bold",
-                        stats.spark[stats.spark.length - 1].net >= 0
-                          ? "text-success"
-                          : "text-destructive",
-                      )}
-                    >
-                      {formatINRShort(stats.spark[stats.spark.length - 1].net)}
-                    </span>
-                  )}
-                </div>
-                <NetWorthSpark data={stats.spark} ready={chartsReady} loading={loading} />
-              </div>
-            </div>
+      <main className="mx-auto max-w-dashboard px-4 pb-16 pt-6 sm:px-6 lg:px-8">
+        {/* ── Header: greeting + month switcher ──────────────────────── */}
+        <header className="flex flex-wrap items-end justify-between gap-3">
+          <div>
+            <h1 className="text-2xl font-black text-primary-dark sm:text-3xl">
+              {greeting}
+              {firstName ? `, ${firstName}` : ""}
+            </h1>
+            <p className="mt-1 text-sm text-muted-foreground">
+              Here&apos;s your money at a glance.
+            </p>
           </div>
-        </section>
+          <div
+            className="flex items-center gap-1 rounded-full border border-border bg-card px-1 py-0.5 shadow-card"
+            aria-label="Select month"
+          >
+            <button
+              type="button"
+              onClick={() => setMonth(shiftMonth(month, -1))}
+              className="grid size-8 place-items-center rounded-full text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+              aria-label="Previous month"
+            >
+              <ChevronLeft className="size-4" />
+            </button>
+            <span className="min-w-24 px-1 text-center text-sm font-bold text-foreground">
+              {monthLabel(month)}
+            </span>
+            <button
+              type="button"
+              onClick={() => setMonth(shiftMonth(month, 1))}
+              disabled={!canGoForward}
+              className="grid size-8 place-items-center rounded-full text-muted-foreground transition-colors hover:bg-muted hover:text-foreground disabled:cursor-not-allowed disabled:opacity-30"
+              aria-label="Next month"
+            >
+              <ChevronRight className="size-4" />
+            </button>
+          </div>
+        </header>
 
-        {/* ── Analytics charts ───────────────────────────────────────── */}
-        <section className="mx-auto max-w-dashboard px-5 py-10 lg:px-8">
-          <div className="mb-6 flex items-end justify-between">
-            <div>
-              <p className="text-sm font-bold text-primary">ANALYTICS</p>
-              <h2 className="mt-1 text-2xl font-bold text-primary-dark">Where your money went</h2>
-            </div>
+        {/* ── Stat band ──────────────────────────────────────────────── */}
+        <StatBand stats={statBandStats} className="mt-5" />
+
+        {/* ── Market ticker (simulated prices) ───────────────────────── */}
+        <TickerStrip className="mt-4" />
+
+        {/* ── Quick actions ──────────────────────────────────────────── */}
+        <nav aria-label="Quick actions" className="mt-5 flex flex-wrap gap-2.5">
+          {quickActions.map(({ label, icon: Icon, to }) => (
+            <Link
+              key={label}
+              to={to}
+              className="inline-flex items-center gap-2 rounded-full border border-border bg-card px-4 py-2.5 text-sm font-bold text-foreground shadow-card transition-all hover:-translate-y-0.5 hover:border-primary/40 hover:text-primary active:translate-y-0 active:scale-[0.98]"
+            >
+              <Icon className="size-4 text-primary" aria-hidden />
+              {label}
+            </Link>
+          ))}
+        </nav>
+
+        {/* ── Spending insight line ──────────────────────────────────── */}
+        {!txnsLoading && stats.mover && (
+          <div className="mt-5 flex items-start gap-3 rounded-2xl border border-border bg-card p-4 shadow-card">
+            <span className="grid size-9 shrink-0 place-items-center rounded-full bg-tint">
+              <Sparkles className="size-4 text-primary" aria-hidden />
+            </span>
+            <p className="text-sm leading-6 text-muted-foreground">
+              <span className="font-bold text-foreground">{stats.mover.label}</span> rose{" "}
+              <NumberDisplay paise={stats.mover.delta} signed className="font-bold text-loss" />
+              {stats.mover.pct !== null ? ` (${stats.mover.pct}% more)` : ""} vs{" "}
+              {monthLabel(prevKey)} — your biggest jump this month. That&apos;s the first place to
+              look if you want to save.
+            </p>
+          </div>
+        )}
+
+        {/* ── Charts ─────────────────────────────────────────────────── */}
+        <section aria-label="Analytics" className="mt-8">
+          <div className="mb-4 flex items-end justify-between">
+            <h2 className="text-lg font-black text-primary-dark">Where your money went</h2>
             <span className="text-sm font-bold text-muted-foreground">{monthLabel(month)}</span>
           </div>
 
-          {txnsError ? (
-            <div className="rounded-lg border border-destructive/30 bg-destructive/5 p-6 text-sm text-destructive">
-              Couldn&apos;t load your transactions. Please try again.
+          {txnsLoading ? (
+            <div className="grid gap-4 lg:grid-cols-12">
+              <Skeleton className="h-72 rounded-2xl lg:col-span-7" />
+              <Skeleton className="h-72 rounded-2xl lg:col-span-5" />
             </div>
+          ) : !hasTxns ? (
+            <EmptyState
+              title="No transactions yet"
+              body="Add your first expense or income and this dashboard will come alive with your cash flow, spending breakdown, and net-worth trend."
+              actionLabel="Add your first expense"
+              onAction={() => void navigate({ to: "/expenses" })}
+            />
           ) : (
-            <div className="grid gap-5 lg:grid-cols-12">
-              <article className="rounded-lg border border-border bg-card p-6 shadow-card lg:col-span-5">
-                <h3 className="text-base font-bold text-primary-dark">Spend by category</h3>
-                <p className="mt-0.5 text-xs text-muted-foreground">{monthLabel(month)}</p>
-                <div className="mt-4">
-                  <SpendDonut
-                    data={stats.donut}
-                    totalPaise={stats.monthExpense}
+            <div className="grid gap-4 lg:grid-cols-12">
+              <ChartCard
+                title="Cash flow"
+                className="lg:col-span-7"
+                ranges={["1M", "1Y"]}
+                defaultRange="1Y"
+                seriesForRange={() => []}
+              >
+                {({ range }) => (
+                  <MonthBars
+                    data={range === "1M" ? stats.bars.slice(-3) : stats.bars}
                     ready={chartsReady}
-                    loading={loading}
+                    loading={false}
                   />
-                </div>
-              </article>
-              <article className="rounded-lg border border-border bg-card p-6 shadow-card lg:col-span-7">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <h3 className="text-base font-bold text-primary-dark">Income vs expenses</h3>
-                    <p className="mt-0.5 text-xs text-muted-foreground">
-                      Last 6 months, ending {monthLabel(month)}
-                    </p>
-                  </div>
-                  <div className="flex items-center gap-4 text-xs font-medium">
-                    <span className="flex items-center gap-1.5 text-muted-foreground">
-                      <span className="size-2.5 rounded-sm bg-[#16A34A]" /> Income
-                    </span>
-                    <span className="flex items-center gap-1.5 text-muted-foreground">
-                      <span className="size-2.5 rounded-sm bg-[#EF4444]" /> Expense
-                    </span>
-                  </div>
-                </div>
-                <div className="mt-4">
-                  <MonthBars data={stats.bars} ready={chartsReady} loading={loading} />
-                </div>
-              </article>
+                )}
+              </ChartCard>
+
+              <SectionCard
+                title="Spend by category"
+                sub={monthLabel(month)}
+                className="lg:col-span-5"
+              >
+                <SpendDonut
+                  data={stats.donut}
+                  totalPaise={stats.monthExpense}
+                  ready={chartsReady}
+                  loading={false}
+                />
+              </SectionCard>
+
+              <SectionCard
+                title="Net worth trend"
+                sub="Cumulative income minus expenses"
+                className="lg:col-span-12"
+                action={
+                  lastSpark && (
+                    <NumberDisplay
+                      paise={lastSpark.net}
+                      className={cn(
+                        "text-sm font-bold",
+                        lastSpark.net >= 0 ? "text-gain" : "text-loss",
+                      )}
+                    />
+                  )
+                }
+              >
+                <NetWorthSpark data={stats.spark} ready={chartsReady} loading={false} />
+              </SectionCard>
             </div>
           )}
         </section>
 
-        {/* ── Quick actions ──────────────────────────────────────────── */}
-        <section className="mx-auto max-w-dashboard px-5 py-10 lg:px-8">
-          <div className="flex items-end justify-between">
-            <div>
-              <p className="text-sm font-bold text-primary">QUICK ACTIONS</p>
-              <h2 className="mt-1 text-2xl font-bold text-primary-dark">
-                What would you like to do?
-              </h2>
-            </div>
-          </div>
-          <div className="mt-7 grid grid-cols-3 gap-3 sm:grid-cols-6 sm:gap-4">
-            {quickActions.map(({ label, icon: Icon, to }) => (
+        {/* ── Recent transactions + watchlist ────────────────────────── */}
+        <div className="mt-8 grid gap-4 lg:grid-cols-2">
+          <SectionCard
+            title="Recent transactions"
+            action={
               <Link
-                key={label}
-                to={to}
-                className="group flex flex-col items-center gap-2.5 rounded-md p-2 text-center transition-transform hover:-translate-y-0.5 active:scale-95"
+                to="/expenses"
+                className="inline-flex items-center gap-1 text-sm font-bold text-primary hover:underline"
               >
-                <span className="grid size-15 place-items-center rounded-md bg-tint shadow-tile transition-colors group-hover:bg-primary">
-                  <Icon className="size-6 text-primary transition-colors group-hover:text-primary-foreground" />
-                </span>
-                <span className="text-xs font-medium text-foreground">{label}</span>
+                View all <ArrowRight className="size-4" aria-hidden />
               </Link>
-            ))}
-          </div>
-        </section>
+            }
+          >
+            {txnsLoading ? (
+              <ul className="space-y-1" aria-label="Loading transactions">
+                {Array.from({ length: 5 }).map((_, i) => (
+                  <li key={i} className="flex items-center gap-3 px-3 py-3">
+                    <Skeleton className="size-11 shrink-0 rounded-full" />
+                    <div className="flex-1 space-y-1.5">
+                      <Skeleton className="h-4 w-2/3 rounded-lg" />
+                      <Skeleton className="h-3 w-1/3 rounded-lg" />
+                    </div>
+                    <Skeleton className="h-4 w-20 rounded-lg" />
+                  </li>
+                ))}
+              </ul>
+            ) : recentTxns.length === 0 ? (
+              <EmptyState
+                title="No transactions yet"
+                body="Your latest activity will show up here."
+                actionLabel="Add expense"
+                onAction={() => void navigate({ to: "/expenses" })}
+              />
+            ) : (
+              <ul className="divide-y divide-border/60">
+                {recentTxns.map((t) => {
+                  const cat = categoryById(t.category);
+                  return (
+                    <li key={t.id}>
+                      <TxnRow
+                        name={t.note || cat?.label || t.category}
+                        secondary={`${dateLabel(t.dateISO)}${t.payMode ? ` · ${t.payMode}` : ""}`}
+                        amountPaise={t.type === "income" ? t.amountPaise : -t.amountPaise}
+                        onClick={() => void navigate({ to: "/expenses" })}
+                      />
+                    </li>
+                  );
+                })}
+              </ul>
+            )}
+          </SectionCard>
 
-        {/* ── AI insight + deep-link cards ───────────────────────────── */}
-        <section className="border-y border-border bg-surface-soft py-10">
-          <div className="mx-auto max-w-dashboard px-5 lg:px-8">
-            <div className="grid gap-5 lg:grid-cols-[1fr_320px]">
-              <div className="grid gap-5 sm:grid-cols-3">
-                <DeepLinkCard
-                  icon={<Wallet className="size-6" />}
-                  title="Expenses"
-                  to="/expenses"
-                  stat={loading ? "…" : formatINRShort(stats.monthExpense)}
-                  statLabel={`Spent in ${monthLabel(month)}`}
-                  sub={
-                    loading
-                      ? "…"
-                      : stats.topCategory
-                        ? `Top: ${stats.topCategory.label} · ${formatINRShort(stats.topCategory.value)}`
-                        : "No spending recorded yet"
-                  }
-                />
-                <DeepLinkCard
-                  icon={<BriefcaseBusiness className="size-6" />}
-                  title="Portfolio"
-                  to="/portfolio"
-                  stat={holdingsLoading ? "…" : formatINRShort(investedPaise)}
-                  statLabel="Invested value"
-                  sub={
-                    holdingsLoading
-                      ? "…"
-                      : `${holdings?.length ?? 0} holding${(holdings?.length ?? 0) === 1 ? "" : "s"} at avg. buy price`
-                  }
-                />
-                <DeepLinkCard
-                  icon={<Sparkles className="size-6" />}
-                  title="Insights"
-                  to="/insights"
-                  stat={loading ? "…" : stats.mover ? `+${formatINRShort(stats.mover.delta)}` : "—"}
-                  statLabel="Biggest riser"
-                  sub={
-                    loading
-                      ? "…"
-                      : stats.mover
-                        ? `${stats.mover.label} vs ${monthLabel(prevKey)}`
-                        : "No category rose this month"
-                  }
-                />
-              </div>
+          <SectionCard
+            title="Watchlist"
+            action={
+              <Link
+                to="/watchlist"
+                className="inline-flex items-center gap-1 text-sm font-bold text-primary hover:underline"
+              >
+                View all <ArrowRight className="size-4" aria-hidden />
+              </Link>
+            }
+          >
+            {watchLoading ? (
+              <ul className="space-y-1" aria-label="Loading watchlist">
+                {Array.from({ length: 3 }).map((_, i) => (
+                  <li key={i} className="flex items-center gap-3 px-3 py-3">
+                    <div className="flex-1 space-y-1.5">
+                      <Skeleton className="h-4 w-1/3 rounded-lg" />
+                      <Skeleton className="h-3 w-1/2 rounded-lg" />
+                    </div>
+                    <Skeleton className="h-4 w-20 rounded-lg" />
+                  </li>
+                ))}
+              </ul>
+            ) : watchError ? (
+              <ErrorState
+                title="Couldn't load your watchlist"
+                body="Check your connection and try again."
+                onRetry={() => void refetchWatch()}
+              />
+            ) : watchPreview.length === 0 ? (
+              <EmptyState
+                title="Your watchlist is empty"
+                body="Track stocks you care about and they'll appear here."
+                actionLabel="Browse stocks"
+                onAction={() => void navigate({ to: "/watchlist" })}
+              />
+            ) : (
+              <ul className="divide-y divide-border/60">
+                {watchPreview.map((w) => (
+                  <li key={w.symbol}>
+                    <MarketRow
+                      symbol={w.symbol}
+                      name={w.name}
+                      pricePaise={w.pricePaise}
+                      changePct={w.changePct}
+                      starred
+                      alerted={w.alerted}
+                      onToggleStar={() => toggleWatch(w.symbol)}
+                      // Alert management (target prices) lives on the watchlist page.
+                      onToggleAlert={() => void navigate({ to: "/watchlist" })}
+                      onClick={() => void navigate({ to: "/watchlist" })}
+                    />
+                  </li>
+                ))}
+              </ul>
+            )}
+          </SectionCard>
+        </div>
 
-              <aside className="rounded-lg border border-border bg-card p-6 shadow-card">
-                <div className="flex items-center gap-2 text-sm font-bold text-primary-dark">
-                  <Sparkles className="size-4 text-primary" /> FinVerse AI says
-                </div>
-                {loading ? (
-                  <ChartSkeleton className="mt-3 h-16" />
-                ) : stats.mover ? (
-                  <p className="mt-3 text-sm leading-6 text-muted-foreground">
-                    <span className="font-bold text-foreground">{stats.mover.label}</span> rose{" "}
-                    <span className="font-bold text-destructive">
-                      +{formatINR(stats.mover.delta)}
-                    </span>
-                    {stats.mover.pct !== null ? ` (${stats.mover.pct}% more)` : ""} vs{" "}
-                    {monthLabel(prevKey)} — your biggest jump this month. That&apos;s the first
-                    place to look if you want to save.
-                  </p>
-                ) : (
-                  <p className="mt-3 text-sm leading-6 text-muted-foreground">
-                    No spending category rose this month — your habits are holding steady. See the
-                    full breakdown of what moved and why.
-                  </p>
-                )}
-                <Button size="sm" className="mt-4" asChild>
-                  <Link to="/insights">
-                    View AI Insights <ArrowRight className="size-4" />
-                  </Link>
-                </Button>
-              </aside>
-            </div>
-          </div>
-        </section>
-
-        {/* ── Trust row ──────────────────────────────────────────────── */}
-        <section className="border-b border-border bg-tint/60">
-          <div className="mx-auto grid max-w-dashboard gap-7 px-5 py-8 sm:grid-cols-3 lg:px-8">
-            <Trust
-              icon={<ShieldCheck />}
-              title="Bank-grade security"
-              detail="Encrypted and protected"
+        {/* ── Deep-link cards ────────────────────────────────────────── */}
+        <section aria-label="Explore" className="mt-8">
+          <div className="grid gap-4 sm:grid-cols-3">
+            <DeepLinkCard
+              icon={<Wallet className="size-6" aria-hidden />}
+              title="Expenses"
+              to="/expenses"
+              loading={txnsLoading}
+              stat={formatINRShort(stats.monthExpense)}
+              statLabel={`Spent in ${monthLabel(month)}`}
+              sub={
+                stats.topCategory
+                  ? `Top: ${stats.topCategory.label} · ${formatINRShort(stats.topCategory.value)}`
+                  : "No spending recorded yet"
+              }
             />
-            <Trust icon={<Lightbulb />} title="AI, explained" detail="No black-box scores" />
-            <Trust icon={<Headphones />} title="24×7 help" detail="Support when you need it" />
+            <DeepLinkCard
+              icon={<BriefcaseBusiness className="size-6" aria-hidden />}
+              title="Portfolio"
+              to="/portfolio"
+              loading={holdingsLoading}
+              error={holdingsError}
+              onRetry={() => void refetchHoldings()}
+              stat={formatINRShort(investedPaise)}
+              statLabel="Invested value"
+              sub={`${holdings?.length ?? 0} holding${(holdings?.length ?? 0) === 1 ? "" : "s"} at avg. buy price`}
+            />
+            <DeepLinkCard
+              icon={<Sparkles className="size-6" aria-hidden />}
+              title="Insights"
+              to="/insights"
+              loading={txnsLoading}
+              stat={stats.mover ? `+${formatINRShort(stats.mover.delta)}` : "—"}
+              statLabel="Biggest riser"
+              sub={
+                stats.mover
+                  ? `${stats.mover.label} vs ${monthLabel(prevKey)}`
+                  : "No category rose this month"
+              }
+            />
           </div>
         </section>
       </main>
-
-      <footer className="bg-background">
-        <div className="mx-auto max-w-dashboard px-5 py-10 lg:px-8">
-          <div className="grid gap-8 sm:grid-cols-2 lg:grid-cols-[1.4fr_1fr_1fr_1fr]">
-            <div>
-              <Logo />
-              <p className="mt-4 max-w-xs text-sm leading-6 text-muted-foreground">
-                Decision support for better money habits. FinVerse does not provide financial
-                advice.
-              </p>
-            </div>
-            <FooterColumn
-              heading="Product"
-              links={[
-                { label: "Dashboard", to: "/" },
-                { label: "Portfolio", to: "/portfolio" },
-                { label: "AI Insights", to: "/insights" },
-              ]}
-            />
-            <FooterColumn
-              heading="Company"
-              links={[{ label: "About" }, { label: "Security" }, { label: "Contact" }]}
-            />
-            <FooterColumn
-              heading="Resources"
-              links={[{ label: "Help Centre" }, { label: "Privacy" }, { label: "Terms" }]}
-            />
-          </div>
-          <div className="mt-10 flex flex-col gap-3 border-t border-border pt-5 text-xs text-faint sm:flex-row sm:items-center sm:justify-between">
-            <span>© 2026 FinVerse AI. All rights reserved.</span>
-            <span>Data encrypted · Explainable AI · Decision support only</span>
-          </div>
-        </div>
-      </footer>
     </div>
+  );
+}
+
+/** Consistent card chrome (mirrors ChartCard's radius/border/shadow/heading). */
+function SectionCard({
+  title,
+  sub,
+  action,
+  className,
+  children,
+}: {
+  title: string;
+  sub?: string;
+  action?: ReactNode;
+  className?: string;
+  children: ReactNode;
+}) {
+  return (
+    <section className={cn("rounded-2xl border border-border bg-card p-5 shadow-card", className)}>
+      <div className="mb-3 flex items-center justify-between gap-3">
+        <div>
+          <h2 className="text-base font-bold text-primary-dark">{title}</h2>
+          {sub && <p className="mt-0.5 text-xs text-muted-foreground">{sub}</p>}
+        </div>
+        {action}
+      </div>
+      {children}
+    </section>
   );
 }
 
@@ -564,6 +699,9 @@ function DeepLinkCard({
   icon,
   title,
   to,
+  loading,
+  error,
+  onRetry,
   stat,
   statLabel,
   sub,
@@ -571,6 +709,9 @@ function DeepLinkCard({
   icon: ReactNode;
   title: string;
   to: string;
+  loading: boolean;
+  error?: boolean;
+  onRetry?: () => void;
   stat: string;
   statLabel: string;
   sub: string;
@@ -578,63 +719,49 @@ function DeepLinkCard({
   return (
     <Link
       to={to}
-      className="group flex flex-col rounded-lg border border-border bg-card p-6 shadow-card transition-all duration-200 hover:-translate-y-0.5 hover:shadow-modal active:translate-y-0 active:scale-[0.99]"
+      className="group flex flex-col rounded-2xl border border-border bg-card p-5 shadow-card transition-all duration-200 hover:-translate-y-0.5 hover:shadow-modal active:translate-y-0 active:scale-[0.99]"
     >
-      <div className="grid size-12 shrink-0 place-items-center rounded-md bg-tint text-primary transition-colors group-hover:bg-primary group-hover:text-primary-foreground">
+      <div className="grid size-12 shrink-0 place-items-center rounded-2xl bg-tint text-primary transition-colors group-hover:bg-primary group-hover:text-primary-foreground">
         {icon}
       </div>
       <p className="mt-4 text-xs font-bold uppercase tracking-wide text-muted-foreground">
         {title}
       </p>
-      <p className="mt-1 text-2xl font-black text-primary-dark">{stat}</p>
-      <p className="text-xs text-muted-foreground">{statLabel}</p>
-      <p className="mt-3 min-h-8 text-xs leading-5 text-muted-foreground">{sub}</p>
+      {loading ? (
+        <>
+          <Skeleton className="mt-2 h-8 w-28 rounded-lg" aria-label={`Loading ${title}`} />
+          <Skeleton className="mt-2 h-3 w-20 rounded-lg" />
+          <Skeleton className="mt-3 h-3 w-36 rounded-lg" />
+        </>
+      ) : error ? (
+        <>
+          <p className="mt-1 text-2xl font-black text-muted-foreground">—</p>
+          <p className="text-xs text-muted-foreground">{statLabel}</p>
+          <button
+            type="button"
+            onClick={(e) => {
+              e.preventDefault();
+              onRetry?.();
+            }}
+            className="mt-3 w-fit text-xs font-bold text-primary hover:underline"
+          >
+            Couldn&apos;t load · Retry
+          </button>
+        </>
+      ) : (
+        <>
+          <p className="mt-1 text-2xl font-black tabular-nums text-primary-dark">{stat}</p>
+          <p className="text-xs text-muted-foreground">{statLabel}</p>
+          <p className="mt-3 min-h-8 text-xs leading-5 text-muted-foreground">{sub}</p>
+        </>
+      )}
       <span className="mt-3 flex items-center gap-1 text-sm font-bold text-primary group-hover:text-primary-hover">
-        Open <ArrowRight className="size-4 transition-transform group-hover:translate-x-0.5" />
+        Open{" "}
+        <ArrowRight
+          className="size-4 transition-transform group-hover:translate-x-0.5"
+          aria-hidden
+        />
       </span>
     </Link>
-  );
-}
-
-function FooterColumn({
-  heading,
-  links,
-}: {
-  heading: string;
-  links: { label: string; to?: string }[];
-}) {
-  return (
-    <div>
-      <h3 className="text-xs font-bold text-foreground">{heading}</h3>
-      <div className="mt-3 grid gap-2">
-        {links.map((link) =>
-          link.to ? (
-            <Link
-              key={link.label}
-              to={link.to}
-              className="w-fit text-left text-xs text-muted-foreground transition-colors hover:text-primary"
-            >
-              {link.label}
-            </Link>
-          ) : (
-            <span key={link.label} className="w-fit text-left text-xs text-muted-foreground">
-              {link.label}
-            </span>
-          ),
-        )}
-      </div>
-    </div>
-  );
-}
-
-function Trust({ icon, title, detail }: { icon: ReactNode; title: string; detail: string }) {
-  return (
-    <div className="flex items-center gap-3 sm:justify-center">
-      <span className="text-primary [&>svg]:size-6">{icon}</span>
-      <div>
-        <p className="text-sm font-bold text-primary-dark">{title}</p>
-        <p className="text-xs text-muted-foreground">{detail}</p>
-      </div>
-    </div>
   );
 }
