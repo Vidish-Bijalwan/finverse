@@ -8,6 +8,9 @@
 
 export type PortfolioRange = "1D" | "1W" | "1M" | "1Y" | "ALL";
 
+/** Re-exported from lib/finance/investments (single source of truth). */
+export { parseOrderNote } from "@/lib/finance/investments";
+
 export const PORTFOLIO_RANGES: readonly PortfolioRange[] = ["1D", "1W", "1M", "1Y", "ALL"];
 
 /** Trading-day point counts for the daily ranges ("1D" is intraday). */
@@ -185,27 +188,6 @@ export function combineSeries(
   return out;
 }
 
-/**
- * Parse a simulated-brokerage ledger note of the form
- * "BUY RELIANCE × 10 @ ₹1,580" (see usePlaceOrder in lib/finance/orders.ts).
- * Returns null for notes that aren't brokerage orders. The execution price is
- * recovered from amount ÷ qty by the caller — formatINR rounds notes to
- * whole rupees, so the note text alone can't carry exact paise.
- */
-export function parseOrderNote(note: string): {
-  side: "buy" | "sell";
-  symbol: string;
-  qty: number;
-} | null {
-  const m = /^(BUY|SELL)\s+([A-Z0-9.]+)\s+×\s+(\d+)\s+@/.exec(note.trim());
-  if (!m) return null;
-  return {
-    side: m[1] === "BUY" ? "buy" : "sell",
-    symbol: m[2]!,
-    qty: Number.parseInt(m[3]!, 10),
-  };
-}
-
 /** "2026-09-12" -> "12 Sep"; passes through anything that doesn't look like
  *  a YYYY-MM-DD date. */
 export function shortDateLabel(dateISO: string): string {
@@ -233,4 +215,66 @@ export function longDateLabel(dateISO: string): string {
   const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(dateISO);
   if (!m) return dateISO;
   return `${shortDateLabel(dateISO)} ${m[1]}`;
+}
+
+export interface SymbolHistoryInput {
+  symbol: string;
+  /** Whole units held. */
+  qty: number;
+  /** Daily closes, ascending by date ("YYYY-MM-DD"), integer paise. */
+  closes: { date: string; closePaise: number }[];
+  /**
+   * First purchase date ("YYYY-MM-DD"); undefined = unknown. A symbol
+   * contributes qty × close only on/after this date — never fabricate a
+   * pre-purchase past.
+   */
+  firstBuyDateISO?: string;
+}
+
+export interface PortfolioValuePoint {
+  /** Calendar date "YYYY-MM-DD". */
+  date: string;
+  /** Portfolio value, integer paise. */
+  valuePaise: number;
+}
+
+/**
+ * Portfolio value per trading day from per-symbol close series.
+ *
+ * Each symbol contributes qty × close only on/after its firstBuyDateISO
+ * (unknown start = whole series). Leading dates where nothing was held yet
+ * are DROPPED — the series starts at the first purchase, so a holding bought
+ * today never renders a fabricated "down from ₹X" history. Dates are
+ * compared as YYYY-MM-DD strings (lexicographic = chronological).
+ */
+export function portfolioValueSeries(items: readonly SymbolHistoryInput[]): PortfolioValuePoint[] {
+  if (items.length === 0) return [];
+  const closeBySymbol = new Map<string, Map<string, number>>();
+  const dateSet = new Set<string>();
+  for (const it of items) {
+    const m = new Map<string, number>();
+    for (const c of it.closes) {
+      m.set(c.date, c.closePaise);
+      dateSet.add(c.date);
+    }
+    closeBySymbol.set(it.symbol, m);
+  }
+  const dates = [...dateSet].sort();
+  const out: PortfolioValuePoint[] = [];
+  for (const date of dates) {
+    let value = 0;
+    let held = false;
+    for (const it of items) {
+      if (it.qty <= 0) continue;
+      if (it.firstBuyDateISO !== undefined && date < it.firstBuyDateISO) continue;
+      const close = closeBySymbol.get(it.symbol)?.get(date);
+      if (close === undefined) continue;
+      held = true;
+      value += Math.round(it.qty * close);
+    }
+    // No fabricated pre-purchase history: skip leading dates with no holding.
+    if (!held && out.length === 0) continue;
+    out.push({ date, valuePaise: value });
+  }
+  return out;
 }

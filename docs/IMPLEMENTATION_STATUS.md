@@ -1,8 +1,17 @@
 # FinVerse Revamp — Implementation Status
 
-Branch: `feature/fintech-overhaul` (Phases 1–4) · Base: `main@3841647d`
+Branch: `feature/fintech-overhaul` (Phases 1–5) · Base: `main@3841647d`
 Migration handoff: `supabase/migrations/0002_revamp.sql` → user runs in Supabase dashboard before deploy.
 Env handoff: `RAZORPAY_KEY_ID`, `RAZORPAY_KEY_SECRET` (test keys, server-only), `SUPABASE_SERVICE_ROLE_KEY` (server-only) → Vercel.
+
+## Phase 5 — microinteractions, mobile 390px, responsive QA (DONE, awaiting parent screenshot review)
+
+- **Microinteractions (§18)**: new `src/lib/motion.ts` — canonical motion contract (`MOTION`: micro 120 / standard 220 / sheet 280 / countUp 800ms, `MOTION_EASE_OUT`, `motionIf`, `useReducedMotion`) + `motion.test.ts` (4 tests pinning the 100–180 / 160–240 / 200–320ms bands). Success-check keyframes → design-token `@utility` `fv-check-pop`/`fv-check-draw` in `styles.css` (inline `<style>` removed from `ReceiptView.tsx`); reduced-motion final-state rule added (the global rule only clamped duration, not the 250ms draw delay). Bottom sheet open 500→280ms; hero net worth counts up on mount (`PrivateMoney` `animate` pass-through); watch toggle toasts on mutation result; `pressable` on nav pills, bottom tabs (`min-h-[56px]`), bell, theme toggle, profile trigger. Everything gated on `prefers-reduced-motion`; no glow/pulse/bounce.
+- **Mobile 390px (§19)**: `AppHeader` — mobile bar (`md:hidden`) = avatar + compact greeting + search + bell + theme toggle; desktop bar unchanged. Dashboard greeting hidden on mobile, month switcher `ml-auto`. Touch targets ≥44px (header `size-11`, month chevrons `size-11 md:size-8`, chart range pills + expense chips `min-h-[44px]`). **New mobile-only "Pay again" people row** on the dashboard (`md:hidden`, between QuickActions and MarketStrip) — reuses `extractPeople` + `PeopleStrip`, deep-links `/payments?flow=upi&name=…`; skipped when empty. BottomTabBar audit: active state, safe-area padding, z-50 < sheets z-[80], mobile `main` `pb-24`; buy/sell, txn details, payment review are bottom sheets already.
+- **Responsive QA (§26)**: headless Playwright (meta-chromium, file:// LNA trampoline) — 5 viewports (390×844, 768×1024, 1366×768, 1440×900, 1920×1080) × /login + /, asserting `scrollWidth ≤ innerWidth` + no out-of-viewport elements (scrollable snap-rows excluded) + screenshots. **10/10 PASS**. One real defect fixed: `/login` was `min-h-[calc(100vh-4rem)]` on the headerless bare-chrome path → 64px white band under the dark mesh at 1366×768; now `min-h-[100dvh]`, re-screenshot verified. **Honest limitation:** no local Supabase env → auth gates on splash; authenticated pages unverifiable headless (dummy env renders the login form only). Parent's live-browser milestone loop covers them.
+- **Carry-over**: legacy investment rows guarded with `isInvestmentOrder` in `budgets.tsx`, `readiness.tsx`, `notify.ts`.
+- **Verification**: tsc 52 = baseline (0 in touched files); eslint 0 on touched files; unit 264/264 (30 files); build green. Details: `TEST_REPORT.md` Phase 5 section.
+- **DO NOT MERGE** — parent coordinator screenshot-reviews the Vercel preview before merge.
 
 ## Phase 4 — portfolio, cash flow, activity, copy + Phase 3 review fixes (DONE, awaiting parent screenshot review)
 

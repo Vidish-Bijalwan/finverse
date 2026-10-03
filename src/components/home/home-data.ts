@@ -4,6 +4,7 @@
  * no invented numbers, no fake insights.
  */
 import { categoryById } from "@/lib/finance/categories";
+import { isInvestmentOrder } from "@/lib/finance/investments";
 import type { Transaction } from "@/lib/finance/types";
 
 /** "2026-10" shifted by delta months, e.g. shiftMonthKey("2026-10", -1) -> "2026-09". */
@@ -74,6 +75,10 @@ export function buildMonthFlows(txns: Transaction[], anchorKey: string, count: n
     let expense = 0;
     for (const t of txns) {
       if (t.dateISO.slice(0, 7) !== key) continue;
+      // Investment orders are transfers (cash ↔ investments), never
+      // spending — and legacy expense/income-shaped brokerage rows must not
+      // pollute cash flow either.
+      if (isInvestmentOrder(t)) continue;
       if (t.type === "income") income += t.amountPaise;
       else if (t.type === "expense") expense += t.amountPaise;
     }
@@ -104,6 +109,7 @@ export function buildWeekFlows(txns: Transaction[], monthKey: string): FlowBar[]
   }
   for (const t of txns) {
     if (t.dateISO.slice(0, 7) !== monthKey) continue;
+    if (isInvestmentOrder(t)) continue;
     const day = Number(t.dateISO.slice(8, 10));
     const w = weeks[Math.min(Math.ceil(day / 7) - 1, weeks.length - 1)];
     if (!w) continue;
@@ -123,7 +129,8 @@ export interface CategorySpend {
 
 /**
  * Top spending categories (expenses only) for an inclusive month range,
- * largest first. `fromKey`/`toKey` are "YYYY-MM" strings.
+ * largest first. `fromKey`/`toKey` are "YYYY-MM" strings. Investment orders
+ * are excluded — a stock buy is a transfer, not spending.
  */
 export function topSpendingCategories(
   txns: Transaction[],
@@ -134,6 +141,7 @@ export function topSpendingCategories(
   const totals = new Map<string, number>();
   for (const t of txns) {
     if (t.type !== "expense") continue;
+    if (isInvestmentOrder(t)) continue;
     const key = t.dateISO.slice(0, 7);
     if (key < fromKey || key > toKey) continue;
     totals.set(t.category, (totals.get(t.category) ?? 0) + t.amountPaise);
@@ -158,7 +166,8 @@ export interface CategoryMover {
 
 /**
  * The category whose month-over-month spend moved the most (by absolute
- * paise), expenses only. Returns null when there is no movement at all —
+ * paise), expenses only. Investment orders are excluded (transfers, not
+ * spending). Returns null when there is no movement at all —
  * callers must not render an insight card in that case.
  */
 export function categoryMover(
@@ -170,6 +179,7 @@ export function categoryMover(
   const previous = new Map<string, number>();
   for (const t of txns) {
     if (t.type !== "expense") continue;
+    if (isInvestmentOrder(t)) continue;
     const key = t.dateISO.slice(0, 7);
     if (key === month) current.set(t.category, (current.get(t.category) ?? 0) + t.amountPaise);
     else if (key === prev)
@@ -201,9 +211,13 @@ export function recentTransactions(txns: Transaction[], limit = 7): Transaction[
     .slice(0, limit);
 }
 
-/** Signed paise for list rendering: income positive, everything else negative. */
+/** Signed paise for list rendering: income positive, expenses negative.
+ * Transfers are money-out (negative) except inbound transfers with no source
+ * account — e.g. sell proceeds landing in cash — which are money-in. */
 export function signedAmountPaise(t: Transaction): number {
-  return t.type === "income" ? t.amountPaise : -t.amountPaise;
+  if (t.type === "income") return t.amountPaise;
+  if (t.type === "transfer" && t.toAccountId && !t.accountId) return t.amountPaise;
+  return -t.amountPaise;
 }
 
 /**

@@ -6,6 +6,7 @@ import { categoryById } from "@/lib/finance/categories";
 import { loadFinanceDB } from "@/lib/finance/db";
 import { formatINR, todayISO } from "@/lib/finance/format";
 import type { Budget, FinanceDB } from "@/lib/finance/types";
+import { isInvestmentOrder } from "@/lib/finance/investments";
 import { watchlistAlerts } from "@/lib/watchlist";
 
 /**
@@ -118,8 +119,9 @@ export function collectNotifications(db: FinanceDB): AppNotification[] {
   }
 
   // (2) Budgets: 100% breach or 80% warning for the current month.
+  // Legacy expense/income-shaped brokerage rows are transfers, not spend.
   const monthTxns = db.transactions.filter(
-    (t) => t.type === "expense" && t.dateISO.startsWith(month),
+    (t) => t.type === "expense" && !isInvestmentOrder(t) && t.dateISO.startsWith(month),
   );
   const spendByCat = new Map<string, number>();
   for (const t of monthTxns) {

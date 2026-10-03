@@ -1,0 +1,1 @@
+import{t as e}from"./jsx-runtime-B-hcVAMW.js";import{t}from"./utils-CyS44Rj3.js";var n=e();function r({className:e,...r}){return(0,n.jsx)(`div`,{className:t(`fv-shimmer rounded-md motion-reduce:animate-none`,e),"aria-hidden":`true`,...r})}export{r as t};

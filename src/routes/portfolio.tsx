@@ -31,6 +31,7 @@ import {
   useTransactions,
 } from "@/lib/finance/hooks";
 import { formatINR } from "@/lib/finance/format";
+import { firstBuyDateBySymbol } from "@/lib/finance/investments";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import { getStock, STOCKS } from "@/lib/market/data";
@@ -218,6 +219,13 @@ function PortfolioPage() {
         .filter((o): o is NonNullable<typeof o> => o !== null),
     [transactions],
   );
+
+  /** First recorded BUY date per symbol (ledger) — the portfolio chart
+   *  starts each holding's history here instead of fabricating a past. */
+  const firstBuyDateISOBySymbol = useMemo(() => {
+    const map = firstBuyDateBySymbol(transactions ?? []);
+    return Object.fromEntries(map.entries());
+  }, [transactions]);
 
   /** Active SIP rules created through the SipSheet flow. */
   const sips = useMemo(
@@ -407,6 +415,7 @@ function PortfolioPage() {
                         qty: r.holding.qty,
                       }))}
                       ltpBySymbol={prices}
+                      firstBuyDateISOBySymbol={firstBuyDateISOBySymbol}
                     />
                   </Suspense>
                 ) : (

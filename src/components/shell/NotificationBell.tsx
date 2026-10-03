@@ -2,6 +2,8 @@ import { Link } from "@tanstack/react-router";
 import { Bell } from "lucide-react";
 
 import { useNotifications } from "@/lib/notify";
+import { pressable } from "@/components/fv";
+import { cn } from "@/lib/utils";
 
 /**
  * Standalone notification bell with an unread badge.
@@ -17,7 +19,10 @@ export function NotificationBell() {
     <Link
       to="/notifications"
       aria-label={unread > 0 ? `${unread} unread notifications` : "Notifications"}
-      className="relative grid size-10 place-items-center rounded-full text-foreground transition-colors hover:bg-muted"
+      className={cn(
+        pressable,
+        "relative grid size-11 place-items-center rounded-full text-foreground transition-colors hover:bg-muted",
+      )}
     >
       <Bell className="size-5" />
       {unread > 0 && (

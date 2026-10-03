@@ -52,6 +52,50 @@ export function topLosers(rows: MoverRow[], n = 3): MoverRow[] {
 }
 
 /**
+ * Day change of a displayed (possibly jittered) LTP vs the previous close,
+ * in percent: `(ltp − prevClose) / prevClose × 100`. 0 when the previous
+ * close is 0 or missing (falls back to the LTP itself).
+ *
+ * Mover rows must compute changePct on the SAME price basis they display.
+ * Mixing a jittered LTP price with a changePct computed against the static
+ * listed close shows a price and a % that disagree with each other (they can
+ * even point in opposite directions), so every consumer builds its rows
+ * with this helper.
+ */
+export function ltpChangePct(ltpPaise: number, prevClosePaise: number | undefined): number {
+  const prev = prevClosePaise ?? ltpPaise;
+  if (prev === 0) return 0;
+  return ((ltpPaise - prev) / prev) * 100;
+}
+
+export interface MoverSplit {
+  gainers: MoverRow[];
+  losers: MoverRow[];
+}
+
+/**
+ * Split ONE consistent snapshot into top gainers + top losers.
+ *
+ * Both lists are derived from the same `rows` array in a single sort, so
+ * they are mutually exclusive by construction: a symbol appears in at most
+ * one list, with the same price/change everywhere it appears. (Naively
+ * slicing both ends of a small universe can put the middle row in both
+ * lists — the losers side explicitly excludes gainer symbols.)
+ */
+export function splitMovers(rows: MoverRow[], n = 3): MoverSplit {
+  const k = Math.max(0, n);
+  if (k === 0 || rows.length === 0) return { gainers: [], losers: [] };
+  const sorted = [...rows].sort(byChangeDesc);
+  const gainers = sorted.slice(0, k);
+  const gainerSymbols = new Set(gainers.map((r) => r.symbol));
+  const losers = sorted
+    .filter((r) => !gainerSymbols.has(r.symbol))
+    .slice(-k)
+    .reverse();
+  return { gainers, losers };
+}
+
+/**
  * Intraday range of a price series as % of its first value:
  * `(max − min) / first × 100`. The demo engine exposes no high/low candles
  * or traded volume, so the swing of the recent series is the activity proxy.

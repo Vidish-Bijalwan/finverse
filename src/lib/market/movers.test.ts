@@ -2,10 +2,12 @@ import { describe, expect, it } from "vitest";
 
 import {
   changePctLabel,
+  ltpChangePct,
   mostActive,
   rangePctOf,
   sparklinePath,
   sparklineValues,
+  splitMovers,
   topGainers,
   topLosers,
   type MoverRow,
@@ -61,6 +63,81 @@ describe("topLosers", () => {
 
   it("returns [] for an empty universe", () => {
     expect(topLosers([], 3)).toEqual([]);
+  });
+});
+
+describe("splitMovers", () => {
+  it("splits one snapshot into mutually exclusive gainers + losers", () => {
+    const { gainers, losers } = splitMovers(ROWS, 3);
+    expect(gainers.map((r) => r.symbol)).toEqual(["CCC", "AAA", "DDD"]);
+    expect(losers.map((r) => r.symbol)).toEqual(["BBB", "EEE"]);
+    // ^ only 5 rows: DDD would naively land in both lists — it must not.
+    const gainerSyms = new Set(gainers.map((r) => r.symbol));
+    for (const l of losers) expect(gainerSyms.has(l.symbol)).toBe(false);
+  });
+
+  it("keeps price/change identical for a symbol wherever it appears", () => {
+    const { gainers, losers } = splitMovers(ROWS, 5);
+    const bySymbol = new Map<string, MoverRow>();
+    for (const r of [...gainers, ...losers]) {
+      const prev = bySymbol.get(r.symbol);
+      if (prev) {
+        expect(r.pricePaise).toBe(prev.pricePaise);
+        expect(r.changePct).toBe(prev.changePct);
+      } else {
+        bySymbol.set(r.symbol, r);
+      }
+    }
+    // …and with a full-size universe nothing is shared at all.
+    const g = new Set(gainers.map((r) => r.symbol));
+    expect(losers.every((r) => !g.has(r.symbol))).toBe(true);
+  });
+
+  it("never puts the same symbol in both lists on the real demo dataset", () => {
+    const rows: MoverRow[] = STOCKS.map((s) => {
+      const h = genHistory(s.symbol, 22);
+      const prevClose = h.length > 1 ? h[h.length - 2]!.closePaise : undefined;
+      // Same basis the MarketSnapshot component uses: displayed LTP + its %.
+      const ltp = 100000; // basis consistency matters, not the value
+      return {
+        symbol: s.symbol,
+        name: s.name,
+        pricePaise: ltp,
+        changePct: ltpChangePct(ltp, prevClose),
+      };
+    });
+    const { gainers, losers } = splitMovers(rows, 3);
+    expect(gainers).toHaveLength(3);
+    expect(losers).toHaveLength(3);
+    const g = new Set(gainers.map((r) => r.symbol));
+    expect(losers.some((r) => g.has(r.symbol))).toBe(false);
+    // Ordering preserved: gainers desc, losers worst-first.
+    expect(gainers.map((r) => r.changePct)).toEqual(
+      [...gainers.map((r) => r.changePct)].sort((a, b) => b - a),
+    );
+    expect(losers.map((r) => r.changePct)).toEqual(
+      [...losers.map((r) => r.changePct)].sort((a, b) => a - b),
+    );
+  });
+
+  it("returns empty lists for n = 0 or an empty universe, never mutating input", () => {
+    expect(splitMovers(ROWS, 0)).toEqual({ gainers: [], losers: [] });
+    expect(splitMovers([], 3)).toEqual({ gainers: [], losers: [] });
+    const copy = [...ROWS];
+    splitMovers(ROWS, 3);
+    expect(ROWS).toEqual(copy);
+  });
+});
+
+describe("ltpChangePct", () => {
+  it("computes the displayed LTP's day change vs the previous close", () => {
+    expect(ltpChangePct(10500, 10000)).toBeCloseTo(5, 10);
+    expect(ltpChangePct(9500, 10000)).toBeCloseTo(-5, 10);
+  });
+
+  it("returns 0 for a zero or missing previous close (no fabricated move)", () => {
+    expect(ltpChangePct(10500, 0)).toBe(0);
+    expect(ltpChangePct(10500, undefined)).toBe(0);
   });
 });
 

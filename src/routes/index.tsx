@@ -9,6 +9,7 @@ import type { NetWorthPoint } from "@/components/charts/NetWorthSpark";
 import type { DonutSlice } from "@/components/charts/SpendDonut";
 import { ChartSkeleton } from "@/components/charts/shared";
 import { categoryMover, shiftMonthKey, shortMonthLabel } from "@/components/home/home-data";
+import { isInvestmentOrder } from "@/lib/finance/investments";
 import { CashFlowCard } from "@/components/home/CashFlowCard";
 import { RecentActivity } from "@/components/home/RecentActivity";
 import { TxnDetailSheet } from "@/components/home/TxnDetailSheet";
@@ -33,6 +34,8 @@ import {
   pressable,
 } from "@/components/fv";
 import { QuickActions } from "@/components/home/QuickActions";
+import { PeopleStrip } from "@/components/payments/PeopleStrip";
+import { extractPeople } from "@/lib/payment-contacts";
 import { WatchlistCard } from "@/components/home/WatchlistCard";
 import { MarketSnapshot } from "@/components/home/MarketSnapshot";
 import { categoryById } from "@/lib/finance/categories";
@@ -86,11 +89,14 @@ function PrivateMoney({
   paise,
   signed = false,
   short = false,
+  animate = false,
   className,
 }: {
   paise: number;
   signed?: boolean;
   short?: boolean;
+  /** Count up from 0 on mount (~800ms, reduced-motion safe). Hero use only. */
+  animate?: boolean;
   className?: string;
 }) {
   const [settings] = useSettings();
@@ -106,6 +112,7 @@ function PrivateMoney({
       paise={paise}
       signed={signed}
       short={short}
+      animate={animate}
       className={cn("tabular-nums", className)}
     />
   );
@@ -158,6 +165,9 @@ function FinVerseDashboard() {
   const greeting = greetingFor(new Date());
   const displayName = greetingName(profile?.full_name, user?.email);
 
+  // Mobile "Pay again" row: recent payees derived from ledger notes.
+  const people = useMemo(() => extractPeople(txns ?? [], []), [txns]);
+
   const stats = useMemo(() => {
     const all = txns ?? [];
     const byMonth = new Map<string, { income: number; expense: number }>();
@@ -170,6 +180,9 @@ function FinVerseDashboard() {
         entry = { income: 0, expense: 0 };
         byMonth.set(key, entry);
       }
+      // Investment orders are transfers (cash ↔ investments) — and legacy
+      // expense/income-shaped brokerage rows must not pollute Spent either.
+      if (isInvestmentOrder(t)) continue;
       if (t.type === "income") {
         entry.income += t.amountPaise;
       } else if (t.type === "expense") {
@@ -314,12 +327,13 @@ function FinVerseDashboard() {
         <main className="mx-auto w-full max-w-dashboard px-4 pb-16 pt-5 sm:px-6 lg:px-8">
           {/* ── Compact greeting + month switcher ──────────────────── */}
           <div className="flex flex-wrap items-center justify-between gap-3">
-            <p className="text-sm text-muted-foreground">
+            {/* Hidden on mobile — the mobile header carries the greeting. */}
+            <p className="hidden text-sm text-muted-foreground md:block">
               {greeting}
               {displayName ? `, ${displayName}` : ""}.
             </p>
             <div
-              className="flex items-center gap-1 rounded-full border border-border bg-card px-1 py-0.5 shadow-card"
+              className="ml-auto flex items-center gap-1 rounded-full border border-border bg-card px-1 py-0.5 shadow-card md:ml-0"
               aria-label="Select month"
             >
               <button
@@ -327,7 +341,7 @@ function FinVerseDashboard() {
                 onClick={() => setMonth(shiftMonthKey(month, -1))}
                 className={cn(
                   pressable,
-                  "grid size-8 place-items-center rounded-full text-muted-foreground hover:bg-muted hover:text-foreground",
+                  "grid size-11 place-items-center rounded-full text-muted-foreground hover:bg-muted hover:text-foreground md:size-8",
                 )}
                 aria-label="Previous month"
               >
@@ -342,7 +356,7 @@ function FinVerseDashboard() {
                 disabled={!canGoForward}
                 className={cn(
                   pressable,
-                  "grid size-8 place-items-center rounded-full text-muted-foreground hover:bg-muted hover:text-foreground disabled:cursor-not-allowed disabled:opacity-30",
+                  "grid size-11 place-items-center rounded-full text-muted-foreground hover:bg-muted hover:text-foreground disabled:cursor-not-allowed disabled:opacity-30 md:size-8",
                 )}
                 aria-label="Next month"
               >
@@ -386,6 +400,7 @@ function FinVerseDashboard() {
                 ) : (
                   <PrivateMoney
                     paise={netWorth}
+                    animate
                     className="mt-1 block text-[32px] font-bold leading-tight text-foreground sm:text-4xl"
                   />
                 )}
@@ -478,6 +493,27 @@ function FinVerseDashboard() {
 
           {/* ── Quick actions ──────────────────────────────────────── */}
           <QuickActions className="mt-5" />
+
+          {/* ── Pay again (mobile only; GPay-style people row) ───────── */}
+          {people.length > 0 && (
+            <section aria-label="Pay again" className="mt-5 md:hidden">
+              <div className="mb-2 flex items-center justify-between">
+                <h2 className="text-sm font-bold text-foreground">Pay again</h2>
+                <Link
+                  to="/payments"
+                  className={`flex min-h-[44px] items-center gap-1 px-2 text-xs font-semibold text-primary ${pressable}`}
+                >
+                  View all <ArrowRight className="size-3.5" aria-hidden />
+                </Link>
+              </div>
+              <PeopleStrip
+                people={people}
+                onSelect={(p) =>
+                  navigate({ to: "/payments", search: { flow: "upi", name: p.name } })
+                }
+              />
+            </section>
+          )}
 
           {/* ── Market strip (simulated) ───────────────────────────── */}
           <MarketStrip symbols={watchSymbols} className="mt-5" />

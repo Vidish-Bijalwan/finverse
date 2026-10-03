@@ -16,6 +16,7 @@ import {
   useTransactions,
 } from "@/lib/finance/hooks";
 import { formatINR, monthKey } from "@/lib/finance/format";
+import { isInvestmentOrder } from "@/lib/finance/investments";
 import { getStock } from "@/lib/market/data";
 import { PageShell } from "@/components/markets/PageShell";
 import { ScoreRing } from "@/components/markets/ScoreRing";
@@ -47,14 +48,24 @@ function shiftMonth(key: string, n: number): string {
 }
 
 function sumBy(txns: Transaction[], month: string, type: Transaction["type"]): number {
-  return txns
-    .filter((t) => t.type === type && monthKey(t.dateISO) === month)
-    .reduce((a, t) => a + t.amountPaise, 0);
+  return (
+    txns
+      // Legacy expense/income-shaped brokerage rows are transfers, not real
+      // income/spend — exclude them from readiness math.
+      .filter((t) => t.type === type && !isInvestmentOrder(t) && monthKey(t.dateISO) === month)
+      .reduce((a, t) => a + t.amountPaise, 0)
+  );
 }
 
 function sumCategory(txns: Transaction[], month: string, category: string): number {
   return txns
-    .filter((t) => t.type === "expense" && t.category === category && monthKey(t.dateISO) === month)
+    .filter(
+      (t) =>
+        t.type === "expense" &&
+        !isInvestmentOrder(t) &&
+        t.category === category &&
+        monthKey(t.dateISO) === month,
+    )
     .reduce((a, t) => a + t.amountPaise, 0);
 }
 
@@ -97,7 +108,7 @@ function ReadinessPage() {
     // 3. Budget discipline, current month (20%)
     const spentByCat = new Map<string, number>();
     txns
-      .filter((t) => t.type === "expense" && monthKey(t.dateISO) === month)
+      .filter((t) => t.type === "expense" && !isInvestmentOrder(t) && monthKey(t.dateISO) === month)
       .forEach((t) =>
         spentByCat.set(t.category, (spentByCat.get(t.category) ?? 0) + t.amountPaise),
       );

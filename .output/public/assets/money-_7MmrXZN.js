@@ -1,0 +1,1 @@
+import{n as e,t}from"./format-BIW7y3xe.js";function n(t){return e(t)}function r(e){return t(e)}export{r as n,n as t};

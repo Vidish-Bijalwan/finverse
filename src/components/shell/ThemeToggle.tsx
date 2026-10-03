@@ -3,6 +3,7 @@ import { Moon, Sun } from "lucide-react";
 
 import { cn } from "@/lib/utils";
 import { useSettings } from "@/lib/settings";
+import { pressable } from "@/components/fv";
 import { resolveIsDark, toggledTheme } from "./theme";
 
 /**
@@ -39,8 +40,9 @@ export function ThemeToggle() {
       aria-pressed={dark}
       title={dark ? "Switch to light mode" : "Switch to dark mode"}
       className={cn(
-        "grid size-10 place-items-center rounded-full text-foreground",
-        "transition-colors hover:bg-muted active:scale-95",
+        pressable,
+        "grid size-11 place-items-center rounded-full text-foreground",
+        "transition-colors hover:bg-muted",
       )}
     >
       {dark ? <Sun className="size-5" aria-hidden /> : <Moon className="size-5" aria-hidden />}

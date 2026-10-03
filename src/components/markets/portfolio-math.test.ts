@@ -6,6 +6,7 @@ import {
   longDateLabel,
   parseOrderNote,
   portfolioTotals,
+  portfolioValueSeries,
   shortDateLabel,
   todayReturnPaise,
   RANGE_TRADING_DAYS,
@@ -188,5 +189,81 @@ describe("RANGE_TRADING_DAYS", () => {
     expect(RANGE_TRADING_DAYS["1W"]).toBeLessThan(RANGE_TRADING_DAYS["1M"]);
     expect(RANGE_TRADING_DAYS["1M"]).toBeLessThan(RANGE_TRADING_DAYS["1Y"]);
     expect(RANGE_TRADING_DAYS["1Y"]).toBeLessThan(RANGE_TRADING_DAYS["ALL"]);
+  });
+});
+
+describe("portfolioValueSeries", () => {
+  // Deterministic closes on consecutive calendar dates (ascending).
+  const closes = (base: number, startISO = "2026-09-28", n = 5) => {
+    const out: { date: string; closePaise: number }[] = [];
+    const d = new Date(`${startISO}T00:00:00`);
+    for (let i = 0; i < n; i++) {
+      out.push({
+        date: `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(
+          d.getDate(),
+        ).padStart(2, "0")}`,
+        closePaise: base + i * 100,
+      });
+      d.setDate(d.getDate() + 1);
+    }
+    return out;
+  };
+
+  it("starts at the first purchase: no fabricated pre-purchase history", () => {
+    // The reported bug: a holding bought TODAY rendered "down from ₹2,259".
+    const out = portfolioValueSeries([
+      {
+        symbol: "RELIANCE",
+        qty: 1,
+        closes: closes(225900),
+        firstBuyDateISO: "2026-10-02", // today in the fixture
+      },
+    ]);
+    // The fixture's last close is the purchase date — every earlier point
+    // must be dropped, never shown as the user's past.
+    expect(out.length).toBeGreaterThan(0);
+    for (const p of out) expect(p.date >= "2026-10-02").toBe(true);
+    expect(out[0]!.date).toBe("2026-10-02");
+  });
+
+  it("keeps plotted values at portfolio scale (paise/rupees regression)", () => {
+    // ₹1,578 portfolio: every plotted point must be within an order of
+    // magnitude of the portfolio value — the old axis bug plotted raw paise
+    // as rupees (≈100× inflated labels).
+    const out = portfolioValueSeries([
+      { symbol: "INFY", qty: 1, closes: closes(157800), firstBuyDateISO: "2026-09-28" },
+    ]);
+    const max = Math.max(...out.map((p) => p.valuePaise));
+    expect(max).toBeLessThan(100000 * 100); // < ₹100,000 in paise
+    expect(max).toBeGreaterThan(0);
+  });
+
+  it("aligns symbols with different buy dates; pre-purchase contributes 0", () => {
+    const out = portfolioValueSeries([
+      { symbol: "A", qty: 2, closes: closes(10000), firstBuyDateISO: "2026-09-28" },
+      { symbol: "B", qty: 1, closes: closes(50000), firstBuyDateISO: "2026-10-01" },
+    ]);
+    // Series starts at the earliest purchase (28 Sep).
+    expect(out[0]!.date).toBe("2026-09-28");
+    // On 28–30 Sep only A contributes: 2 × 10000-ish, no B value.
+    const sep30 = out.find((p) => p.date === "2026-09-30")!;
+    expect(sep30.valuePaise).toBe(2 * (10000 + 2 * 100));
+    // From 1 Oct both contribute.
+    const oct1 = out.find((p) => p.date === "2026-10-01")!;
+    expect(oct1.valuePaise).toBe(2 * (10000 + 3 * 100) + (50000 + 3 * 100));
+  });
+
+  it("keeps the full history when the buy date is unknown", () => {
+    const cs = closes(10000);
+    const out = portfolioValueSeries([{ symbol: "A", qty: 1, closes: cs }]);
+    expect(out.map((p) => p.date)).toEqual(cs.map((c) => c.date));
+  });
+
+  it("returns [] for no holdings and skips zero-qty positions", () => {
+    expect(portfolioValueSeries([])).toEqual([]);
+    const out = portfolioValueSeries([
+      { symbol: "A", qty: 0, closes: closes(10000), firstBuyDateISO: "2026-09-28" },
+    ]);
+    expect(out).toEqual([]);
   });
 });

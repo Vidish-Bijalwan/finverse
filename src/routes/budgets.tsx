@@ -14,6 +14,7 @@ import { AnimatedProgress } from "@/components/money/AnimatedProgress";
 import { BudgetDialog } from "@/components/money/BudgetDialog";
 import { addMonthsToKey, monthLabel } from "@/components/money/utils";
 import { pressable } from "@/components/fv";
+import { isInvestmentOrder } from "@/lib/finance/investments";
 
 export const Route = createFileRoute("/budgets")({
   head: () => ({
@@ -128,7 +129,8 @@ function BudgetsPage() {
   const spentByCategory = useMemo(() => {
     const map = new Map<string, number>();
     for (const t of txns) {
-      if (t.type !== "expense") continue;
+      // Legacy expense/income-shaped brokerage rows are transfers, not spend.
+      if (t.type !== "expense" || isInvestmentOrder(t)) continue;
       map.set(t.category, (map.get(t.category) ?? 0) + t.amountPaise);
     }
     return map;

@@ -22,6 +22,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { toast } from "sonner";
 import { allCategories, categoryById } from "@/lib/finance/categories";
 import { formatINR, monthKey, monthLabel, todayISO } from "@/lib/finance/format";
+import { isInvestmentOrder } from "@/lib/finance/investments";
 import {
   useAccounts,
   useAllTags,
@@ -283,6 +284,8 @@ function ExpensesPage() {
     let spent = 0;
     let earned = 0;
     for (const t of txns ?? []) {
+      // Investment orders are transfers, not spending/income.
+      if (isInvestmentOrder(t)) continue;
       if (t.type === "expense") spent += t.amountPaise;
       else if (t.type === "income") earned += t.amountPaise;
     }
@@ -592,7 +595,7 @@ function ExpensesPage() {
                   onClick={() => setTypeFilter(value)}
                   className={cn(
                     pressable,
-                    "rounded-xl px-3.5 py-1.5 text-sm font-semibold transition-colors",
+                    "min-h-[44px] rounded-xl px-3.5 text-sm font-semibold transition-colors",
                     typeFilter === value
                       ? "bg-card text-foreground shadow-sm"
                       : "text-muted-foreground hover:text-foreground",
@@ -651,7 +654,7 @@ function ExpensesPage() {
                     }
                     className={cn(
                       pressable,
-                      "shrink-0 rounded-full px-3 py-1.5 text-xs font-semibold transition-colors",
+                      "min-h-[44px] shrink-0 rounded-full px-3 text-xs font-semibold transition-colors",
                       active
                         ? "bg-primary text-primary-foreground"
                         : "bg-muted text-muted-foreground hover:text-foreground",
@@ -722,6 +725,7 @@ function ExpensesPage() {
                 let daySpent = 0;
                 let dayEarned = 0;
                 for (const t of items) {
+                  if (isInvestmentOrder(t)) continue;
                   if (t.type === "expense") daySpent += t.amountPaise;
                   else if (t.type === "income") dayEarned += t.amountPaise;
                 }

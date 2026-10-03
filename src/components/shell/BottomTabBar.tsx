@@ -2,6 +2,7 @@ import { Link } from "@tanstack/react-router";
 import { Home, LineChart, ReceiptText, Send, TrendingUp } from "lucide-react";
 
 import { cn } from "@/lib/utils";
+import { pressable } from "@/components/fv";
 
 const TABS = [
   { label: "Home", to: "/", icon: Home },
@@ -30,7 +31,8 @@ export function BottomTabBar() {
             {...(tab.to === "/" ? { activeOptions: { exact: true } } : {})}
             activeProps={{ "data-active": "true", "aria-current": "page" }}
             className={cn(
-              "group relative flex flex-col items-center gap-1 py-2.5 text-[11px] font-medium",
+              pressable,
+              "group relative flex min-h-[56px] flex-col items-center justify-center gap-1 px-2 text-[11px] font-medium",
               "text-muted-foreground transition-colors hover:text-foreground",
               "data-[active=true]:text-primary",
             )}

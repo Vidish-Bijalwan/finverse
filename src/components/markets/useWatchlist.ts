@@ -1,5 +1,6 @@
 import { useCallback } from "react";
 import { useQuery } from "@tanstack/react-query";
+import { toast } from "sonner";
 
 import {
   fetchWatchlist,
@@ -14,6 +15,10 @@ import { FINVERSE_QUERY_DEFAULTS } from "@/lib/query";
  * query from @/lib/watchlist. Same return shape as before; toggling now goes
  * through the Supabase mutations (requires a signed-in user). Unresolved or
  * unauthenticated state simply reads as an empty list.
+ *
+ * Toggling gives explicit feedback: success/error toasts on the mutation
+ * result (the star/bookmark visuals flip optimistically via the query cache
+ * invalidation, the toast confirms it stuck).
  */
 export function useWatchlist(): {
   watchlist: string[];
@@ -39,9 +44,15 @@ export function useWatchlist(): {
     (symbol: string) => {
       const s = symbol.toUpperCase();
       if (isWatched(s)) {
-        removeStock.mutateRemove(s);
+        removeStock.mutateRemove(s, {
+          onSuccess: () => toast.success(`${s} removed from watchlist`),
+          onError: () => toast.error(`Couldn't remove ${s} — try again.`),
+        });
       } else {
-        addStock.mutateAdd(s);
+        addStock.mutateAdd(s, {
+          onSuccess: () => toast.success(`${s} added to watchlist`),
+          onError: () => toast.error(`Couldn't watch ${s} — try again.`),
+        });
       }
     },
     [addStock, isWatched, removeStock],

@@ -26,13 +26,23 @@ export interface PlaceOrderResult {
 }
 
 /**
- * Simulated-brokerage order execution. Every order writes the shared ledger:
- *  - BUY  -> upsert `holdings` (weighted-average qty/avg_price) + an
- *           "expense" transaction (category "investments",
- *           note `BUY SYMBOL × qty @ price`, account = default account).
+ * Simulated-brokerage order execution. Every order writes the shared ledger
+ * as a TRANSFER (brief §12: investment buys/sells are cash ↔ investments
+ * moves, never expenses/income):
+ *  - BUY  -> upsert `holdings` (weighted-average qty/avg_price) + a
+ *           "transfer" transaction (category "investments",
+ *           note `BUY SYMBOL × qty @ price`, accountId = cash account
+ *           debited, no toAccountId — the destination is the holdings
+ *           ledger, same shape as goal-saving transfers).
  *  - SELL -> reduce the holding qty (honest error when insufficient; the
- *           holding row is removed when qty reaches zero) + an "income"
- *           transaction (category "investments", note `SELL SYMBOL × qty @ price`).
+ *           holding row is removed when qty reaches zero) + a "transfer"
+ *           transaction (category "investments", note `SELL SYMBOL × qty @
+ *           price`, toAccountId = cash account credited).
+ * Because the type is "transfer", no spend/income aggregation (dashboard
+ * cash flow, top categories, insights, budgets, AI engine — they all key on
+ * expense/income) ever counts an investment order as spending. Cash balances
+ * stay exact via balanceForAccount (transfer debits the source account and
+ * credits the destination account).
  * All money is integer paise. Nothing here touches a real broker.
  */
 export function usePlaceOrder() {
@@ -68,13 +78,17 @@ export function usePlaceOrder() {
 
       const tag = input.side === "buy" ? "BUY" : "SELL";
       const txn = await insertTransaction({
-        type: input.side === "buy" ? "expense" : "income",
+        // Transfer, not expense/income: a buy moves cash → investments, a
+        // sell moves investments → cash. See the module docstring.
+        type: "transfer",
         amountPaise: costPaise,
         category: "investments",
         note: `${tag} ${symbol} × ${qty} @ ${formatINR(pricePaise)}`,
         dateISO: todayISO(),
         payMode: "Bank",
-        ...(accountId ? { accountId } : {}),
+        // Buy: debit the cash account. Sell: credit the cash account. The
+        // other side of the transfer is the holdings ledger (not an account).
+        ...(accountId ? (input.side === "buy" ? { accountId } : { toAccountId: accountId }) : {}),
         tags: ["simulated-brokerage"],
       });
 

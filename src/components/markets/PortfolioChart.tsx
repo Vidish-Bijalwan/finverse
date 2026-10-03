@@ -12,12 +12,14 @@ import {
 
 import { cn } from "@/lib/utils";
 import { formatINR } from "@/lib/finance/format";
+import { paiseAxisTick } from "@/components/charts/money";
 import { genHistory } from "@/lib/market/history";
 import { usePrefersReducedMotion } from "@/hooks/use-prefers-reduced-motion";
 import { Pill } from "@/components/fv/Pill";
 import {
   combineSeries,
   genIntraday,
+  portfolioValueSeries,
   PORTFOLIO_RANGES,
   RANGE_TRADING_DAYS,
   shortDateLabel,
@@ -63,9 +65,11 @@ function tooltipContent(
  *
  * Series semantics (labelled honestly below the chart): the value of the
  * *current* portfolio composition through each range — for daily ranges,
- * each holding's deterministic demo history multiplied by today's qty; for
- * 1D, a deterministic intraday path from the last demo close to the current
- * simulated LTP. The final point is always the live simulated value ("Now").
+ * each holding's deterministic demo history multiplied by today's qty, but
+ * starting at each holding's first recorded purchase (no fabricated
+ * pre-purchase history); for 1D, a deterministic intraday path from the
+ * last demo close to the current simulated LTP. The final point is always
+ * the live simulated value ("Now").
  *
  * Rendered client-side only (lazy route-level gate): LTPs are jittered demo
  * prices resolved in an effect, so they must never feed SSR HTML.
@@ -73,10 +77,17 @@ function tooltipContent(
 export function PortfolioChart({
   positions,
   ltpBySymbol,
+  firstBuyDateISOBySymbol,
 }: {
   positions: PortfolioPosition[];
   /** Simulated LTP per symbol, paise (client-resolved; null while loading). */
   ltpBySymbol: Record<string, number> | null;
+  /**
+   * First recorded BUY date ("YYYY-MM-DD") per symbol, parsed from the
+   * ledger. Symbols without a recorded buy keep their full simulated
+   * history ("unknown" is never presented as "bought today").
+   */
+  firstBuyDateISOBySymbol?: Record<string, string>;
 }) {
   const [range, setRange] = useState<PortfolioRange>("1M");
   const reducedMotion = usePrefersReducedMotion();
@@ -86,6 +97,12 @@ export function PortfolioChart({
     if (!ltpBySymbol || positions.length === 0) return [];
     const qtyBySymbol: Record<string, number> = {};
     const seriesBySymbol: Record<string, SeriesPoint[]> = {};
+    const historyItems: {
+      symbol: string;
+      qty: number;
+      closes: { date: string; closePaise: number }[];
+      firstBuyDateISO?: string;
+    }[] = [];
     for (const p of positions) {
       qtyBySymbol[p.symbol] = p.qty;
       const ltp = ltpBySymbol[p.symbol];
@@ -95,22 +112,37 @@ export function PortfolioChart({
         const prevClose = daily.length > 1 ? daily[daily.length - 2]!.closePaise : ltp;
         seriesBySymbol[p.symbol] = genIntraday(p.symbol, prevClose, ltp);
       } else {
-        seriesBySymbol[p.symbol] = genHistory(p.symbol, RANGE_TRADING_DAYS[range]).map((h) => ({
-          label: shortDateLabel(h.date),
-          valuePaise: h.closePaise,
-        }));
+        historyItems.push({
+          symbol: p.symbol,
+          qty: p.qty,
+          closes: genHistory(p.symbol, RANGE_TRADING_DAYS[range]),
+          ...(firstBuyDateISOBySymbol?.[p.symbol]
+            ? { firstBuyDateISO: firstBuyDateISOBySymbol[p.symbol] }
+            : {}),
+        });
       }
     }
-    const combined = combineSeries(seriesBySymbol, qtyBySymbol);
-    if (combined.length === 0) return combined;
     // Anchor the series to the live simulated value: the last plotted point
     // is always what the summary card shows.
     const nowPaise = positions.reduce(
       (a, p) => a + Math.round(p.qty * (ltpBySymbol[p.symbol] ?? 0)),
       0,
     );
+    if (range === "1D") {
+      const combined = combineSeries(seriesBySymbol, qtyBySymbol);
+      if (combined.length === 0) return combined;
+      return [...combined, { label: "Now", valuePaise: nowPaise }];
+    }
+    // Daily ranges: date-aligned portfolio value; each holding contributes
+    // only on/after its first recorded purchase — the series starts at the
+    // first purchase, never with a fabricated pre-purchase past.
+    const combined = portfolioValueSeries(historyItems).map((d) => ({
+      label: shortDateLabel(d.date),
+      valuePaise: d.valuePaise,
+    }));
+    if (combined.length === 0) return combined;
     return [...combined, { label: "Now", valuePaise: nowPaise }];
-  }, [positions, ltpBySymbol, range]);
+  }, [positions, ltpBySymbol, range, firstBuyDateISOBySymbol]);
 
   const first = points[0];
   const last = points[points.length - 1];
@@ -167,7 +199,10 @@ export function PortfolioChart({
                 tickLine={false}
                 axisLine={false}
                 tick={{ fontSize: 11, fill: "var(--muted-foreground)" }}
-                tickFormatter={(v: number) => `₹${Math.round(v).toLocaleString("en-IN")}`}
+                // Values are integer paise — paiseAxisTick converts to rupees.
+                // (A previous version formatted raw paise as ₹, inflating
+                // every label 100×.)
+                tickFormatter={paiseAxisTick}
                 width={64}
               />
               <Tooltip
@@ -195,7 +230,8 @@ export function PortfolioChart({
       </div>
 
       <p className="mt-2 text-xs text-muted-foreground">
-        Value of your current holdings at simulated prices — not live market data.
+        Value of your current holdings at simulated prices — history starts at your first recorded
+        purchase per stock. Not live market data.
       </p>
     </div>
   );

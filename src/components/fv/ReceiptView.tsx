@@ -40,17 +40,6 @@ export function ReceiptView({
 
   return (
     <div className={cn("flex flex-col items-center px-6 py-8 text-center", className)}>
-      <style>{`
-        @keyframes fv-check-pop { 0% { transform: scale(0.6); opacity: 0; } 100% { transform: scale(1); opacity: 1; } }
-        @keyframes fv-check-draw { to { stroke-dashoffset: 0; } }
-        .fv-check-pop { animation: fv-check-pop 0.35s ease-out; }
-        .fv-check-draw { stroke-dasharray: 60; stroke-dashoffset: 60; animation: fv-check-draw 0.45s ease-out 0.25s forwards; }
-        @media (prefers-reduced-motion: reduce) {
-          .fv-check-pop, .fv-check-draw { animation: none; }
-          .fv-check-draw { stroke-dashoffset: 0; }
-        }
-      `}</style>
-
       {status === "processing" && (
         <span
           role="status"

@@ -4,15 +4,15 @@ import { useMemo } from "react";
 import { Sparkline, pressable } from "@/components/fv";
 import { INDICES } from "@/lib/market/indices";
 import { STOCKS } from "@/lib/market/data";
-import { dayChange, genHistory, getLTP } from "@/lib/market/history";
+import { genHistory, getLTP } from "@/lib/market/history";
 import {
   changePctLabel,
   directionForChangePct,
+  ltpChangePct,
   mostActive,
   rangePctOf,
   sparklineValues,
-  topGainers,
-  topLosers,
+  splitMovers,
   type MoverRow,
 } from "@/lib/market/movers";
 import { formatINR } from "@/lib/finance/format";
@@ -132,29 +132,46 @@ export function MarketSnapshot() {
   const { indices, gainers, losers, active } = useMemo(() => {
     const idx: IndexCard[] = INDICES.map((i) => {
       const h = genHistory(i.symbol, 22);
+      const ltp = getLTP(i.symbol);
+      const prevClose = h.length > 1 ? h[h.length - 2]!.closePaise : undefined;
       return {
         name: i.name,
-        pricePaise: getLTP(i.symbol),
-        changePct: dayChange(h).changePct,
+        // One consistent snapshot: the % change is computed against the SAME
+        // jittered LTP that is displayed — never against the static close.
+        pricePaise: ltp,
+        changePct: ltpChangePct(ltp, prevClose),
         spark: sparklineValues(h, 20),
       };
     });
-    const rows: MoverRow[] = STOCKS.map((s) => {
+    const seen = new Set<string>();
+    const rows: MoverRow[] = [];
+    for (const s of STOCKS) {
+      // Defensive dedupe: one row per symbol, so a symbol can never appear
+      // twice in the mover lists even if the dataset ever duplicates one.
+      if (seen.has(s.symbol)) continue;
+      seen.add(s.symbol);
       // genHistory is deterministic per symbol, so the last two points of a
       // 22-day history match the 2-day dayChange; reuse it for the range.
       const h = genHistory(s.symbol, 22);
-      return {
+      const ltp = getLTP(s.symbol);
+      const prevClose = h.length > 1 ? h[h.length - 2]!.closePaise : undefined;
+      rows.push({
         symbol: s.symbol,
         name: s.name,
-        pricePaise: getLTP(s.symbol),
-        changePct: dayChange(h).changePct,
+        // Same consistency rule as the index cards: changePct is derived
+        // from the displayed LTP, so price and % always agree.
+        pricePaise: ltp,
+        changePct: ltpChangePct(ltp, prevClose),
         rangePct: rangePctOf(sparklineValues(h, 20)),
-      };
-    });
+      });
+    }
+    // Gainers + losers are split from this ONE rows array — mutually
+    // exclusive by construction (see splitMovers).
+    const { gainers, losers } = splitMovers(rows, 3);
     return {
       indices: idx,
-      gainers: topGainers(rows, 3),
-      losers: topLosers(rows, 3),
+      gainers,
+      losers,
       active: mostActive(rows, 3),
     };
   }, []);

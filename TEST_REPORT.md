@@ -702,3 +702,70 @@ The "clipped floating button" at ~1920px was the **Vercel Toolbar preview widget
 | `bun x eslint` (all 22 touched/new files) | **0 errors** (prettier nits auto-fixed) |
 | `bun run build` | ✅ green (TanStack Start + Nitro) |
 | Live-browser visual QA | ⚠️ parent-side milestone screenshot loop (Phase 5 next) |
+
+## Phase 4 review fixes (screenshot review, 4 bugs) — 2026-10-03 ~17:00 IST
+
+### Bug 1 — Portfolio chart y-axis inflated ~100× (P0 visual)
+**Root cause:** `src/components/markets/PortfolioChart.tsx` plots `dataKey="valuePaise"` (integer paise), but the YAxis `tickFormatter` was `` `₹${Math.round(v).toLocaleString("en-IN")}` `` — it stamped a ₹ prefix on raw paise, so a ₹1,578 portfolio (157,800 paise) rendered axis labels around ₹1,44,000–₹1,60,000. Tooltip and aria-label already used `formatINR` (correct) — the error was only the tick formatter. (The stock-detail chart was audited too: it maps values to rupees before plotting, so its formatter was already correct.)
+**Fix:** `tickFormatter={paiseAxisTick}` — new shared helper in `src/components/charts/money.ts` (`paiseAxisTick(paise) = formatINR(paise)`), so every paise-denominated chart has one correct formatter.
+**Verification:** new `src/components/charts/money.test.ts` asserts `paiseAxisTick(157800) === "₹1,578"`; `portfolioValueSeries` regression test asserts a ₹1,578 portfolio's max plotted value stays < ₹100,000. End-to-end script on real `genHistory` data: axis ticks now read ₹1,520-scale instead of ₹1,57,800-scale.
+
+### Bug 2 — Same stock in Top Gainers AND Top Losers
+**Audit finding:** the pure `topGainers`/`topLosers` in `src/lib/market/movers.ts` are mutually exclusive on a single snapshot (verified: the deterministic engine puts M&M at −1.72% — a loser only — and the +2.04% gainer is SURYAROSNI; one symbol cannot land in both lists from one `rows` array). The real defects were in the data flow feeding them: `MarketSnapshot` built each row with **price and change on different bases** — `pricePaise` from jittered `getLTP` (±0.6%, session-random) but `changePct` from `dayChange` of the static listed close — so the displayed price and the displayed % could disagree (even in sign), and the same symbol showed different numbers in different places.
+**Fix:** (1) new `ltpChangePct(ltpPaise, prevClosePaise)` in `movers.ts` — every mover row (stock rows AND index cards) now derives changePct from the SAME jittered LTP it displays; (2) new `splitMovers(rows, n)` — gainers + losers split from ONE `rows` array in a single sort, with the losers side explicitly excluding gainer symbols, so mutual exclusivity holds by construction even for small universes; (3) `MarketSnapshot` dedupes symbols defensively when building the snapshot.
+**Verification:** new `movers.test.ts` cases — exclusivity on a 5-row fixture where naive slicing would overlap, price/change identity across lists, exclusivity on the real 41-stock demo dataset, `ltpChangePct` math + zero/missing-prevClose guard. Live-data script: gainers/losers disjoint, no overlap.
+
+### Bug 3 — ALL-range chart fabricated pre-purchase history
+**Root cause:** `PortfolioChart` plotted each holding's full deterministic demo history × today's qty for the whole range, so a stock bought today rendered a month of "history" (the "down from ₹2,259 to ₹1,578" the review caught) — a past the user never had.
+**Fix:** (1) new `src/lib/finance/investments.ts`: `parseOrderNote` (moved here from `portfolio-math.ts`, re-exported for compat), `firstBuyDateBySymbol` (earliest BUY date per symbol from simulated-brokerage ledger notes; unknown stays unknown); (2) new pure `portfolioValueSeries` in `portfolio-math.ts` — date-aligned per-symbol closes, each symbol contributes qty × close only on/after its first buy date, and leading pre-purchase dates are dropped, so history starts at the first purchase; (3) `PortfolioChart` takes `firstBuyDateISOBySymbol` (wired from `portfolio.tsx` via `useTransactions`), caption now reads "history starts at your first recorded purchase per stock".
+**Verification:** new `portfolioValueSeries` tests — single purchase today → no points before the purchase date; mixed buy dates → date-aligned with 0 pre-purchase contribution; unknown buy date → full history kept (never mislabeled as "bought today"). End-to-end script: bought-today holding → 1 point on 1M/1Y/ALL.
+
+### Bug 4 — Investment buys counted as "Spent"
+**Root cause:** `usePlaceOrder` (`src/lib/finance/orders.ts`) wrote BUY as `type: "expense"` and SELL as `type: "income"` (category "investments"), so a stock buy inflated Spent and topped the spending categories.
+**Fix (brief §12 — buys/sells are transfers):** (1) orders now write `type: "transfer"` — BUY debits the cash account (`accountId`), SELL credits it (`toAccountId`); the other side is the holdings ledger (same single-sided-transfer shape as the existing goal-saving transfers). Every spend/income aggregation keys on expense/income, so transfers are excluded everywhere automatically, while `balanceForAccount` keeps cash exact. (2) New `isInvestmentOrder(t)` predicate (category "investments" + `simulated-brokerage` tag, both ledger shapes) guards the aggregation sites against legacy expense/income-shaped brokerage rows: `home-data.ts` (`buildMonthFlows`, `buildWeekFlows`, `topSpendingCategories`, `categoryMover`), dashboard `stats` (`index.tsx`), expenses view totals + day totals (`expenses.tsx`), AI engine (`engine.ts`: `expenseTxns`/`incomeTxns`, weekly/monthly spend, daily burn, streak). SIP instalment posts are covered by the same predicate. (3) `signedAmountPaise`: inbound transfers with no source account (sell proceeds → cash) render positive; account→account transfers keep the money-out sign.
+**Verification:** new `src/lib/finance/investments.test.ts` (12 tests) — buy (new transfer shape AND legacy expense shape) decreases cash via `balanceForAccount` and leaves `buildMonthFlows` Spent + `topSpendingCategories` unchanged; sell increases cash and leaves Income unchanged; `isInvestmentOrder`/`firstBuyDateBySymbol` unit tests; sign tests. Full suite green (see below).
+
+## Verification (Phase 4 review fixes — final state)
+| Command | Result |
+|---|---|
+| `bun run test:unit` | **260/260 pass** (29 files): new regression tests — movers +6 (splitMovers/ltpChangePct), portfolio-math +5 (portfolioValueSeries), investments +12 (new file), money +3 (new file) |
+| `bun x tsc --noEmit` | **52 errors — identical to pre-existing baseline** (0 in any touched file) |
+| `bun x eslint` (all 16 touched/new files) | **0 errors** (4 prettier nits auto-fixed) |
+| `bun run build` | ✅ green (TanStack Start + Nitro) |
+| Data-path scripts | Bug 1: ticks ₹1,520-scale (was ₹1,57,800-scale) · Bug 2: gainers ∩ losers = ∅ on live demo data · Bug 3: bought-today → 1 chart point on all ranges |
+
+## Phase 5 — microinteractions, mobile 390px, responsive QA loop — 2026-10-03 ~18:30 IST
+
+### Task 1 — Microinteractions (brief §18)
+- New `src/lib/motion.ts`: canonical motion contract — `MOTION` durations (micro 120ms / standard 220ms / sheet 280ms / countUp 800ms), `MOTION_EASE_OUT`, `motionIf()` helper, `useReducedMotion` alias; `src/lib/motion.test.ts` (4 tests) pins the 100–180 / 160–240 / 200–320 ms bands.
+- `src/styles.css`: success-check keyframes promoted to design-token `@utility` classes `fv-check-pop` / `fv-check-draw`; inline `<style>` removed from `ReceiptView.tsx`. **Bug caught during implementation:** the global reduced-motion rule only clamped `animation-duration`, not the 250ms draw *delay* — added an explicit reduced-motion rule so the check lands fully drawn, instantly.
+- Bottom sheet open duration 500ms → 280ms (`src/components/ui/sheet.tsx` — sheet band).
+- Hero count-up: `PrivateMoney` (`src/routes/index.tsx`) gained an `animate` pass-through → net worth counts up on mount (portfolio "Current value" already animated).
+- Watch toggle (`src/components/markets/useWatchlist.ts`) now toasts success/error tied to the mutation result.
+- `pressable` (scale .97 / brightness .95, 120ms) applied to desktop nav pills, `BottomTabBar` links (`py-2.5` → `min-h-[56px]`), `NotificationBell`, `ThemeToggle`, profile-menu trigger.
+- Everything gated on `prefers-reduced-motion` via the existing `usePrefersReducedMotion` hook + CSS media query; no glow, no pulse loops, no bounce.
+
+### Task 2 — Mobile 390px (brief §19)
+- `AppHeader.tsx`: mobile bar (`md:hidden`) = avatar + compact `MobileGreeting` ("Good morning," over display name via `greetingFor`/`greetingName` + `useAuth`) + search icon + bell + theme toggle; desktop bar (`hidden md:flex`) unchanged. Dashboard page greeting hidden on mobile (`hidden md:block`), month switcher `ml-auto` (header owns the greeting on mobile).
+- Touch targets ≥44px: header icon buttons `size-10` → `size-11`; month chevrons `size-11 md:size-8`; `ChartCard` range pills + expenses type/tag chips → `min-h-[44px]`; bottom tab links `min-h-[56px]`.
+- Dashboard "Pay again" people row (**new, mobile-only `md:hidden`**) between QuickActions and MarketStrip: reuses `extractPeople` + `PeopleStrip` from payments; deep-links to `/payments` with `search { flow: "upi", name }` pre-filling the send flow; skipped when empty.
+- BottomTabBar verified by code audit: active state, safe-area padding (`pb-[env(safe-area-inset-bottom)]`), z-50 below sheets z-[80], mobile `main` has `pb-24`; toasts z-999999999 (above tab bar, transient). Buy/sell (`OrderSheet`), txn details (`TxnDetailSheet`), payment review (`PaymentSheet`) are already bottom sheets; expenses filters are inline chips (mobile-native).
+
+### Task 3 — Responsive QA loop (brief §26)
+- Headless Playwright script (`/tmp/phase5-qa/responsive-qa.mjs`, meta-chromium, file:// LNA trampoline): 5 viewports × 2 public routes, asserting `scrollWidth <= innerWidth` + no out-of-viewport elements (excluding legitimate internal scrollers) + screenshots.
+- **Result: 10/10 PASS** (390×844, 768×1024, 1366×768, 1440×900, 1920×1080 — /login and /, the latter redirecting to /login).
+- **Defect found + fixed:** /login container was `min-h-[calc(100vh-4rem)]` but the bare-chrome path has no header → 64px white band under the dark mesh at 1366×768. Fixed to `min-h-[100dvh]`; re-screenshot verified the mesh fills the viewport.
+- **False-positive caught:** an early run flagged MarketStrip cards at 390px — the walker was flagging children of the `overflow-x-auto` snap-scroll row (the intended internal scroll, §19). Checker now excludes scrollable ancestors; the document-level assertion is the real signal.
+- **Known limitation (honest):** no local `.env` (only `.env.example`) → Supabase unconfigured → auth loading gates forever on splash without env. Authenticated routes were QA'd with **dummy** `VITE_SUPABASE_URL`/`VITE_SUPABASE_ANON_KEY` (login form only; no real session possible). All authenticated pages (dashboard, payments, portfolio, markets, activity) are **unverifiable here** — recorded for the parent's live-browser milestone loop.
+
+### Carry-over (Step 1, trivial)
+Legacy investment rows guarded with `isInvestmentOrder` in `src/routes/budgets.tsx`, `src/routes/readiness.tsx` (sumBy/sumCategory/spentByCat), `src/lib/notify.ts`.
+
+## Verification (Phase 5 — final state)
+| Command | Result |
+|---|---|
+| `bun run test:unit` | **264/264 pass** (30 files): new — motion 4 |
+| `bun x tsc --noEmit` | **52 errors — identical to pre-existing baseline** (0 in login.tsx / index.tsx / motion.ts / any touched file) |
+| `bun x eslint` (touched: login.tsx, index.tsx + earlier 16) | **0 errors** |
+| `bun run build` | ✅ green (TanStack Start + Nitro) |
+| Responsive QA (headless, 5 viewports × /login, /) | **10/10 PASS**, no horizontal overflow; 1 real defect fixed (login height) |
