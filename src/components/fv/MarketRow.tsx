@@ -102,14 +102,23 @@ export function MarketRow({
 
   if (onClick) {
     return (
-      <button
-        type="button"
+      <div
+        role="button"
+        tabIndex={0}
         onClick={onClick}
-        className={classes}
+        onKeyDown={(e) => {
+          // Inner star/alert buttons handle their own keys — don't double-fire.
+          if (e.target !== e.currentTarget) return;
+          if (e.key === "Enter" || e.key === " ") {
+            e.preventDefault();
+            onClick();
+          }
+        }}
+        className={cn(classes, "cursor-pointer focus-visible:outline-2 focus-visible:outline-ring")}
         aria-label={`${name} (${symbol}), ${up ? "up" : "down"} ${Math.abs(changePct).toFixed(2)} percent`}
       >
         {content}
-      </button>
+      </div>
     );
   }
   return <div className={classes}>{content}</div>;

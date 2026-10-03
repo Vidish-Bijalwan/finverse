@@ -1,3 +1,4 @@
+import { memo } from "react";
 import { Cell, Pie, PieChart, ResponsiveContainer, Tooltip } from "recharts";
 import { cn } from "@/lib/utils";
 import { NumberDisplay } from "./NumberDisplay";
@@ -22,7 +23,7 @@ const FALLBACK_COLORS = [
  * Allocation donut (recharts Pie) with a legend list (label, %, value).
  * Donut hole shows the total.
  */
-export function DonutAllocation({
+function DonutAllocationInner({
   items,
   className,
 }: {
@@ -94,3 +95,6 @@ export function DonutAllocation({
     </div>
   );
 }
+
+/** Memoized: parents re-render on unrelated state (sheet open, refresh) with stable data refs. */
+export const DonutAllocation = memo(DonutAllocationInner);

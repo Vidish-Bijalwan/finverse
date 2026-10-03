@@ -8,6 +8,7 @@ import {
   updateHolding,
 } from "./db";
 import { formatINR, todayISO } from "./format";
+import { applyOrderToHolding } from "./order-math";
 
 export interface PlaceOrderInput {
   side: "buy" | "sell";
@@ -42,35 +43,27 @@ export function usePlaceOrder() {
       const symbol = input.symbol.toUpperCase();
       const qty = Math.floor(input.qty);
       const pricePaise = Math.round(input.pricePaise);
-      if (qty <= 0) throw new Error("Quantity must be at least 1.");
-      if (pricePaise <= 0) throw new Error("Price must be greater than zero.");
 
       const costPaise = qty * pricePaise;
       const accountId = await defaultAccountId();
       const holdings = await fetchHoldings();
       const holding = holdings.find((h) => h.symbol === symbol);
 
-      if (input.side === "buy") {
-        if (holding) {
-          const newQty = holding.qty + qty;
-          const newAvg = Math.round((holding.qty * holding.avgPricePaise + costPaise) / newQty);
-          await updateHolding(holding.id, { qty: newQty, avgPricePaise: newAvg });
-        } else {
-          await insertHolding({ symbol, qty, avgPricePaise: pricePaise });
+      // Pure holdings math (throws on invalid qty/price, oversell, …).
+      const outcome = applyOrderToHolding(holding, input.side, qty, pricePaise, symbol);
+
+      if (!holding) {
+        // Only reachable on buy — a sell without a holding throws above.
+        if (outcome === null) {
+          throw new Error(`Unexpected: sell closed the missing ${symbol} position.`);
         }
+        await insertHolding({ symbol, qty: outcome.qty, avgPricePaise: outcome.avgPricePaise });
+      } else if (outcome === null) {
+        await deleteHolding(holding.id);
+      } else if (input.side === "buy") {
+        await updateHolding(holding.id, { qty: outcome.qty, avgPricePaise: outcome.avgPricePaise });
       } else {
-        const owned = holding?.qty ?? 0;
-        if (!holding || holding.qty < qty) {
-          throw new Error(
-            `You hold ${owned} × ${symbol} — reduce the quantity to place this sell.`,
-          );
-        }
-        const newQty = holding.qty - qty;
-        if (newQty === 0) {
-          await deleteHolding(holding.id);
-        } else {
-          await updateHolding(holding.id, { qty: newQty });
-        }
+        await updateHolding(holding.id, { qty: outcome.qty });
       }
 
       const tag = input.side === "buy" ? "BUY" : "SELL";

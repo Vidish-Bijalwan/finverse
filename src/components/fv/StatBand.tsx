@@ -17,22 +17,24 @@ const toneClass: Record<NonNullable<StatBandStat["tone"]>, string> = {
 
 /**
  * 3-stat summary band (Current value | Invested | P&L). Values are rendered
- * with tabular numerals and tone coloring.
+ * with the display grotesque + tabular numerals and tone coloring; labels
+ * use the eyebrow treatment. Static 1px border with a 3px signature-accent
+ * top edge.
  */
 export function StatBand({ stats, className }: { stats: StatBandStat[]; className?: string }) {
   return (
     <div
       className={cn(
-        "grid grid-cols-3 divide-x divide-border rounded-2xl border border-border bg-card shadow-card",
+        "fv-card-static fv-top-accent grid grid-cols-3 divide-x divide-border rounded-[14px] bg-card shadow-card",
         className,
       )}
     >
       {stats.map((s, i) => (
-        <div key={i} className="flex min-w-0 flex-col gap-1 px-4 py-4">
-          <span className="truncate text-xs font-medium text-muted-foreground">{s.label}</span>
+        <div key={i} className="flex min-w-0 flex-col gap-1 px-3 py-3 sm:px-4 sm:py-4">
+          <span className="fv-eyebrow truncate">{s.label}</span>
           <span
             className={cn(
-              "truncate text-lg font-bold tabular-nums",
+              "fv-money truncate text-base font-bold sm:text-lg",
               toneClass[s.tone ?? "neutral"],
             )}
           >

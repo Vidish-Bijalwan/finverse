@@ -1,6 +1,7 @@
 import { Cell, Pie, PieChart, ResponsiveContainer, Tooltip } from "recharts";
 import { formatINR, formatINRShort } from "@/lib/finance/format";
 import { ChartSkeleton, MoneyTooltip } from "./shared";
+import { memo } from "react";
 import { usePrefersReducedMotion } from "@/hooks/use-prefers-reduced-motion";
 
 export interface DonutSlice {
@@ -25,7 +26,7 @@ interface SpendDonutProps {
  * every category with its amount. Renders an empty state when there is no
  * spend for the month.
  */
-export function SpendDonut({ data, totalPaise, ready, loading }: SpendDonutProps) {
+function SpendDonutInner({ data, totalPaise, ready, loading }: SpendDonutProps) {
   const reducedMotion = usePrefersReducedMotion();
   if (loading || !ready) return <ChartSkeleton className="h-64" />;
 
@@ -87,3 +88,6 @@ export function SpendDonut({ data, totalPaise, ready, loading }: SpendDonutProps
     </div>
   );
 }
+
+/** Memoized: parents re-render on unrelated state (sheet open, refresh) with stable data refs. */
+export const SpendDonut = memo(SpendDonutInner);

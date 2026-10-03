@@ -42,6 +42,7 @@ import { usePrefersReducedMotion } from "@/hooks/use-prefers-reduced-motion";
 import { usePlaceOrder } from "@/lib/finance/orders";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
+import { pressable } from "@/components/fv";
 
 export const Route = createFileRoute("/stocks/$symbol")({
   head: ({ params }) => ({
@@ -389,6 +390,7 @@ function StockDetailPage() {
           aria-pressed={watched}
           aria-label={watched ? "Remove from watchlist" : "Add to watchlist"}
           onClick={() => toggle(sym)}
+          className={pressable}
         >
           <Star className={watched ? "size-4 fill-amber-400 text-amber-400" : "size-4"} />
           <span className="hidden sm:inline">{watched ? "Watching" : "Watch"}</span>
@@ -417,7 +419,7 @@ function StockDetailPage() {
             )}
             <button
               onClick={handleRefresh}
-              className="rounded-md p-1.5 text-muted-foreground transition-colors hover:bg-muted hover:text-primary"
+              className={`rounded-md p-1.5 text-muted-foreground transition-colors hover:bg-muted hover:text-primary ${pressable}`}
               aria-label="Refresh price"
             >
               <RefreshCw className="size-4" />
@@ -620,21 +622,21 @@ function StockDetailPage() {
           <button
             type="button"
             onClick={() => setOrderSide("buy")}
-            className="h-13 flex-1 rounded-full bg-gain py-3.5 text-base font-bold text-white transition-opacity hover:opacity-90"
+            className={`h-13 flex-1 rounded-full bg-gain py-3.5 text-base font-bold text-white transition-opacity hover:opacity-90 ${pressable}`}
           >
             Buy
           </button>
           <button
             type="button"
             onClick={() => setOrderSide("sell")}
-            className="h-13 flex-1 rounded-full border border-loss/40 py-3.5 text-base font-bold text-loss transition-colors hover:bg-loss/10"
+            className={`h-13 flex-1 rounded-full border border-loss/40 py-3.5 text-base font-bold text-loss transition-colors hover:bg-loss/10 ${pressable}`}
           >
             Sell
           </button>
           <button
             type="button"
             onClick={() => setSipOpen(true)}
-            className="h-13 rounded-full border border-border px-5 py-3.5 text-base font-bold text-foreground transition-colors hover:bg-muted/60"
+            className={`h-13 rounded-full border border-border px-5 py-3.5 text-base font-bold text-foreground transition-colors hover:bg-muted/60 ${pressable}`}
           >
             Start SIP
           </button>

@@ -16,6 +16,7 @@ import { cn } from "@/lib/utils";
 import { BillDialog, type BillFormInput } from "@/components/money/BillDialog";
 import { ConfirmDeleteDialog } from "@/components/money/ConfirmDeleteDialog";
 import { ordinal } from "@/components/money/utils";
+import { pressable } from "@/components/fv";
 
 export const Route = createFileRoute("/bills")({
   head: () => ({
@@ -138,16 +139,22 @@ function BillRow({
         <p className="shrink-0 text-base font-semibold">{formatINR(bill.amountPaise)}</p>
         <div className="flex shrink-0 items-center gap-1">
           {status.kind === "paid" ? (
-            <Button variant="ghost" size="sm" disabled className="text-emerald-600">
+            <Button variant="ghost" size="sm" disabled className={`text-emerald-600 ${pressable}`}>
               <Check className="mr-1 h-4 w-4" aria-hidden />
               Paid
             </Button>
           ) : (
-            <Button size="sm" onClick={onPay} disabled={paying}>
+            <Button size="sm" onClick={onPay} disabled={paying} className={pressable}>
               {paying ? "Saving…" : "Mark paid"}
             </Button>
           )}
-          <Button variant="ghost" size="icon" onClick={onEdit} aria-label={`Edit ${bill.name}`}>
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={onEdit}
+            aria-label={`Edit ${bill.name}`}
+            className={pressable}
+          >
             <Pencil className="h-4 w-4" />
           </Button>
           <Button
@@ -155,7 +162,7 @@ function BillRow({
             size="icon"
             onClick={onDelete}
             aria-label={`Delete ${bill.name}`}
-            className="text-destructive hover:text-destructive"
+            className={`text-destructive hover:text-destructive ${pressable}`}
           >
             <Trash2 className="h-4 w-4" />
           </Button>
@@ -213,6 +220,7 @@ function BillsPage() {
             setEditing(null);
             setDialogOpen(true);
           }}
+          className={pressable}
         >
           <Plus className="mr-2 h-4 w-4" aria-hidden />
           Add bill
@@ -241,6 +249,7 @@ function BillsPage() {
                 setEditing(null);
                 setDialogOpen(true);
               }}
+              className={pressable}
             >
               <Plus className="mr-2 h-4 w-4" aria-hidden />
               Add your first bill

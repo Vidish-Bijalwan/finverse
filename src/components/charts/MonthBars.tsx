@@ -1,6 +1,7 @@
 import { Bar, BarChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import { ChartSkeleton, MoneyTooltip } from "./shared";
 import { axisTick } from "./money";
+import { memo } from "react";
 import { usePrefersReducedMotion } from "@/hooks/use-prefers-reduced-motion";
 
 export interface MonthFlow {
@@ -21,7 +22,7 @@ interface MonthBarsProps {
 }
 
 /** Grouped income-vs-expense bars for the six months ending at the selected month. */
-export function MonthBars({ data, ready, loading }: MonthBarsProps) {
+function MonthBarsInner({ data, ready, loading }: MonthBarsProps) {
   const reducedMotion = usePrefersReducedMotion();
   if (loading || !ready) return <ChartSkeleton className="h-64" />;
   if (data.every((d) => d.income === 0 && d.expense === 0)) {
@@ -78,3 +79,6 @@ export function MonthBars({ data, ready, loading }: MonthBarsProps) {
     </div>
   );
 }
+
+/** Memoized: parents re-render on unrelated state (sheet open, refresh) with stable data refs. */
+export const MonthBars = memo(MonthBarsInner);

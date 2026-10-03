@@ -1,13 +1,6 @@
 import { useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
+import { BottomSheet } from "@/components/shell/BottomSheet";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
@@ -73,74 +66,79 @@ export function BillDialog({
   };
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-md">
-        <DialogHeader>
-          <DialogTitle>{initial ? "Edit bill" : "Add a bill"}</DialogTitle>
-          <DialogDescription>
-            Recurring bills remind you when they are due. Marking one paid records the expense
-            automatically.
-          </DialogDescription>
-        </DialogHeader>
-        <div className="space-y-4">
-          <div className="space-y-1.5">
-            <Label htmlFor="bill-name">Bill name</Label>
-            <Input
-              id="bill-name"
-              placeholder="Electricity, Rent, Netflix…"
-              value={name}
-              autoFocus
-              onChange={(e) => setName(e.target.value)}
-              aria-invalid={errors.name ? true : undefined}
-              aria-describedby={errors.name ? "bill-name-error" : undefined}
-            />
-            {errors.name && (
-              <p id="bill-name-error" role="alert" className="text-xs text-destructive">
-                {errors.name}
-              </p>
-            )}
-          </div>
-          <AmountField
-            id="bill-amount"
-            label="Amount"
-            value={amount}
-            onChange={setAmount}
-            error={errors.amount}
-            placeholder="1,250.00"
+    <BottomSheet
+      open={open}
+      onClose={() => onOpenChange(false)}
+      title={initial ? "Edit bill" : "Add a bill"}
+      showCloseButton
+    >
+      <p className="text-sm text-muted-foreground">
+        Recurring bills remind you when they are due. Marking one paid records the expense
+        automatically.
+      </p>
+      <div className="mt-4 space-y-4">
+        <div className="space-y-1.5">
+          <Label htmlFor="bill-name">Bill name</Label>
+          <Input
+            id="bill-name"
+            placeholder="Electricity, Rent, Netflix…"
+            value={name}
+            autoFocus
+            onChange={(e) => setName(e.target.value)}
+            aria-invalid={errors.name ? true : undefined}
+            aria-describedby={errors.name ? "bill-name-error" : undefined}
           />
-          <div className="grid grid-cols-2 gap-4">
-            <div className="space-y-1.5">
-              <Label htmlFor="bill-due-day">Due day of month</Label>
-              <Select value={dueDay} onValueChange={setDueDay}>
-                <SelectTrigger id="bill-due-day" className="w-full">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {Array.from({ length: 28 }, (_, i) => i + 1).map((d) => (
-                    <SelectItem key={d} value={String(d)}>
-                      {d}
-                      {d === 1 ? "st" : d === 2 ? "nd" : d === 3 ? "rd" : "th"}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-              <p className="text-xs text-muted-foreground">Days 1–28 so every month has one.</p>
-            </div>
-            <div className="space-y-1.5">
-              <Label htmlFor="bill-category">Category</Label>
-              <CategorySelect id="bill-category" value={category} onChange={setCategory} />
-            </div>
+          {errors.name && (
+            <p id="bill-name-error" role="alert" className="text-xs text-destructive">
+              {errors.name}
+            </p>
+          )}
+        </div>
+        <AmountField
+          id="bill-amount"
+          label="Amount"
+          value={amount}
+          onChange={setAmount}
+          error={errors.amount}
+          placeholder="1,250.00"
+        />
+        <div className="grid grid-cols-2 gap-4">
+          <div className="space-y-1.5">
+            <Label htmlFor="bill-due-day">Due day of month</Label>
+            <Select value={dueDay} onValueChange={setDueDay}>
+              <SelectTrigger id="bill-due-day" className="w-full">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {Array.from({ length: 28 }, (_, i) => i + 1).map((d) => (
+                  <SelectItem key={d} value={String(d)}>
+                    {d}
+                    {d === 1 ? "st" : d === 2 ? "nd" : d === 3 ? "rd" : "th"}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <p className="text-xs text-muted-foreground">Days 1–28 so every month has one.</p>
+          </div>
+          <div className="space-y-1.5">
+            <Label htmlFor="bill-category">Category</Label>
+            <CategorySelect id="bill-category" value={category} onChange={setCategory} />
           </div>
         </div>
-        <DialogFooter>
-          <Button variant="outline" onClick={() => onOpenChange(false)} disabled={saving}>
-            Cancel
-          </Button>
-          <Button onClick={handleSave} disabled={saving}>
-            {saving ? "Saving…" : initial ? "Save changes" : "Add bill"}
-          </Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
+      </div>
+      <div className="mt-6 flex gap-3">
+        <Button
+          variant="outline"
+          className="flex-1"
+          onClick={() => onOpenChange(false)}
+          disabled={saving}
+        >
+          Cancel
+        </Button>
+        <Button className="flex-1" onClick={handleSave} disabled={saving}>
+          {saving ? "Saving…" : initial ? "Save changes" : "Add bill"}
+        </Button>
+      </div>
+    </BottomSheet>
   );
 }

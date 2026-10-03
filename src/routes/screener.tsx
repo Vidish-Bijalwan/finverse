@@ -23,7 +23,13 @@ import {
   type StockInfo,
 } from "@/lib/market/data";
 import { dayChange, genHistory, getLTP } from "@/lib/market/history";
-import { EmptyState, MarketRow, SearchDropdown, type SearchResultGroup } from "@/components/fv";
+import {
+  EmptyState,
+  MarketRow,
+  SearchDropdown,
+  type SearchResultGroup,
+  pressable,
+} from "@/components/fv";
 import { PageShell } from "@/components/markets/PageShell";
 import { useWatchlist } from "@/components/markets/useWatchlist";
 import { cn } from "@/lib/utils";
@@ -224,7 +230,7 @@ function ScreenerPage() {
             {sectors.length > 0 && (
               <button
                 onClick={() => setSectors([])}
-                className="text-xs font-semibold text-primary hover:underline"
+                className={`text-xs font-semibold text-primary hover:underline ${pressable}`}
               >
                 Clear ({sectors.length})
               </button>
@@ -238,12 +244,12 @@ function ScreenerPage() {
                   key={sector}
                   onClick={() => toggleSector(sector)}
                   aria-pressed={active}
-                  className={cn(
+                  className={`${cn(
                     "rounded-full border px-3.5 py-1.5 text-xs font-semibold transition-colors",
                     active
                       ? "border-primary bg-primary text-primary-foreground"
                       : "border-border bg-background text-foreground hover:border-primary/60 hover:text-primary",
-                  )}
+                  )} ${pressable}`}
                 >
                   {sector}
                 </button>
@@ -284,14 +290,14 @@ function ScreenerPage() {
           <Button
             variant="outline"
             size="icon"
-            className="size-9"
+            className={`size-9 ${pressable}`}
             onClick={() => setSortDir((d) => (d === "asc" ? "desc" : "asc"))}
             aria-label={sortDir === "desc" ? "Sort ascending" : "Sort descending"}
           >
             {sortDir === "desc" ? <ArrowDown className="size-4" /> : <ArrowUp className="size-4" />}
           </Button>
           {filterCount > 0 && (
-            <Button variant="ghost" size="sm" onClick={resetFilters}>
+            <Button variant="ghost" size="sm" onClick={resetFilters} className={pressable}>
               Reset filters
             </Button>
           )}

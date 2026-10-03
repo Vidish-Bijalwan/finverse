@@ -20,6 +20,7 @@ import { AnimatedProgress } from "@/components/money/AnimatedProgress";
 import { ConfirmDeleteDialog } from "@/components/money/ConfirmDeleteDialog";
 import { AddFundsDialog, GoalFormDialog, type GoalFormInput } from "@/components/money/GoalDialogs";
 import { addMonthsToKey, formatDateLong, monthDiff, monthLabel } from "@/components/money/utils";
+import { pressable } from "@/components/fv";
 
 export const Route = createFileRoute("/goals")({
   head: () => ({
@@ -116,7 +117,13 @@ function GoalCard({
             </p>
           </div>
           <div className="flex shrink-0 gap-1">
-            <Button variant="ghost" size="icon" onClick={onEdit} aria-label={`Edit ${goal.name}`}>
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={onEdit}
+              aria-label={`Edit ${goal.name}`}
+              className={pressable}
+            >
               <Pencil className="h-4 w-4" />
             </Button>
             <Button
@@ -124,7 +131,7 @@ function GoalCard({
               size="icon"
               onClick={onDelete}
               aria-label={`Delete ${goal.name}`}
-              className="text-destructive hover:text-destructive"
+              className={`text-destructive hover:text-destructive ${pressable}`}
             >
               <Trash2 className="h-4 w-4" />
             </Button>
@@ -145,7 +152,7 @@ function GoalCard({
         <ProjectionLine goal={goal} projection={projection} />
 
         <Button
-          className="w-full"
+          className={`w-full ${pressable}`}
           onClick={onAddFunds}
           disabled={goal.savedPaise >= goal.targetPaise}
         >
@@ -255,6 +262,7 @@ function GoalsPage() {
             setEditing(null);
             setFormOpen(true);
           }}
+          className={pressable}
         >
           <Plus className="mr-2 h-4 w-4" aria-hidden />
           New goal
@@ -283,6 +291,7 @@ function GoalsPage() {
                 setEditing(null);
                 setFormOpen(true);
               }}
+              className={pressable}
             >
               <Plus className="mr-2 h-4 w-4" aria-hidden />
               Create your first goal

@@ -18,6 +18,7 @@ import {
 } from "lucide-react";
 
 import { APP_VERSION } from "@/components/shell/AppHeader";
+import { pressable } from "@/components/fv";
 
 export const Route = createFileRoute("/more")({
   head: () => ({
@@ -111,9 +112,9 @@ function MorePage() {
           <Link
             key={row.label}
             to={row.to}
-            className={`flex items-center gap-4 px-4 py-4 transition-colors hover:bg-muted/60 ${
+            className={`${`flex items-center gap-4 px-4 py-4 transition-colors hover:bg-muted/60 ${
               index > 0 ? "border-t border-border/60" : ""
-            }`}
+            }`} ${pressable}`}
           >
             <span className="grid size-10 shrink-0 place-items-center rounded-xl bg-primary/10 text-primary">
               <row.icon className="size-5" />

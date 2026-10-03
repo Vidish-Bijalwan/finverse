@@ -60,6 +60,44 @@ This is **Module 1 (personal expense tracking)** of a 3-module college major pro
 | Runtime | Bun |
 | Deployment | Vercel (auto-deploys from `main`) |
 
+## Design system
+
+All tokens live in [`src/styles.css`](src/styles.css) as oklch semantic variables
+(`--primary`, `--success`, `--warning`, `--danger`, `--info`, `--gain`, `--loss`,
+`--keypad`, …) with intentional light- *and* dark-mode values. Component
+primitives live in the `fv` kit: [`src/components/fv/`](src/components/fv/).
+
+### Color
+- **Signature accent — mint `#00E5A0`**: reserved for primary actions, focus rings,
+  and hero moments. In dark mode it goes full electric on a deep-ink `#0B0E17` →
+  charcoal base; in light mode a deepened mint-teal keeps contrast on warm paper
+  `#FAFAF8`.
+- **Profit `#00C853` / loss `#FF5252`** (`--gain`/`--loss`): the only colors used
+  for P&L, returns, and ticker flashes — green means up, red means down, everywhere.
+- **Section accents**: payments skew blue, investments green, insights amber — one
+  accent per section so each tab has its own identity.
+- **Borders**: hairline 1px/1.5px discipline; no heavy dividers.
+
+### Typography
+- **Fraunces** (serif, `--font-display-serif`) for major headings — editorial voice.
+- **Space Grotesk** (`--font-display`) for all money: `.fv-money` enforces
+  `font-variant-numeric: tabular-nums` so ₹ figures align in columns; `.fv-hero`
+  renders hero numbers at 40px+ with tight tracking.
+- **11px uppercase eyebrows** (`.fv-eyebrow`: 11px/600/uppercase/0.12em tracking)
+  for section labels; **Roboto** for body text.
+- Fonts load via Google Fonts `display=swap` with `preconnect` in `__root.tsx`.
+
+### Components (`src/components/fv/`)
+NumberDisplay · TestModeBanner · StatBand · TxnRow (swipe actions) · HoldingRow ·
+MarketRow · TickerStrip · AmountInput + NumericKeypad · PinPad · PaymentSheet ·
+OrderSheet · ReceiptView · ChartCard (1D/1W/1M/1Y) · DonutAllocation ·
+SearchDropdown · AppLockScreen · EmptyState / ErrorState · PullToRefresh ·
+CategorizeSheet · **Pill · Accordion · Carousel · Tabs · Popover** · `press()`
+(active:scale-0.97 press states) · `tabsNav`. Utilities in `styles.css`:
+`fv-eyebrow`, `fv-hero`, `fv-money`, `fv-shimmer` (mint-tinted skeleton sweep).
+Motion utilities: count-up numbers (`charts/CountUp.tsx`), 300ms ticker price
+flash, reduced-motion respected throughout.
+
 ---
 
 ## Architecture
@@ -132,6 +170,61 @@ bun run build      # production build (vite + nitro)
 
 No environment variables or API keys are required — the app seeds realistic demo
 data on first launch. Your data stays in your browser's `localStorage`.
+
+## Testing
+
+```sh
+bun run test:unit     # vitest — unit tests (67 passing, incl. PIN crypto,
+                      # webhook HMAC vectors, order math, keypad reducer)
+bun run test:e2e      # playwright — browser E2E (chromium + Pixel 7 mobile)
+bun x tsc --noEmit    # typecheck (53 pre-existing errors in untouched legacy
+                      # files; zero in revamp/polish/fv code)
+bun x eslint          # lint — 0 errors
+bun run build         # production build (vite + nitro)
+```
+
+See [TEST_REPORT.md](./TEST_REPORT.md) for the full verification log (per-issue
+status, bundle sizes, honest pending items) and
+[docs/IMPLEMENTATION_STATUS.md](./docs/IMPLEMENTATION_STATUS.md) for the
+feature-by-feature build state.
+
+## Razorpay test-mode setup (optional)
+
+Payments include a **Razorpay test-mode rail**. The app is designed to fail
+closed: without keys the Razorpay tab shows an honest "not configured" state and
+nothing else changes.
+
+1. In the Razorpay dashboard, generate **test-mode** keys (never live keys).
+2. Set server-only env vars (never `VITE_`-prefixed — the secret must stay off
+   the client):
+   ```sh
+   RAZORPAY_KEY_ID=<test key id>
+   RAZORPAY_KEY_SECRET=<test key secret>
+   ```
+   In Vercel, add these to the server environment. Names are in
+   [`.env.example`](.env.example).
+3. Register the webhook in the Razorpay dashboard:
+   `https://<your-app>/api/razorpay-webhook` for `payment.authorized`,
+   `payment.captured`, `payment.failed`.
+4. Flow: payment link → new-tab test checkout → UI polls for 3s → success only
+   when the payment is `captured` **and** `webhook_verified`. The webhook verifies
+   HMAC-SHA256 signatures (401 on mismatch), upserts idempotently on
+   `razorpay_payment_id`, and writes the ledger transaction exactly once.
+
+## App lock
+
+Optional PIN lock (settings → App lock):
+
+- PIN is derived with **PBKDF2-SHA256, 100,000 iterations** (WebCrypto) — only
+  salt + hash are stored, never the PIN.
+- **Auto-lock timeouts**: 30s / 1m / 2m / 5m / 10m of background inactivity
+  (in-memory last-active tracking in `__root.tsx`).
+- **5 wrong attempts → 30s lockout.**
+- **WebAuthn**: offered only where a platform authenticator exists (Face ID /
+  Touch ID / Windows Hello / Android biometrics) as a device-local convenience
+  unlock — the PIN remains the authoritative credential.
+- **Forgot PIN**: no backdoor — signs you out and re-authenticates via Supabase.
+
 
 ## Deployment
 

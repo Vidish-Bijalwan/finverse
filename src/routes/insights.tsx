@@ -9,6 +9,7 @@ import { SpendingHeatmap } from "@/components/ai/SpendingHeatmap";
 import { StreakCard } from "@/components/ai/StreakCard";
 import { WeeklyDigest } from "@/components/ai/WeeklyDigest";
 import { Button } from "@/components/ui/button";
+import { pressable } from "@/components/fv";
 import { Card, CardContent } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { buildInsights, previousMonth } from "@/lib/ai/engine";
@@ -69,7 +70,7 @@ function InsightsPage() {
               <Button
                 variant="ghost"
                 size="icon"
-                className="size-8"
+                className={`size-8 ${pressable}`}
                 onClick={() => setMonth(previousMonth(month))}
                 aria-label={`Previous month (${monthLabel(previousMonth(month))})`}
               >
@@ -78,7 +79,7 @@ function InsightsPage() {
               <Button
                 variant="ghost"
                 size="icon"
-                className="size-8"
+                className={`size-8 ${pressable}`}
                 onClick={() => setMonth(shiftMonthKey(month, 1))}
                 disabled={isCurrentMonth}
                 aria-label={`Next month (${monthLabel(shiftMonthKey(month, 1))})`}
@@ -124,16 +125,22 @@ function InsightsPage() {
                   FinVerse AI checked your spending trends, budget usage, upcoming bills, goal pace
                   and savings rate. Everything looks healthy.
                 </p>
-                <Button variant="outline" size="sm" className="mt-4" asChild>
+                <Button variant="outline" size="sm" className={`mt-4 ${pressable}`} asChild>
                   <Link to="/expenses">Review transactions</Link>
                 </Button>
               </CardContent>
             </Card>
           )}
 
-          {insights.map((insight) => (
-            <InsightCard key={insight.id} insight={insight} />
-          ))}
+          {insights.length > 0 && (
+            <div className="flex snap-x gap-4 overflow-x-auto pb-2 sm:grid sm:grid-cols-1 sm:overflow-visible sm:pb-0">
+              {insights.map((insight) => (
+                <div key={insight.id} className="w-[86%] shrink-0 snap-start sm:w-auto sm:shrink">
+                  <InsightCard insight={insight} />
+                </div>
+              ))}
+            </div>
+          )}
         </div>
       </div>
     </div>

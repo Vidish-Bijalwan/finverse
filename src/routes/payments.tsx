@@ -3,6 +3,7 @@ import { useMemo, useState } from "react";
 import {
   ArrowLeft,
   ArrowUpRight,
+  ChevronDown,
   CreditCard,
   ExternalLink,
   History,
@@ -12,10 +13,12 @@ import {
   Wallet,
   X,
 } from "lucide-react";
+import { toast } from "sonner";
 import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
   AmountInput,
+  CategorizeSheet,
   EmptyState,
   ErrorState,
   NumberDisplay,
@@ -25,10 +28,18 @@ import {
   TestModeBanner,
   TxnRow,
   initialsOf,
+  pressable,
 } from "@/components/fv";
 import type { TxnStatus } from "@/components/fv";
-import { useAccountSummaries, useAddTransaction, useTransactions } from "@/lib/finance/hooks";
-import { todayISO } from "@/lib/finance/format";
+import { AccountDialog } from "@/components/money/AccountDialog";
+import {
+  useAccountSummaries,
+  useAddTransaction,
+  useDeleteTransaction,
+  useTransactions,
+  useUpdateTransaction,
+} from "@/lib/finance/hooks";
+import { formatINR, todayISO } from "@/lib/finance/format";
 import {
   buildUpiNote,
   groupTransactionsByMonth,
@@ -121,6 +132,7 @@ function PaymentsPage() {
             onClick={() => setTab(id)}
             aria-pressed={tab === id}
             className={cn(
+              pressable,
               "flex h-10 items-center justify-center gap-1.5 rounded-xl text-sm font-bold transition-colors",
               tab === id
                 ? "bg-card text-foreground shadow-card"
@@ -150,6 +162,7 @@ function SendTab() {
   const [amountPaise, setAmountPaise] = useState(0);
   const [accountId, setAccountId] = useState<string | null>(null);
   const [sheetOpen, setSheetOpen] = useState(false);
+  const [accountDialogOpen, setAccountDialogOpen] = useState(false);
   const [receipt, setReceipt] = useState<null | {
     status: "success" | "failure";
     txn?: Transaction;
@@ -159,6 +172,7 @@ function SendTab() {
   const { data: transactions } = useTransactions();
   const { data: summaries, isLoading: accountsLoading } = useAccountSummaries();
   const addTransaction = useAddTransaction();
+  const deleteTransaction = useDeleteTransaction();
 
   const payees = useMemo(() => {
     const seen = new Map<string, { name: string; at: string }>();
@@ -208,6 +222,20 @@ function SendTab() {
       ]);
       // Success is shown ONLY after the ledger write resolves.
       setReceipt({ status: "success", txn: created });
+      toast.success("Payment recorded", {
+        description: `${formatINR(amountPaise)} to ${payeeName || "recipient"} · simulated UPI`,
+        action: {
+          label: "Undo",
+          onClick: () => {
+            // Undo reverses the ledger write for real.
+            deleteTransaction.mutate(created.id, {
+              onSuccess: () => toast.success("Payment reversed"),
+              onError: () => toast.error("Couldn't reverse — delete it from History."),
+            });
+          },
+        },
+        duration: 8000,
+      });
     } catch (err) {
       setReceipt({
         status: "failure",
@@ -253,7 +281,10 @@ function SendTab() {
                     key={p.name}
                     type="button"
                     onClick={() => startFor(p.name)}
-                    className="flex flex-col items-center gap-1.5 rounded-2xl p-2 transition-colors hover:bg-muted/60"
+                    className={cn(
+                      pressable,
+                      "flex flex-col items-center gap-1.5 rounded-2xl p-2 transition-colors hover:bg-muted/60",
+                    )}
                   >
                     <span
                       aria-hidden
@@ -282,7 +313,10 @@ function SendTab() {
               setReceipt(null);
               setPhase("recipient");
             }}
-            className="flex h-13 w-full items-center justify-center gap-2 rounded-full bg-primary py-3.5 text-base font-bold text-primary-foreground hover:bg-primary-hover"
+            className={cn(
+              pressable,
+              "flex h-13 w-full items-center justify-center gap-2 rounded-full bg-primary py-3.5 text-base font-bold text-primary-foreground hover:bg-primary-hover",
+            )}
           >
             <Plus className="size-5" aria-hidden /> New payment
           </button>
@@ -307,10 +341,22 @@ function SendTab() {
           {accountsLoading ? (
             <Skeleton className="h-14 rounded-2xl" />
           ) : accounts.length === 0 ? (
-            <ErrorState
-              title="No accounts yet"
-              body="Create an account first — simulated UPI payments debit a FinVerse account."
-            />
+            <div className="flex flex-col gap-3">
+              <ErrorState
+                title="No accounts yet"
+                body="Create an account first — simulated UPI payments debit a FinVerse account."
+              />
+              <button
+                type="button"
+                onClick={() => setAccountDialogOpen(true)}
+                className={cn(
+                  pressable,
+                  "flex h-12 w-full items-center justify-center gap-2 rounded-full bg-primary text-base font-bold text-primary-foreground transition-colors hover:bg-primary-hover",
+                )}
+              >
+                <Plus className="size-5" aria-hidden /> Create account
+              </button>
+            </div>
           ) : (
             <label className="flex items-center gap-3 rounded-2xl border border-border bg-card px-4 py-3 shadow-card">
               <Wallet className="size-5 shrink-0 text-muted-foreground" aria-hidden />
@@ -375,7 +421,7 @@ function SendTab() {
           <button
             type="button"
             onClick={reset}
-            className="mx-auto text-sm font-semibold text-primary hover:underline"
+            className={cn(pressable, "mx-auto text-sm font-semibold text-primary hover:underline")}
           >
             Back to payments
           </button>
@@ -413,6 +459,8 @@ function SendTab() {
           </p>
         )}
       </PaymentSheet>
+
+      <AccountDialog open={accountDialogOpen} onOpenChange={setAccountDialogOpen} editing={null} />
     </div>
   );
 }
@@ -424,7 +472,10 @@ function StepHeader({ title, onBack }: { title: string; onBack: () => void }) {
         type="button"
         onClick={onBack}
         aria-label="Back"
-        className="grid size-10 place-items-center rounded-full text-foreground hover:bg-muted/60"
+        className={cn(
+          pressable,
+          "grid size-10 place-items-center rounded-full text-foreground hover:bg-muted/60",
+        )}
       >
         <ArrowLeft className="size-5" aria-hidden />
       </button>
@@ -465,6 +516,7 @@ function RecipientStep({
         disabled={!valid}
         onClick={() => onContinue(buildUpiNote(name))}
         className={cn(
+          pressable,
           "h-13 rounded-full py-3.5 text-base font-bold transition-colors",
           valid
             ? "bg-primary text-primary-foreground hover:bg-primary-hover"
@@ -485,6 +537,7 @@ function RazorpayTab() {
   const [waitingShortUrl, setWaitingShortUrl] = useState<string | null>(null);
   const [doneRecord, setDoneRecord] = useState<PaymentRecord | null>(null);
   const [createError, setCreateError] = useState<string | null>(null);
+  const [setupOpen, setSetupOpen] = useState(false);
 
   const statusQuery = useRazorpayStatus();
   const linksQuery = usePaymentLinks(rzPhase === "waiting");
@@ -545,31 +598,59 @@ function RazorpayTab() {
 
   if (!configured) {
     return (
-      <div className="flex flex-col gap-4 rounded-2xl border border-border bg-card p-6 shadow-card">
+      <div className="flex flex-col gap-4 rounded-[14px] border border-border bg-card p-4 shadow-card sm:p-6">
         <div className="grid size-14 place-items-center rounded-full bg-tint">
           <CreditCard className="size-6 text-primary" aria-hidden />
         </div>
         <h2 className="text-lg font-bold text-foreground">Razorpay test keys not configured</h2>
         <p className="text-sm leading-6 text-muted-foreground">
-          Razorpay test mode needs server-only keys. Add{" "}
-          <code className="rounded bg-muted px-1.5 py-0.5 font-mono text-xs">RAZORPAY_KEY_ID</code>{" "}
-          and{" "}
-          <code className="rounded bg-muted px-1.5 py-0.5 font-mono text-xs">
-            RAZORPAY_KEY_SECRET
-          </code>{" "}
-          (test-mode keys only) to the server environment, plus{" "}
-          <code className="rounded bg-muted px-1.5 py-0.5 font-mono text-xs">
-            SUPABASE_SERVICE_ROLE_KEY
-          </code>{" "}
-          for the webhook. Then register the webhook URL in the Razorpay dashboard (test mode):
+          Nothing here is a real payment — and nothing here fakes one either. Until the test-mode
+          keys are set, this rail stays honestly unavailable.
         </p>
-        <code className="block truncate rounded-xl bg-muted px-3 py-2 font-mono text-xs text-foreground">
-          {typeof window !== "undefined" ? window.location.origin : ""}/api/razorpay-webhook
-        </code>
-        <p className="text-sm leading-6 text-muted-foreground">
-          Nothing here is a real payment — and nothing here fakes one either. Until the keys are
-          set, this rail stays honestly unavailable.
-        </p>
+        <div className="overflow-hidden rounded-[14px] border border-border">
+          <button
+            type="button"
+            aria-expanded={setupOpen}
+            onClick={() => setSetupOpen((o) => !o)}
+            className={cn(
+              pressable,
+              "flex w-full items-center justify-between px-4 py-3 text-left",
+            )}
+          >
+            <span className="text-sm font-bold text-foreground">Setup instructions</span>
+            <ChevronDown
+              className={cn(
+                "size-4 text-muted-foreground transition-transform duration-200",
+                setupOpen && "rotate-180",
+              )}
+              aria-hidden
+            />
+          </button>
+          {setupOpen && (
+            <div className="flex flex-col gap-3 border-t border-border px-4 py-4">
+              <p className="text-sm leading-6 text-muted-foreground">
+                Razorpay test mode needs server-only keys. Add{" "}
+                <code className="rounded bg-muted px-1.5 py-0.5 font-mono text-xs">
+                  RAZORPAY_KEY_ID
+                </code>{" "}
+                and{" "}
+                <code className="rounded bg-muted px-1.5 py-0.5 font-mono text-xs">
+                  RAZORPAY_KEY_SECRET
+                </code>{" "}
+                (test-mode keys only) to the server environment, plus{" "}
+                <code className="rounded bg-muted px-1.5 py-0.5 font-mono text-xs">
+                  SUPABASE_SERVICE_ROLE_KEY
+                </code>{" "}
+                for the webhook. Then register the webhook URL in the Razorpay dashboard (test
+                mode):
+              </p>
+              <code className="block truncate rounded-xl bg-muted px-3 py-2 font-mono text-xs text-foreground">
+                {typeof window !== "undefined" ? window.location.origin : ""}
+                /api/razorpay-webhook
+              </code>
+            </div>
+          )}
+        </div>
       </div>
     );
   }
@@ -632,7 +713,10 @@ function RazorpayTab() {
               <button
                 type="button"
                 onClick={() => window.open(waitingShortUrl, "_blank", "noopener,noreferrer")}
-                className="flex h-11 items-center gap-2 rounded-full bg-primary px-5 text-sm font-bold text-primary-foreground hover:bg-primary-hover"
+                className={cn(
+                  pressable,
+                  "flex h-11 items-center gap-2 rounded-full bg-primary px-5 text-sm font-bold text-primary-foreground hover:bg-primary-hover",
+                )}
               >
                 <ExternalLink className="size-4" aria-hidden /> Reopen payment link
               </button>
@@ -640,7 +724,10 @@ function RazorpayTab() {
             <button
               type="button"
               onClick={resetRazorpay}
-              className="flex h-11 items-center gap-2 rounded-full border border-border bg-card px-5 text-sm font-bold text-foreground hover:bg-muted/60"
+              className={cn(
+                pressable,
+                "flex h-11 items-center gap-2 rounded-full border border-border bg-card px-5 text-sm font-bold text-foreground hover:bg-muted/60",
+              )}
             >
               <X className="size-4" aria-hidden /> Cancel
             </button>
@@ -739,7 +826,8 @@ function RecentLinks({ onSelect }: { onSelect: (r: PaymentRecord) => void }) {
             onClick={() => rec && onSelect(rec)}
             disabled={!rec}
             className={cn(
-              "flex items-center gap-3 rounded-2xl border border-border bg-card px-4 py-3 text-left shadow-card",
+              pressable,
+              "flex items-center gap-3 rounded-[14px] border border-border bg-card px-4 py-3 text-left shadow-card",
               rec ? "hover:bg-muted/40" : "opacity-80",
             )}
           >
@@ -773,8 +861,11 @@ function RecentLinks({ onSelect }: { onSelect: (r: PaymentRecord) => void }) {
 
 function HistoryTab() {
   const [detail, setDetail] = useState<Transaction | null>(null);
+  const [categorizing, setCategorizing] = useState<Transaction | null>(null);
   const txnsQuery = useTransactions();
   const paymentsQuery = usePayments(false);
+  const deleteTxn = useDeleteTransaction();
+  const updateTxn = useUpdateTransaction();
 
   const paymentTxns = useMemo(
     () => (txnsQuery.data ?? []).filter(isPaymentTransaction),
@@ -830,44 +921,74 @@ function HistoryTab() {
   }
 
   return (
-    <div className="flex flex-col gap-5">
-      {groups.map((g) => (
-        <section key={g.monthKey} aria-label={g.label}>
-          <h2 className="sticky top-0 z-10 bg-background/95 py-1.5 text-xs font-bold uppercase tracking-wide text-muted-foreground backdrop-blur">
-            {g.label}
-          </h2>
-          <div className="mt-1 flex flex-col">
-            {g.items.map((t) => (
-              <TxnRow
-                key={t.id}
-                name={nameOf(t)}
-                secondary={`${formatDay(t.dateISO)} · ${RAIL_LABEL[t.payMode] ?? t.payMode}`}
-                amountPaise={-t.amountPaise}
-                status={statusOf(t)}
-                onClick={() => setDetail(t)}
-              />
-            ))}
-          </div>
-        </section>
-      ))}
-
-      <Dialog open={detail !== null} onOpenChange={(open) => !open && setDetail(null)}>
-        <DialogContent className="max-w-md rounded-3xl">
-          <DialogTitle className="sr-only">Payment receipt</DialogTitle>
-          {detail &&
-            (() => {
-              const rec = paymentByTxnId.get(detail.id);
-              return (
-                <HistoryDetail
-                  txn={detail}
-                  {...(rec ? { record: rec } : {})}
-                  status={statusOf(detail)}
+    <>
+      <div className="flex flex-col gap-5">
+        {groups.map((g) => (
+          <section key={g.monthKey} aria-label={g.label}>
+            <h2 className="sticky top-0 z-10 bg-background/95 py-1.5 text-xs font-bold uppercase tracking-wide text-muted-foreground backdrop-blur">
+              {g.label}
+            </h2>
+            <div className="mt-1 flex flex-col gap-2">
+              {g.items.map((t) => (
+                <TxnRow
+                  key={t.id}
+                  name={nameOf(t)}
+                  secondary={`${formatDay(t.dateISO)} · ${RAIL_LABEL[t.payMode] ?? t.payMode}`}
+                  amountPaise={-t.amountPaise}
+                  status={statusOf(t)}
+                  onClick={() => setDetail(t)}
+                  swipeActions={{
+                    onCategorize: () => setCategorizing(t),
+                    onDelete: () =>
+                      deleteTxn.mutate(t.id, {
+                        onSuccess: () => toast.success("Payment deleted"),
+                        onError: () => toast.error("Couldn't delete — try again."),
+                      }),
+                  }}
                 />
-              );
-            })()}
-        </DialogContent>
-      </Dialog>
-    </div>
+              ))}
+            </div>
+          </section>
+        ))}
+
+        <Dialog open={detail !== null} onOpenChange={(open) => !open && setDetail(null)}>
+          <DialogContent className="max-w-md rounded-3xl">
+            <DialogTitle className="sr-only">Payment receipt</DialogTitle>
+            {detail &&
+              (() => {
+                const rec = paymentByTxnId.get(detail.id);
+                return (
+                  <HistoryDetail
+                    txn={detail}
+                    {...(rec ? { record: rec } : {})}
+                    status={statusOf(detail)}
+                  />
+                );
+              })()}
+          </DialogContent>
+        </Dialog>
+      </div>
+
+      <CategorizeSheet
+        open={categorizing !== null}
+        onOpenChange={(o) => {
+          if (!o) setCategorizing(null);
+        }}
+        currentCategory={categorizing?.category}
+        onPick={(categoryId) => {
+          const target = categorizing;
+          setCategorizing(null);
+          if (!target) return;
+          updateTxn.mutate(
+            { id: target.id, patch: { category: categoryId } },
+            {
+              onSuccess: () => toast.success("Payment recategorized"),
+              onError: () => toast.error("Couldn't update — try again."),
+            },
+          );
+        }}
+      />
+    </>
   );
 }
 

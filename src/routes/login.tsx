@@ -7,6 +7,9 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useAuth } from "@/lib/auth";
+import { usePrefersReducedMotion } from "@/hooks/use-prefers-reduced-motion";
+import { cn } from "@/lib/utils";
+import { pressable } from "@/components/fv";
 
 export const Route = createFileRoute("/login")({
   head: () => ({
@@ -132,7 +135,7 @@ function AuthForm({ mode }: { mode: "login" | "signup" }) {
           <button
             type="button"
             onClick={() => setShowPassword((v) => !v)}
-            className="absolute right-2 top-1/2 -translate-y-1/2 rounded p-1 text-muted-foreground transition-colors hover:text-foreground"
+            className={`absolute right-2 top-1/2 -translate-y-1/2 rounded p-1 text-muted-foreground transition-colors hover:text-foreground ${pressable}`}
             aria-label={showPassword ? "Hide password" : "Show password"}
           >
             {showPassword ? <EyeOff className="size-4" /> : <Eye className="size-4" />}
@@ -156,7 +159,7 @@ function AuthForm({ mode }: { mode: "login" | "signup" }) {
         </p>
       )}
 
-      <Button type="submit" className="w-full" disabled={submitting}>
+      <Button type="submit" className={`w-full ${pressable}`} disabled={submitting}>
         {submitting && <Loader2 className="mr-2 size-4 animate-spin" aria-hidden="true" />}
         {mode === "login" ? "Sign in" : "Create account"}
       </Button>
@@ -169,6 +172,7 @@ function LoginPage() {
   const [tab, setTab] = useState<"login" | "signup">("login");
   const [googleError, setGoogleError] = useState<string | null>(null);
   const [googleLoading, setGoogleLoading] = useState(false);
+  const reducedMotion = usePrefersReducedMotion();
 
   if (!loading && user) {
     return <Navigate to={profile?.onboarding_completed ? "/" : "/onboarding"} />;
@@ -188,16 +192,21 @@ function LoginPage() {
   };
 
   return (
-    <div className="flex min-h-[calc(100vh-4rem)] items-center justify-center px-4 py-10">
-      <div className="w-full max-w-sm">
+    <div className="relative flex min-h-[calc(100vh-4rem)] items-center justify-center overflow-hidden px-4 py-10">
+      {/* Brand-hero mesh gradient — login only. Static when reduced motion. */}
+      <div
+        aria-hidden="true"
+        className={cn("fv-mesh fv-mesh-dark", !reducedMotion && "fv-mesh-animated")}
+      />
+      <div className="relative w-full max-w-sm">
         <div className="mb-6 flex flex-col items-center text-center">
           <div className="grid size-12 place-items-center rounded-xl bg-primary-dark shadow-logo">
-            <ChartNoAxesCombined className="size-6 text-primary-foreground" strokeWidth={2.5} />
+            <ChartNoAxesCombined className="size-6 text-background" strokeWidth={2.5} />
           </div>
-          <h1 className="mt-4 text-2xl font-black tracking-tight text-primary-dark">
+          <h1 className="mt-4 text-2xl font-black tracking-tight text-white">
             Fin<span className="text-primary">Verse</span>
           </h1>
-          <p className="mt-1 text-sm text-muted-foreground">
+          <p className="mt-1 text-sm text-white/70">
             Clear, explainable insights for your financial life.
           </p>
         </div>
@@ -233,7 +242,7 @@ function LoginPage() {
           <Button
             type="button"
             variant="outline"
-            className="w-full"
+            className={`w-full ${pressable}`}
             onClick={handleGoogle}
             disabled={googleLoading || loading}
           >
@@ -246,7 +255,7 @@ function LoginPage() {
           </Button>
         </div>
 
-        <p className="mt-4 text-center text-xs text-muted-foreground">
+        <p className="mt-4 text-center text-xs text-white/60">
           Your data is stored securely and never shared.
         </p>
       </div>

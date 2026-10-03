@@ -35,6 +35,7 @@ import { buildTransactionsCSV } from "@/lib/settings";
 import { useVoiceInput } from "@/lib/voice";
 import type { PayMode, Transaction } from "@/lib/finance/types";
 import { cn, downloadFile } from "@/lib/utils";
+import { pressable } from "@/components/fv";
 
 export const Route = createFileRoute("/expenses")({
   head: () => ({
@@ -98,7 +99,7 @@ function SwipeableRow({
   const translate = open ? -DELETE_WIDTH : -dx;
 
   return (
-    <div className="relative overflow-hidden rounded-2xl">
+    <div className="relative overflow-hidden rounded-[14px]">
       <button
         type="button"
         onClick={(e) => {
@@ -364,7 +365,7 @@ function ExpensesPage() {
       {/* Tabs: transactions / recurring + accounts shortcut */}
       <div className="mt-3 flex items-center gap-2">
         <div
-          className="flex flex-1 gap-1 rounded-2xl bg-muted p-1"
+          className="flex flex-1 gap-1 rounded-[14px] bg-muted p-1"
           role="tablist"
           aria-label="Expenses sections"
         >
@@ -381,6 +382,7 @@ function ExpensesPage() {
               aria-selected={tab === value}
               onClick={() => setTab(value)}
               className={cn(
+                pressable,
                 "flex flex-1 items-center justify-center gap-1.5 rounded-xl px-3 py-2 text-sm font-semibold transition-colors",
                 tab === value
                   ? "bg-card text-foreground shadow-sm"
@@ -395,7 +397,7 @@ function ExpensesPage() {
         <Link
           to="/accounts"
           aria-label="Manage accounts"
-          className="flex items-center gap-1.5 rounded-2xl bg-card px-3.5 py-2.5 text-sm font-bold text-primary shadow-tile transition-colors hover:bg-primary/10"
+          className="flex items-center gap-1.5 rounded-[14px] bg-card px-3.5 py-2.5 text-sm font-bold text-primary shadow-tile transition-colors hover:bg-primary/10"
         >
           <Wallet className="h-4 w-4" /> Accounts
         </Link>
@@ -404,7 +406,7 @@ function ExpensesPage() {
           onClick={handleExportCSV}
           aria-label="Export visible transactions to CSV"
           title="Export visible transactions to CSV"
-          className="flex items-center gap-1.5 rounded-2xl bg-card px-3.5 py-2.5 text-sm font-bold text-primary shadow-tile transition-colors hover:bg-primary/10"
+          className="flex items-center gap-1.5 rounded-[14px] bg-card px-3.5 py-2.5 text-sm font-bold text-primary shadow-tile transition-colors hover:bg-primary/10"
         >
           <Download className="h-4 w-4" /> Export
         </button>
@@ -418,13 +420,13 @@ function ExpensesPage() {
         <>
           {/* Month totals */}
           <div className="mt-3 grid grid-cols-2 gap-2">
-            <div className="rounded-2xl bg-card p-3 shadow-tile">
+            <div className="rounded-[14px] bg-card p-3 shadow-tile">
               <p className="text-xs font-medium text-muted-foreground">Spent</p>
               <p className="text-lg font-bold tabular-nums text-destructive">
                 {formatINR(totals.spent)}
               </p>
             </div>
-            <div className="rounded-2xl bg-card p-3 shadow-tile">
+            <div className="rounded-[14px] bg-card p-3 shadow-tile">
               <p className="text-xs font-medium text-muted-foreground">Earned</p>
               <p className="text-lg font-bold tabular-nums text-success">
                 {formatINR(totals.earned)}
@@ -433,7 +435,7 @@ function ExpensesPage() {
           </div>
 
           {/* Quick-add bar */}
-          <div className="mt-3 rounded-2xl bg-card p-2 shadow-tile">
+          <div className="mt-3 rounded-[14px] bg-card p-2 shadow-tile">
             <div className="flex items-center gap-1">
               <input
                 type="text"
@@ -451,7 +453,7 @@ function ExpensesPage() {
                   type="button"
                   onClick={() => setQuickAdd("")}
                   aria-label="Clear quick add"
-                  className="rounded-full p-2 text-muted-foreground hover:bg-muted"
+                  className={cn(pressable, "rounded-full p-2 text-muted-foreground hover:bg-muted")}
                 >
                   <X className="h-4 w-4" />
                 </button>
@@ -465,6 +467,7 @@ function ExpensesPage() {
                   voiceSupported ? "Speak an expense" : "Voice input not supported in this browser"
                 }
                 className={cn(
+                  pressable,
                   "rounded-full p-2.5 transition-colors",
                   listening
                     ? "bg-destructive text-destructive-foreground motion-safe:animate-pulse"
@@ -479,7 +482,10 @@ function ExpensesPage() {
                 disabled={scanning}
                 aria-label="Scan receipt"
                 title="Scan a receipt (demo)"
-                className="rounded-full p-2.5 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground disabled:opacity-60"
+                className={cn(
+                  pressable,
+                  "rounded-full p-2.5 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground disabled:opacity-60",
+                )}
               >
                 {scanning ? (
                   <Loader2 className="h-5 w-5 animate-spin" />
@@ -507,7 +513,10 @@ function ExpensesPage() {
                   type="button"
                   onClick={confirmQuickAdd}
                   disabled={addTxn.isPending}
-                  className="shrink-0 rounded-full bg-primary px-4 py-1.5 text-sm font-bold text-primary-foreground transition-opacity hover:opacity-90 disabled:opacity-60"
+                  className={cn(
+                    pressable,
+                    "shrink-0 rounded-full bg-primary px-4 py-1.5 text-sm font-bold text-primary-foreground transition-opacity hover:opacity-90 disabled:opacity-60",
+                  )}
                 >
                   {addTxn.isPending ? "Saving…" : "Confirm"}
                 </button>
@@ -546,7 +555,7 @@ function ExpensesPage() {
           {/* Type chips + category select */}
           <div className="mt-3 flex items-center gap-2">
             <div
-              className="flex gap-1 rounded-2xl bg-muted p-1"
+              className="flex gap-1 rounded-[14px] bg-muted p-1"
               role="tablist"
               aria-label="Type filter"
             >
@@ -564,6 +573,7 @@ function ExpensesPage() {
                   aria-selected={typeFilter === value}
                   onClick={() => setTypeFilter(value)}
                   className={cn(
+                    pressable,
                     "rounded-xl px-3.5 py-1.5 text-sm font-semibold transition-colors",
                     typeFilter === value
                       ? "bg-card text-foreground shadow-sm"
@@ -622,6 +632,7 @@ function ExpensesPage() {
                       )
                     }
                     className={cn(
+                      pressable,
                       "shrink-0 rounded-full px-3 py-1.5 text-xs font-semibold transition-colors",
                       active
                         ? "bg-primary text-primary-foreground"
@@ -636,7 +647,10 @@ function ExpensesPage() {
                 <button
                   type="button"
                   onClick={() => setTagFilter([])}
-                  className="flex shrink-0 items-center gap-1 rounded-full bg-destructive/10 px-3 py-1.5 text-xs font-semibold text-destructive"
+                  className={cn(
+                    pressable,
+                    "flex shrink-0 items-center gap-1 rounded-full bg-destructive/10 px-3 py-1.5 text-xs font-semibold text-destructive",
+                  )}
                 >
                   <X className="h-3 w-3" /> Clear
                 </button>
@@ -649,7 +663,7 @@ function ExpensesPage() {
             {isLoading && (
               <div className="flex flex-col gap-3" aria-label="Loading transactions">
                 {Array.from({ length: 6 }).map((_, i) => (
-                  <div key={i} className="flex items-center gap-3 rounded-2xl bg-card p-3">
+                  <div key={i} className="flex items-center gap-3 rounded-[14px] bg-card p-3">
                     <Skeleton className="h-11 w-11 rounded-xl" />
                     <div className="flex-1">
                       <Skeleton className="h-4 w-2/3" />
@@ -662,8 +676,8 @@ function ExpensesPage() {
             )}
 
             {!isLoading && filtered.length === 0 && (
-              <div className="flex flex-col items-center gap-3 rounded-3xl bg-card px-6 py-12 text-center shadow-tile">
-                <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-muted">
+              <div className="flex flex-col items-center gap-3 rounded-[14px] bg-card px-6 py-12 text-center shadow-tile">
+                <div className="flex h-14 w-14 items-center justify-center rounded-[14px] bg-muted">
                   <Plus className="h-7 w-7 text-muted-foreground" />
                 </div>
                 <div>
@@ -675,7 +689,10 @@ function ExpensesPage() {
                 <button
                   type="button"
                   onClick={() => openAdd()}
-                  className="rounded-full bg-primary px-5 py-2.5 text-sm font-bold text-primary-foreground transition-opacity hover:opacity-90"
+                  className={cn(
+                    pressable,
+                    "rounded-full bg-primary px-5 py-2.5 text-sm font-bold text-primary-foreground transition-opacity hover:opacity-90",
+                  )}
                 >
                   Add transaction
                 </button>
@@ -723,7 +740,7 @@ function ExpensesPage() {
                             }
                             deleteLabel={`Delete ${t.note || cat?.label || "transaction"}`}
                           >
-                            <div className="flex items-center gap-3 rounded-2xl bg-card p-3 shadow-tile">
+                            <div className="flex items-center gap-3 rounded-[14px] bg-card p-3 shadow-tile">
                               <span
                                 className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl"
                                 style={{ backgroundColor: `${color}1f`, color }}
@@ -767,8 +784,9 @@ function ExpensesPage() {
         onClick={() => openAdd()}
         aria-label="Add transaction"
         className={cn(
+          pressable,
           "fixed bottom-6 right-6 z-40 flex h-14 w-14 items-center justify-center rounded-full",
-          "bg-primary text-primary-foreground shadow-modal transition-transform hover:scale-105 active:scale-95",
+          "bg-primary text-primary-foreground shadow-modal transition-transform hover:scale-105",
         )}
       >
         <Plus className="h-6 w-6" />

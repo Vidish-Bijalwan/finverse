@@ -13,6 +13,7 @@ import { cn } from "@/lib/utils";
 import { AnimatedProgress } from "@/components/money/AnimatedProgress";
 import { BudgetDialog } from "@/components/money/BudgetDialog";
 import { addMonthsToKey, monthLabel } from "@/components/money/utils";
+import { pressable } from "@/components/fv";
 
 export const Route = createFileRoute("/budgets")({
   head: () => ({
@@ -92,6 +93,7 @@ function BudgetCard({
             size="icon"
             onClick={onEdit}
             aria-label={`Edit ${category?.label ?? "budget"}`}
+            className={pressable}
           >
             <Pencil className="h-4 w-4" />
           </Button>
@@ -174,7 +176,7 @@ function BudgetsPage() {
           <h1 className="text-2xl font-bold tracking-tight">Budgets</h1>
           <p className="text-sm text-muted-foreground">Monthly spending limits per category.</p>
         </div>
-        <Button onClick={() => openNew()}>
+        <Button onClick={() => openNew()} className={pressable}>
           <Plus className="mr-2 h-4 w-4" aria-hidden />
           Set budget
         </Button>
@@ -186,13 +188,20 @@ function BudgetsPage() {
           size="icon"
           onClick={() => shiftMonth(-1)}
           aria-label="Previous month"
+          className={pressable}
         >
           <ChevronLeft className="h-4 w-4" />
         </Button>
         <p className="w-32 text-center font-medium tabular-nums" aria-live="polite">
           {monthLabel(month)}
         </p>
-        <Button variant="outline" size="icon" onClick={() => shiftMonth(1)} aria-label="Next month">
+        <Button
+          variant="outline"
+          size="icon"
+          onClick={() => shiftMonth(1)}
+          aria-label="Next month"
+          className={pressable}
+        >
           <ChevronRight className="h-4 w-4" />
         </Button>
       </div>
@@ -213,7 +222,7 @@ function BudgetsPage() {
             <p className="max-w-sm text-sm text-muted-foreground">
               Pick a category and a monthly limit to start tracking spending against it.
             </p>
-            <Button onClick={() => openNew()}>
+            <Button onClick={() => openNew()} className={pressable}>
               <Plus className="mr-2 h-4 w-4" aria-hidden />
               Set your first budget
             </Button>
@@ -276,7 +285,12 @@ function BudgetsPage() {
                             Spent {formatINR(spent)} in {monthLabel(month)}
                           </p>
                         </div>
-                        <Button variant="ghost" size="sm" onClick={() => openNew(categoryId)}>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => openNew(categoryId)}
+                          className={pressable}
+                        >
                           <Plus className="mr-1 h-3.5 w-3.5" aria-hidden />
                           Set budget
                         </Button>

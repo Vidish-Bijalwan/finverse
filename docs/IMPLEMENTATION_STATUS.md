@@ -41,3 +41,148 @@ Env handoff: `RAZORPAY_KEY_ID`, `RAZORPAY_KEY_SECRET` (test keys, server-only), 
 - 2 tsc errors introduced in stocks.$symbol.tsx during revamp → fixed by coordinator.
 - 20 prettier/eslint issues across revamp files → auto-fixed.
 - Dashboard Pay pill was plain `<a>` (route didn't exist at the time) → restored to typed `<Link to="/payments">`.
+
+## Code review findings (Worker C perf pass, 2026-10-03)
+
+Bundle (post-polish, pre-perf): 1,736,799 bytes total JS in `.output/public/assets/*.js`
+(vs 1,718,293 pre-polish baseline, +18,506). Top chunks: root `index-*` 503KB
+(react/react-dom/router/shell), recharts core 346KB, supabase 240KB,
+tools route 56KB, expenses route 51KB. Lucide tree-shaking verified healthy
+(no unused icon glyphs in any chunk); recharts was eagerly reachable from the
+dashboard route chunk only (NOT the root chunk), so login/onboarding never
+paid for it.
+
+### Perf changes made
+- **Recharts lazy-split (dashboard + portfolio):** `MonthBars`/`NetWorthSpark`/
+  `SpendDonut` in `routes/index.tsx` and `DonutAllocation` in
+  `routes/portfolio.tsx` are now `React.lazy` + `Suspense` with `ChartSkeleton`
+  fallbacks. All render behind the existing client-only `chartsReady` mount
+  gate, so SSR is unaffected. Dashboard initial route chunk drops ~400KB of
+  eager recharts; it streams in after mount.
+- **Query dedupe (`lib/finance/hooks.ts`):** `useAccountSummaries()` previously
+  fired its own full-table `transactions` fetch via `fetchAccountSummaries()`
+  while `useTransactions()` fired another — 2 identical Supabase reads on every
+  dashboard/portfolio mount. It now resolves transactions through
+  `qc.fetchQuery` on the existing `["finverse","transactions","all"]` key
+  (key shapes unchanged), so React Query dedupes the in-flight request → 1
+  fetch. `balanceForAccount` exported from `db.ts` to support this;
+  `ensureRecurringPosted()` preserved in the shared fetch.
+- **Memoized charts:** `MonthBars`, `NetWorthSpark`, `SpendDonut`,
+  `DonutAllocation` wrapped in `React.memo` — parents re-render on unrelated
+  state (categorize sheet, pull-to-refresh) with stable `useMemo`'d data refs,
+  so recharts no longer re-renders then.
+- **Dead code removed:** 21 unused shadcn `ui/*` components deleted
+  (accordion, aspect-ratio, breadcrumb, calendar, carousel, chart, checkbox,
+  command, context-menu, drawer, form, hover-card, input-otp, menubar,
+  navigation-menu, pagination, popover, radio-group, resizable, sidebar) —
+  zero had any importer in `src`/`e2e`. Unimported files were never bundled,
+  so this is source hygiene, not byte savings.
+
+### Deliberately skipped (with reason)
+- Row memoization (`TxnRow`/`MarketRow`/`HoldingRow`): callsites pass inline
+  arrow callbacks + fresh `swipeActions` objects, so `memo` alone would be a
+  no-op; rows are cheap DOM and lists are short. Stabilizing callbacks
+  parent-side is a larger refactor with negligible payoff — skipped per
+  "don't memoize trivially-cheap components".
+- List virtualization: expenses/payments lists are month-scoped (typically
+  <100 rows) with date grouping + swipe gestures; virtualization complexity
+  not justified. Revisit if a month ever exceeds ~100 rows.
+- `package.json` unused deps (`date-fns`, `@hookform/resolvers`, plus
+  `embla-carousel-react`/`vaul`/`cmdk`/`input-otp`/`react-resizable-panels`/
+  `react-day-picker`/`react-hook-form` now that their only importers — the
+  deleted ui files — are gone): removal needs `bun install` to regenerate
+  `bun.lock`, which this worker may not run; left for the coordinator.
+  None are bundled (no remaining importers), so no byte impact either way.
+
+### Review findings (not changed — for follow-up)
+1. **`Pill` is dead:** the revamp's design-system `Pill` (`components/fv/Pill.tsx`)
+   has zero usages — every route hand-rolls `rounded-full` chips with
+   inconsistent padding/color classes (19 files). Either adopt `Pill`
+   everywhere or delete it.
+2. **BottomTabBar missing `aria-current`:** active tab has no
+   `aria-current="page"`; the nav has `aria-label` but screen readers can't
+   tell the current tab.
+3. **Prop drilling:** `routes/index.tsx` threads `month`/`setMonth` and
+   categorize-sheet state through ~900 lines; consider extracting the
+   dashboard sections. Not a bug, just growing.
+4. **Duplicate `ensureRecurringPosted` trigger:** both `useTransactions` and
+   (now) the shared summaries fetch can trigger it; it's idempotent, so
+   harmless, but a single explicit "post recurring on app start" would be
+   cleaner than piggybacking on query fns.
+5. **`fetchWatchlist`/`useWatchlist` dual sources:** dashboard uses
+   `useQuery({queryKey: WATCHLIST_QUERY_KEY})` + `useWatchlistUI()` from
+   `components/markets/useWatchlist` — two hooks over the same data; already
+   shares the key, but the split is easy to misuse.
+6. **No `<img>` tags anywhere** — all imagery is SVG/icons; nothing to
+   optimize. Fonts: preconnect + `display=swap` present for Roboto + Space
+   Grotesk in `__root.tsx` ✓.
+7. **53 pre-existing tsc strict-mode errors** (exactOptionalPropertyTypes /
+   noUncheckedIndexedAccess in money dialogs, etc.) — runtime-safe per prior
+   notes; untouched by this pass, 0 new errors introduced.
+
+## UI polish pass (issues #52–#58) — Completed 2026-10-03
+
+Branch: polish work on top of `main@5798cae1` (PR #51 merged). No `.git` in workdir;
+coordinator merges. Verification: `bun run test:unit` 67/67 ✅ · `bun x tsc --noEmit`
+53 errors all pre-existing, 0 in polish files ✅ · `bun x eslint .` 0 errors, 9 benign
+react-refresh warnings ✅ · `bun run build` green ✅ · client JS 1,743,130 bytes
+(+1.45% vs 1,718,293 baseline) ✅. See `TEST_REPORT.md` ("UI polish pass") for the
+full per-item table and command outputs.
+
+### #52–#56: 30 UI items
+- **Color**: signature mint `#00E5A0` accent (primary/focus/ring oklch tokens, `--tint`);
+  profit `#00C853` / loss `#FF5252` (`--gain`/`--loss` with intentional dark-mode values);
+  dark `#0B0E17`→charcoal discipline; light warm paper `#FAFAF8`
+  (`--background: oklch(0.985 0.004 100)`); section accents — payments blue,
+  investments green, insights amber
+- **Typography**: Fraunces serif headings (`--font-display-serif`), Space Grotesk money
+  numerals (`--font-display` + `fv-money` tabular-nums), 11px uppercase eyebrows
+  (`fv-eyebrow`: 11px/600/uppercase/0.12em); hero numbers 40px+ (`fv-hero`: 2.5rem)
+- **Layout**: 1400px desktop grid (dashboard `max-w-[1400px]`); 3-up mobile stat bands;
+  snap-scroll rails (Carousel, dashboard, insights); sticky sheet footers
+  (PaymentSheet/OrderSheet)
+- **Motion/interaction**: count-up numbers (`charts/CountUp.tsx`); press states
+  (`fv/press.ts` `pressable()`, `active:scale-0.97`); txn swipe actions (`TxnRow`
+  `swipeActions`); pull-to-refresh (`PullToRefresh` on dashboard); ticker flash
+  (300ms green/red on 5s refresh, reduced-motion safe); toasts with real Undo;
+  1px/1.5px hairline borders; mint shimmer skeletons (`fv-shimmer` 1.8s sweep,
+  `ChartSkeleton` Suspense fallbacks)
+- **fv kit additions**: `Pill`, `Accordion`, `Carousel`, `Tabs`, `Popover` (exported from
+  `fv/index.ts`); bottom sheets everywhere as the primary dialog pattern
+
+### #57: perf
+- Recharts lazy-split (dashboard `MonthBars`/`NetWorthSpark`/`SpendDonut`, portfolio
+  `DonutAllocation`) → recharts is a separate 340KB lazy chunk, NOT in the root chunk;
+  eager dashboard chunk shrank; streams in behind `chartsReady` + `ChartSkeleton`
+- Supabase query dedupe: `useAccountSummaries()` resolves via `qc.fetchQuery` on the
+  existing `["finverse","transactions","all"]` key → 1 fetch per mount instead of 2
+- Charts `React.memo`'d; 21 unused shadcn `ui/*` files deleted (zero importers);
+  21 unused prod deps removed from `package.json` (radix leftovers, cmdk, vaul,
+  embla-carousel-react, input-otp, react-resizable-panels, react-day-picker,
+  react-hook-form, date-fns, @hookform/resolvers, @tailwindcss/vite,
+  @tanstack/router-plugin, vite-tsconfig-paths)
+- Result: 1,718,293 → 1,743,130 bytes (+1.45%; growth is lazy chunks, eager path lighter)
+
+### #58: docs (this pass)
+- `TEST_REPORT.md`: "UI polish pass" section with real command outputs, per-item
+  verified status, honest ⏳ marks for browser-only checks
+- `docs/IMPLEMENTATION_STATUS.md`: this section (all polish moved to Completed)
+- `README.md`: design-system + testing + Razorpay + app-lock docs
+
+### QA bugfixes (polish pass)
+- Keypad rapid-input stale-closure fix (`src/lib/amount-keys.ts`, 6 unit tests)
+- "Create account" CTA dead end in payment sheet → working sheet flow
+- Portfolio 12s load-timeout failsafe + `ready` decoupling (`src/routes/portfolio.tsx`) —
+  timeout shows ErrorState + Retry instead of infinite spinner
+- Holdings order math extracted to pure `src/lib/finance/order-math.ts`
+  (10 unit tests, incl. `BUY INFY × 2 @ 152200 paise`)
+- MarketRow nested-button a11y fix (no interactive-inside-interactive)
+- BillDialog/BudgetDialog converted from centered Dialog to BottomSheet
+
+### Still pending (coordinator's live pass)
+- Visual QA at 390px / tablet / 1440px, light + dark (all 30 items are code-verified;
+  *looking* right needs a browser)
+- axe run (installed; needs authenticated page harness), Lighthouse
+- Authenticated E2E of the QA fixes (rapid keypad input, portfolio timeout path,
+  undo toasts, swipe actions)
+- Pre-existing: RLS live probes, Razorpay live test-mode flow (need owner / test keys)
