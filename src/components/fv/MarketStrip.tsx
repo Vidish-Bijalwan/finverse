@@ -20,8 +20,9 @@ interface StripItem {
 }
 
 /**
- * Market strip: indices + watched instruments in one compact, horizontally
- * scrollable row with scroll-snap.
+ * Market strip: two labeled groups — "Indices" (NIFTY 50 / SENSEX / BANK
+ * NIFTY) and "Watchlist" (user stocks) — each in its own compact,
+ * horizontally scrollable row with scroll-snap.
  *
  * Each item shows symbol, price, absolute move and % move in muted
  * green/red. One quiet muted line labels the strip as simulated — the
@@ -36,12 +37,12 @@ export function MarketStrip({
   symbols,
   className,
 }: {
-  /** Watched stock symbols appended after the indices. */
+  /** Watched stock symbols, rendered in the "Watchlist" group. */
   symbols?: string[];
   className?: string;
 }) {
-  const items: StripItem[] = useMemo(() => {
-    const list: StripItem[] = INDICES.map((idx) => {
+  const { indices, stocks }: { indices: StripItem[]; stocks: StripItem[] } = useMemo(() => {
+    const indices: StripItem[] = INDICES.map((idx) => {
       const change = dayChange(genHistory(idx.symbol, 2));
       return {
         symbol: idx.symbol,
@@ -52,11 +53,14 @@ export function MarketStrip({
         kind: "index" as const,
       };
     });
+    const seen = new Set(indices.map((i) => i.symbol));
+    const stocks: StripItem[] = [];
     for (const sym of symbols ?? []) {
       const stock = getStock(sym);
-      if (!stock || list.some((i) => i.symbol === stock.symbol)) continue;
+      if (!stock || seen.has(stock.symbol)) continue;
+      seen.add(stock.symbol);
       const change = dayChange(genHistory(stock.symbol, 2));
-      list.push({
+      stocks.push({
         symbol: stock.symbol,
         name: stock.name,
         pricePaise: getLTP(stock.symbol),
@@ -65,7 +69,7 @@ export function MarketStrip({
         kind: "stock",
       });
     }
-    return list;
+    return { indices, stocks };
   }, [symbols]);
 
   const card = (it: StripItem) => {
@@ -119,6 +123,8 @@ export function MarketStrip({
     );
   };
 
+  const snapRow = "flex snap-x gap-2 overflow-x-auto pb-1 [scrollbar-width:thin]";
+
   return (
     <section
       aria-label="Market strip — simulated data"
@@ -130,8 +136,33 @@ export function MarketStrip({
           Simulated prices — not live data
         </span>
       </div>
-      <div className="flex snap-x gap-2 overflow-x-auto pb-1 [scrollbar-width:thin]">
-        {items.map(card)}
+      <div role="group" aria-labelledby="market-strip-indices-heading" className="mb-2">
+        <h3
+          id="market-strip-indices-heading"
+          className="mb-1 px-1 text-[11px] font-bold uppercase tracking-wider text-muted-foreground"
+        >
+          Indices
+        </h3>
+        <div aria-label="Market indices" className={snapRow}>
+          {indices.map(card)}
+        </div>
+      </div>
+      <div role="group" aria-labelledby="market-strip-watchlist-heading">
+        <h3
+          id="market-strip-watchlist-heading"
+          className="mb-1 px-1 text-[11px] font-bold uppercase tracking-wider text-muted-foreground"
+        >
+          Watchlist
+        </h3>
+        {stocks.length > 0 ? (
+          <div aria-label="Watched stocks" className={snapRow}>
+            {stocks.map(card)}
+          </div>
+        ) : (
+          <p className="px-1 py-2 text-xs text-muted-foreground">
+            No watched stocks yet — watch a stock to pin it here.
+          </p>
+        )}
       </div>
     </section>
   );

@@ -6,6 +6,19 @@ import type { PricePoint } from "./history";
  * price engine (`@/lib/market/history`) supplies the inputs.
  */
 
+/** Sparkline stroke direction: the day's direction vs previous close. */
+export type SparklineDirection = "up" | "down" | "flat";
+
+/**
+ * Map a day changePct to the sparkline's direction color. Near-zero moves
+ * (|changePct| < 0.05) render muted-flat so a −0.01% day doesn't scream green
+ * or red.
+ */
+export function directionForChangePct(changePct: number): SparklineDirection {
+  if (Math.abs(changePct) < 0.05) return "flat";
+  return changePct > 0 ? "up" : "down";
+}
+
 export interface MoverRow {
   symbol: string;
   name: string;
@@ -13,6 +26,12 @@ export interface MoverRow {
   pricePaise: number;
   /** Signed day change in percent. */
   changePct: number;
+  /**
+   * Intraday range as % of the series' first value (max − min over the recent
+   * sparkline series). Powers `mostActive`'s activity ranking; rows without
+   * it fall back to |changePct|.
+   */
+  rangePct?: number;
 }
 
 /** Stable ordering: primary key, then symbol (ascending) for determinism. */
@@ -33,15 +52,31 @@ export function topLosers(rows: MoverRow[], n = 3): MoverRow[] {
 }
 
 /**
- * "Most active" by largest absolute day % move — the demo feed has no
- * traded-volume data, so swing size is the activity proxy. Biggest movers
- * first.
+ * Intraday range of a price series as % of its first value:
+ * `(max − min) / first × 100`. The demo engine exposes no high/low candles
+ * or traded volume, so the swing of the recent series is the activity proxy.
+ * Returns 0 for series shorter than 2 points or a zero first value.
+ */
+export function rangePctOf(values: number[]): number {
+  if (values.length < 2) return 0;
+  const first = values[0]!;
+  if (first === 0) return 0;
+  return ((Math.max(...values) - Math.min(...values)) / first) * 100;
+}
+
+/**
+ * "Most active" by largest intraday range — the demo engine has no
+ * traded-volume data, so series swing (max−min over the recent series, via
+ * `rangePct`) is the activity proxy. Rows without `rangePct` fall back to
+ * |changePct| so the function stays total on plain MoverRows. Biggest swing
+ * first; deterministic tiebreak on symbol. Genuinely distinct from
+ * `topGainers`: a steady climber ranks high there but low here, while a
+ * volatile stock that closed near flat ranks high here but low there.
  */
 export function mostActive(rows: MoverRow[], n = 3): MoverRow[] {
+  const activity = (r: MoverRow) => r.rangePct ?? Math.abs(r.changePct);
   return [...rows]
-    .sort(
-      (a, b) => Math.abs(b.changePct) - Math.abs(a.changePct) || a.symbol.localeCompare(b.symbol),
-    )
+    .sort((a, b) => activity(b) - activity(a) || a.symbol.localeCompare(b.symbol))
     .slice(0, Math.max(0, n));
 }
 

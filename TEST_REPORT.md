@@ -654,3 +654,51 @@ updated in `src/lib/quick-actions.test.ts`.
 | `bun x eslint` (all 9 touched/new files) | **0 errors** (9 prettier issues auto-fixed with `--fix`; 3 react-refresh warnings in ChartCard.tsx are pre-existing — the file already exported constants alongside the component) |
 | `bun run build` | ✅ green (vite + nitro) |
 | Live-browser visual QA | ⚠️ NOT performed — no browser control in this environment; the Phase 3 milestone screenshot loop belongs to the parent coordinator |
+
+## Phase 3 review fixes (screenshot review, 2026-10-03 ~16:30 IST)
+
+### Fix A — SENSEX sparkline wrong color
+**Root cause:** `Sparkline` inferred direction from the series itself (last ≥ first), but `dayChange` measures vs *previous close*. On a −0.77% day the 20-point intraday series can still end above its start → green stroke on a down day.
+**Fix:** `src/components/fv/Sparkline.tsx` — replaced optional `up?: boolean` with required `direction: "up" | "down" | "flat"`; stroke maps to `var(--gain)` / `var(--loss)` / `var(--muted-foreground)`. New `directionForChangePct()` in `src/lib/market/movers.ts` (|changePct| < 0.05 → flat/muted). All usages audited (`MarketSnapshot` index cards, `WatchlistCard` rows — the only two) and now pass direction explicitly. New `src/components/fv/Sparkline.test.tsx` contract tests (series ending above start + −0.77% → loss stroke; boundaries ±0.05).
+
+### Fix B — "Most Active" identical to "Top Gainers"
+**Root cause:** `mostActive` sorted by |changePct|, byte-identical to `topGainers` on the deterministic demo data.
+**Fix:** `src/lib/market/history.ts` exposes only `closePaise` (no high/low/volume), so `movers.ts` gained `rangePctOf(values)` = (max−min)/first × 100 over the recent series as the documented activity proxy; `MoverRow` gained optional `rangePct`; `mostActive` sorts by range (falls back to |changePct| when absent). `MarketSnapshot` builds one 22-day `genHistory` per mover and computes the range. Verified on demo data: gainers = SURYAROSNI,ADANIPORTS,TATAMOTORS vs active = NESTLEIND,NTPC,LAURUSLABS. Regression test on the real demo dataset asserts mostActive ≠ topGainers and ≠ topLosers.
+
+### Fix C — Market strip mixes indices and watched stocks unlabeled
+**Fix:** `src/components/fv/MarketStrip.tsx` renders two labeled groups — **"Indices"** (NIFTY 50 / SENSEX / BANK NIFTY) and **"Watchlist"** (user stocks; compact muted hint "No watched stocks yet — watch a stock to pin it here." when empty). Each group has `role="group"` + `aria-labelledby` and its own snap-scroll row. Card rendering, indices-first dedupe, simulated disclosure unchanged.
+
+### FAB clipping — RESOLVED, no app change
+The "clipped floating button" at ~1920px was the **Vercel Toolbar preview widget** (injected by the platform via vercel.live, not in the FinVerse DOM). It never appears on the production domain. No app code touched.
+
+## Phase 4: portfolio, cash flow, activity, copy (brief §11 + §13 + §14 + §23 + §25) — 2026-10-03 ~16:30 IST
+
+### 1. Investment summary (§11) — `src/routes/portfolio.tsx` rewritten
+- New `src/components/markets/portfolio-math.ts` (pure, unit-tested): `holdingTotals`/`portfolioTotals` (invested = qty × avg, value = qty × LTP, returns = value − invested, %; no divide-by-zero), `todayReturnPaise` (qty × (LTP − prev close), −0 normalized), `genIntraday` (deterministic 09:15–15:30 Brownian bridge pinned prev-close → LTP), `combineSeries`, `parseOrderNote` (execution price = amount ÷ qty from ledger notes), date helpers.
+- New `src/components/markets/PortfolioChart.tsx`: lazy recharts area chart, 1D/1W/1M/1Y/ALL pills, hover tooltip, final point anchored to live simulated value, honest caption, prefers-reduced-motion respected.
+- Summary card: Current value (large, tabular) + quiet Simulated pill; Total invested; Total returns (+₹X · +X.XX%); Today's returns. Tabs: Holdings (donut + table, rows → stock detail, edit/delete preserved) / Orders (parsed from real ledger `investments` + `simulated-brokerage` rows; "Executed" = genuine ledger state, no fake fills) / SIPs (real recurring rules, pause/resume, Start SIP → SipSheet) / Watchlist (existing hook + MarketRow). Compact empty states. **Zero monthly cash-flow numbers on this page; "P&L" labels only for portfolio.**
+- Deliberately removed: the per-holding dividend-yield override editor + expected-annual table (didn't fit the §11 tabbed structure; underlying dividend data in `data.ts` untouched — restorable on request).
+
+### 2. Cash flow rework (§13)
+- New `src/components/home/CashFlowCard.tsx`: header + 1M/3M/6M/1Y pills; Income / Spent / Net summary (`monthlyCashFlowPaise`, never "P&L"); compact h-44 chart; top-4 categories with share bars; compact empty state + Add expense CTA.
+- New `src/components/charts/CashFlowChart.tsx`: grouped income/spent bars, interactive `MoneyTooltip`, short-INR axis, gain/loss fills, reduced-motion respected, lazy recharts.
+- New `src/components/home/home-data.ts` (+18 tests): `buildMonthFlows`, `buildWeekFlows`, `topSpendingCategories`, `categoryMover` (null when nothing moved → no card), `recentTransactions`, `signedAmountPaise`, `txnSecondary`, `payModeLabel`.
+- Deleted `src/components/charts/MonthBars.tsx` (giant bar chart; only `index.tsx` imported it).
+
+### 3. Recent activity (§14)
+- New `src/components/home/RecentActivity.tsx`: up to 7 rows (initials avatar, name, date/time/category/pay-mode, signed tabular amounts, no status badges), "View all" → `/expenses`, tap → detail sheet, swipe categorize/delete preserved.
+- New `src/components/home/TxnDetailSheet.tsx`: BottomSheet with real ledger data only (avatar, amount, date/time, category, pay mode, account, goal-bill linkage, tags), one "Open in expenses" CTA.
+
+### 4. Copy rewrite (§25) + empty states (§23)
+- Killed "Here's your money at a glance"; greeting is now just "Good morning, Vidish."
+- New `src/components/ai/HomeInsight.tsx`: renders ONLY when `categoryMover` returns real data ("Food & Dining fell ₹20,000 (40% less) vs Sep 2026"); null otherwise. Coordinator edit: removed the "That's the first place to look if you want to save." editorializing — insight copy is now purely factual.
+- All new empty states ≤220px with one CTA.
+
+## Verification (real outputs — integrated final state)
+| Command | Result |
+|---|---|
+| `bun run test:unit` | **234/234 pass** (27 files): incl. new portfolio-math 18, home-data 18, Sparkline contract tests, MarketStrip group tests, movers range/regression tests |
+| `bun x tsc --noEmit` | **52 errors — identical to pre-existing baseline** (0 in any touched file) |
+| `bun x eslint` (all 22 touched/new files) | **0 errors** (prettier nits auto-fixed) |
+| `bun run build` | ✅ green (TanStack Start + Nitro) |
+| Live-browser visual QA | ⚠️ parent-side milestone screenshot loop (Phase 5 next) |

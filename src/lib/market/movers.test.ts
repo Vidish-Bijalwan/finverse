@@ -3,12 +3,15 @@ import { describe, expect, it } from "vitest";
 import {
   changePctLabel,
   mostActive,
+  rangePctOf,
   sparklinePath,
   sparklineValues,
   topGainers,
   topLosers,
   type MoverRow,
 } from "./movers";
+import { dayChange, genHistory } from "./history";
+import { STOCKS } from "./data";
 
 const ROWS: MoverRow[] = [
   { symbol: "AAA", name: "Aaa Co", pricePaise: 10000, changePct: 2.5 },
@@ -62,13 +65,75 @@ describe("topLosers", () => {
 });
 
 describe("mostActive", () => {
-  it("ranks by absolute day % move, biggest swing first", () => {
+  it("ranks by intraday range, biggest swing first", () => {
+    const ranged: MoverRow[] = [
+      { symbol: "AAA", name: "A", pricePaise: 1, changePct: 5.0, rangePct: 1.0 },
+      { symbol: "BBB", name: "B", pricePaise: 1, changePct: 0.1, rangePct: 9.0 },
+      { symbol: "CCC", name: "C", pricePaise: 1, changePct: -0.2, rangePct: 4.0 },
+    ];
+    // BBB closed nearly flat but swung the most — it must lead, unlike
+    // topGainers which would put AAA first.
+    expect(mostActive(ranged, 3).map((r) => r.symbol)).toEqual(["BBB", "CCC", "AAA"]);
+    expect(topGainers(ranged, 3).map((r) => r.symbol)).toEqual(["AAA", "BBB", "CCC"]);
+  });
+
+  it("falls back to |changePct| when rows carry no rangePct", () => {
     const out = mostActive(ROWS, 3);
     expect(out.map((r) => r.symbol)).toEqual(["CCC", "BBB", "AAA"]);
   });
 
-  it("returns [] for an empty universe", () => {
+  it("breaks ties by symbol for determinism", () => {
+    const tied: MoverRow[] = [
+      { symbol: "ZZZ", name: "Z", pricePaise: 1, changePct: 1, rangePct: 5 },
+      { symbol: "AAA", name: "A", pricePaise: 1, changePct: 2, rangePct: 5 },
+    ];
+    expect(mostActive(tied, 2).map((r) => r.symbol)).toEqual(["AAA", "ZZZ"]);
+  });
+
+  it("returns [] for an empty universe and never mutates the input", () => {
     expect(mostActive([], 3)).toEqual([]);
+    const copy = [...ROWS];
+    mostActive(ROWS, 3);
+    expect(ROWS).toEqual(copy);
+  });
+
+  it("is never byte-identical to top gainers or top losers on the demo dataset", () => {
+    const rows: MoverRow[] = STOCKS.map((s) => {
+      const h = genHistory(s.symbol, 22);
+      return {
+        symbol: s.symbol,
+        name: s.name,
+        pricePaise: 0,
+        changePct: dayChange(h).changePct,
+        rangePct: rangePctOf(sparklineValues(h, 20)),
+      };
+    });
+    const gainers = topGainers(rows, 3).map((r) => r.symbol);
+    const losers = topLosers(rows, 3).map((r) => r.symbol);
+    const active = mostActive(rows, 3).map((r) => r.symbol);
+    expect(active).not.toEqual(gainers);
+    expect(active).not.toEqual(losers);
+    // Sanity: the ranking actually keys off range, not |changePct|.
+    const bySwing = [...rows].sort(
+      (a, b) => (b.rangePct ?? 0) - (a.rangePct ?? 0) || a.symbol.localeCompare(b.symbol),
+    );
+    expect(active).toEqual(bySwing.slice(0, 3).map((r) => r.symbol));
+  });
+});
+
+describe("rangePctOf", () => {
+  it("returns (max − min) / first × 100", () => {
+    expect(rangePctOf([100, 110, 95, 105])).toBeCloseTo(15, 10);
+  });
+
+  it("returns 0 for short series or a zero first value", () => {
+    expect(rangePctOf([])).toBe(0);
+    expect(rangePctOf([42])).toBe(0);
+    expect(rangePctOf([0, 5, 10])).toBe(0);
+  });
+
+  it("returns 0 for a flat series", () => {
+    expect(rangePctOf([7, 7, 7])).toBe(0);
   });
 });
 

@@ -55,6 +55,28 @@ describe("MarketStrip", () => {
     expect(screen.getByText("RELIANCE")).toBeTruthy();
   });
 
+  it("renders labeled Indices and Watchlist groups", () => {
+    render(<MarketStrip symbols={["RELIANCE"]} />);
+    expect(screen.getByRole("heading", { name: "Indices" })).toBeTruthy();
+    expect(screen.getByRole("heading", { name: "Watchlist" })).toBeTruthy();
+    // Indices stay in their own group; watched stocks don't mingle with them.
+    const indicesGroup = screen.getByRole("group", { name: "Indices" });
+    expect(indicesGroup.textContent ?? "").toMatch(/SENSEX/);
+    expect(indicesGroup.textContent ?? "").not.toMatch(/RELIANCE/);
+    const watchlistGroup = screen.getByRole("group", { name: "Watchlist" });
+    expect(watchlistGroup.textContent ?? "").toMatch(/RELIANCE/);
+  });
+
+  it("shows a compact empty hint in the Watchlist group when no stocks are watched", () => {
+    render(<MarketStrip symbols={[]} />);
+    expect(screen.getByText(/No watched stocks yet/)).toBeTruthy();
+  });
+
+  it("hides the empty hint when watched stocks are present", () => {
+    render(<MarketStrip symbols={["RELIANCE"]} />);
+    expect(screen.queryByText(/No watched stocks yet/)).toBeNull();
+  });
+
   it("labels the strip as simulated data for assistive tech", () => {
     render(<MarketStrip />);
     expect(screen.getByRole("region", { name: "Market strip — simulated data" })).toBeTruthy();

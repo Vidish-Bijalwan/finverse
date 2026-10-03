@@ -1,17 +1,25 @@
 import { useId } from "react";
 import { cn } from "@/lib/utils";
-import { sparklinePath } from "@/lib/market/movers";
+import { directionForChangePct, sparklinePath, type SparklineDirection } from "@/lib/market/movers";
+
+const STROKE_FOR_DIRECTION: Record<SparklineDirection, string> = {
+  up: "var(--gain)",
+  down: "var(--loss)",
+  flat: "var(--muted-foreground)",
+};
 
 /**
  * Tiny SVG sparkline for price series (watchlist rows, market snapshot).
- * Direction color comes from the first→last value (gain/loss tokens) unless
- * `up` is given explicitly. SSR-safe: the path is pure math on the values.
+ * The stroke reflects the DAY's direction: pass `direction` derived from the
+ * day's changePct (vs previous close) via `directionForChangePct` — an
+ * intraday series can end above its start on a down day, which must still
+ * paint down-colored.
  */
 export function Sparkline({
   values,
   width = 72,
   height = 28,
-  up,
+  direction,
   strokeWidth = 1.5,
   ariaLabel,
   className,
@@ -20,16 +28,15 @@ export function Sparkline({
   values: number[];
   width?: number;
   height?: number;
-  /** Force direction color; defaults to last >= first. */
-  up?: boolean;
+  /** Day direction (vs previous close); see directionForChangePct. */
+  direction: SparklineDirection;
   strokeWidth?: number;
   ariaLabel?: string;
   className?: string;
 }) {
   const id = useId();
   const d = sparklinePath(values, width, height);
-  const direction = up ?? (values.length < 2 || values[values.length - 1]! >= values[0]!);
-  const stroke = direction ? "var(--gain)" : "var(--loss)";
+  const stroke = STROKE_FOR_DIRECTION[direction];
 
   return (
     <svg

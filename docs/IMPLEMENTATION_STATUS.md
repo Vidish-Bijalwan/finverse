@@ -1,8 +1,18 @@
 # FinVerse Revamp — Implementation Status
 
-Branch: `feature/fintech-overhaul` (Phase 1) · Base: `main@3841647d`
+Branch: `feature/fintech-overhaul` (Phases 1–4) · Base: `main@3841647d`
 Migration handoff: `supabase/migrations/0002_revamp.sql` → user runs in Supabase dashboard before deploy.
 Env handoff: `RAZORPAY_KEY_ID`, `RAZORPAY_KEY_SECRET` (test keys, server-only), `SUPABASE_SERVICE_ROLE_KEY` (server-only) → Vercel.
+
+## Phase 4 — portfolio, cash flow, activity, copy + Phase 3 review fixes (DONE, awaiting parent screenshot review)
+
+- **Phase 3 review fixes**: (A) SENSEX sparkline — `Sparkline` now takes explicit `direction: "up"|"down"|"flat"` (day's direction, muted under ±0.05%); all usages audited. (B) Most Active — now ranks by intraday `rangePct` (documented activity proxy; demo feed has no volume), verified ≠ Top Gainers on demo data + regression test. (C) Market strip — labeled "Indices" and "Watchlist" groups (role=group + aria-labelledby), compact empty hint. FAB-clipping report resolved: Vercel Toolbar preview widget, not in app DOM — no app change.
+- **Investment summary (§11)**: `src/routes/portfolio.tsx` rewritten — summary card (current value large/tabular + Simulated pill, invested, returns +₹X · +X.XX%, today's returns), `PortfolioChart` 1D/1W/1M/1Y/ALL with tooltips, tabs Holdings/Orders/SIPs/Watchlist (count badges, real ledger data; "Executed" = genuine ledger state). Pure `portfolio-math.ts` (+18 tests). Zero monthly cash-flow numbers on the page. NOTE: per-holding dividend-yield override editor removed (didn't fit §11 structure; underlying dividend data untouched — restorable on request).
+- **Cash flow (§13)**: `CashFlowCard` — 1M/3M/6M/1Y pills, Income/Spent/Net summary (never "P&L"), compact chart with tooltips, top-4 categories; `home-data.ts` pure logic (+18 tests); `MonthBars.tsx` deleted.
+- **Recent activity (§14)**: `RecentActivity` — up to 7 rows (avatar, name, datetime/category/pay-mode, signed tabular amounts, no badges), View all → /expenses, tap → `TxnDetailSheet` (real ledger data only).
+- **Copy (§25)**: "Here's your money at a glance" killed; `HomeInsight` renders only from real data, copy kept purely factual ("Food & Dining fell ₹20,000 (40% less) vs Sep 2026").
+- **Verification**: tsc 52 = baseline (0 in touched files); eslint 0 on 22 touched files; unit 234/234 (27 files); build green. Details: `TEST_REPORT.md` Phase 4 section.
+- **DO NOT MERGE** — parent coordinator screenshot-reviews the Vercel preview before Phase 5 (mobile + microinteractions + full QA loop).
 
 ## Phase 1 — fintech overhaul: shell + dashboard (DONE, awaiting parent screenshot review)
 

@@ -8,7 +8,7 @@ import { fetchWatchlist, WATCHLIST_QUERY_KEY } from "@/lib/watchlist";
 import { FINVERSE_QUERY_DEFAULTS } from "@/lib/query";
 import { getStock } from "@/lib/market/data";
 import { dayChange, genHistory, getLTP } from "@/lib/market/history";
-import { changePctLabel, sparklineValues } from "@/lib/market/movers";
+import { changePctLabel, directionForChangePct, sparklineValues } from "@/lib/market/movers";
 import { formatINR } from "@/lib/finance/format";
 import { cn } from "@/lib/utils";
 
@@ -132,7 +132,12 @@ export function WatchlistCard() {
                       {r.symbol}
                     </span>
                   </span>
-                  <Sparkline values={r.spark} width={64} height={26} />
+                  <Sparkline
+                    values={r.spark}
+                    width={64}
+                    height={26}
+                    direction={directionForChangePct(r.changePct)}
+                  />
                   <span className="flex w-20 shrink-0 flex-col items-end">
                     <span className="text-sm font-bold tabular-nums text-foreground">
                       {formatINR(r.pricePaise)}

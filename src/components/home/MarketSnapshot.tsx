@@ -7,7 +7,9 @@ import { STOCKS } from "@/lib/market/data";
 import { dayChange, genHistory, getLTP } from "@/lib/market/history";
 import {
   changePctLabel,
+  directionForChangePct,
   mostActive,
+  rangePctOf,
   sparklineValues,
   topGainers,
   topLosers,
@@ -52,6 +54,7 @@ function IndexCards({ indices }: { indices: IndexCard[] }) {
                 values={idx.spark}
                 width={56}
                 height={22}
+                direction={directionForChangePct(idx.changePct)}
                 className="hidden min-[420px]:block"
               />
             </div>
@@ -136,12 +139,18 @@ export function MarketSnapshot() {
         spark: sparklineValues(h, 20),
       };
     });
-    const rows: MoverRow[] = STOCKS.map((s) => ({
-      symbol: s.symbol,
-      name: s.name,
-      pricePaise: getLTP(s.symbol),
-      changePct: dayChange(genHistory(s.symbol, 2)).changePct,
-    }));
+    const rows: MoverRow[] = STOCKS.map((s) => {
+      // genHistory is deterministic per symbol, so the last two points of a
+      // 22-day history match the 2-day dayChange; reuse it for the range.
+      const h = genHistory(s.symbol, 22);
+      return {
+        symbol: s.symbol,
+        name: s.name,
+        pricePaise: getLTP(s.symbol),
+        changePct: dayChange(h).changePct,
+        rangePct: rangePctOf(sparklineValues(h, 20)),
+      };
+    });
     return {
       indices: idx,
       gainers: topGainers(rows, 3),
