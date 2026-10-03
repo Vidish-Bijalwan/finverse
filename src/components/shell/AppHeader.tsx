@@ -1,5 +1,5 @@
 import { Link, useNavigate } from "@tanstack/react-router";
-import { ChartNoAxesCombined, LogOut, Search, User } from "lucide-react";
+import { ChartNoAxesCombined, LogOut, Search, Settings, User } from "lucide-react";
 
 import { cn } from "@/lib/utils";
 import { pressable } from "@/components/fv";
@@ -34,7 +34,7 @@ function Logo() {
   return (
     <Link to="/" className="flex items-center gap-2.5" aria-label="FinVerse home">
       <div className="grid size-9 place-items-center rounded-md bg-primary-dark shadow-logo">
-        <ChartNoAxesCombined className="size-5 text-primary-foreground" strokeWidth={2.5} />
+        <ChartNoAxesCombined className="size-5 text-logo-mark-fg" strokeWidth={2.5} />
       </div>
       <span className="text-xl font-black text-primary-dark">
         Fin<span className="text-primary">Verse</span>
@@ -87,6 +87,10 @@ function ProfileMenu() {
         <DropdownMenuItem onSelect={() => navigate({ to: "/profile" })}>
           <User className="size-4" />
           Profile
+        </DropdownMenuItem>
+        <DropdownMenuItem onSelect={() => navigate({ to: "/settings" })}>
+          <Settings className="size-4" />
+          Settings
         </DropdownMenuItem>
         <DropdownMenuSeparator />
         <DropdownMenuItem

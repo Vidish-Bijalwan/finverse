@@ -557,7 +557,7 @@ function SettingsPage() {
         <SectionCard title="About FinVerse">
           <div className="flex items-start gap-4">
             <span className="grid size-12 shrink-0 place-items-center rounded-xl bg-primary-dark shadow-logo">
-              <Palette className="size-6 text-primary-foreground" />
+              <Palette className="size-6 text-logo-mark-fg" />
             </span>
             <div className="min-w-0">
               <div className="flex flex-wrap items-center gap-2">

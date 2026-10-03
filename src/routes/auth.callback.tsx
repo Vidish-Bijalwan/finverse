@@ -11,6 +11,25 @@ export const Route = createFileRoute("/auth/callback")({
   component: AuthCallbackPage,
 });
 
+/**
+ * Friendly copy for the ways an OAuth code exchange can fail, so users never
+ * see a raw "PKCE code verifier not found in storage" message.
+ */
+function friendlyError(raw: string): string {
+  const lower = raw.toLowerCase();
+  if (
+    lower.includes("pkce") ||
+    lower.includes("code verifier") ||
+    lower.includes("authorization code") ||
+    lower.includes("invalid_grant") ||
+    lower.includes("code has expired") ||
+    lower.includes("already been used")
+  ) {
+    return "This sign-in link already expired or was used. Please try signing in again.";
+  }
+  return raw || "Could not complete sign in.";
+}
+
 function AuthCallbackPage() {
   const navigate = useNavigate();
   const [error, setError] = useState<string | null>(null);
@@ -20,16 +39,31 @@ function AuthCallbackPage() {
     (async () => {
       try {
         const supabase = getSupabase();
-        const { error: exchangeError } = await supabase.auth.exchangeCodeForSession(
-          window.location.href,
-        );
-        if (exchangeError) {
-          throw new Error(exchangeError.message || "Could not complete sign in.");
+        // If a session already exists (the code was already exchanged in
+        // another tab, or this page was refreshed after a successful
+        // exchange), there is nothing to exchange — proceed instead of
+        // failing on the spent code.
+        const { data: pre } = await supabase.auth.getSession();
+        if (!pre.session) {
+          const { error: exchangeError } = await supabase.auth.exchangeCodeForSession(
+            window.location.href,
+          );
+          if (exchangeError) {
+            // The code may have been consumed by a concurrent exchange
+            // (refresh / double tab) while the session landed anyway.
+            // If a session exists now, treat it as success.
+            const { data: post } = await supabase.auth.getSession();
+            if (!post.session) {
+              throw new Error(friendlyError(exchangeError.message));
+            }
+          }
         }
         if (!cancelled) {
           // AuthProvider's onAuthStateChange will resolve the profile; the
           // route guard sorts out whether / or /onboarding is correct.
-          await navigate({ to: "/onboarding" });
+          // `replace` drops the one-time ?code= URL from history so Back /
+          // refresh can't replay the spent code.
+          await navigate({ to: "/onboarding", replace: true });
         }
       } catch (err) {
         if (!cancelled) {
