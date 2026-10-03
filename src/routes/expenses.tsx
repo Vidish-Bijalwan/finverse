@@ -1,4 +1,4 @@
-import { createFileRoute, Link } from "@tanstack/react-router";
+import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import {
   Camera,
@@ -38,6 +38,10 @@ import { cn, downloadFile } from "@/lib/utils";
 import { pressable } from "@/components/fv";
 
 export const Route = createFileRoute("/expenses")({
+  /** `?add=1` deep-link opens the add-expense sheet (dashboard quick action). */
+  validateSearch: (search: Record<string, unknown>): { add?: "1" } => ({
+    ...(search["add"] === "1" ? { add: "1" as const } : {}),
+  }),
   head: () => ({
     meta: [
       { title: "Expenses — FinVerse AI" },
@@ -168,6 +172,8 @@ const MOCK_RECEIPTS: {
 ];
 
 function ExpensesPage() {
+  const routeSearch = Route.useSearch();
+  const navigate = useNavigate();
   const [month, setMonth] = useMonth();
   const [tab, setTab] = useState<Tab>("transactions");
   const [search, setSearch] = useState("");
@@ -288,6 +294,17 @@ function ExpensesPage() {
     setSheet({ mode: "add" });
   };
 
+  // `?add=1` deep-link (dashboard "Add expense" quick action): open the real
+  // add sheet once, then drop the param so back/forward stays clean.
+  const addHandled = useRef(false);
+  useEffect(() => {
+    if (routeSearch["add"] === "1" && !addHandled.current) {
+      addHandled.current = true;
+      openAdd();
+      void navigate({ to: "/expenses", search: {}, replace: true });
+    }
+  }, [routeSearch, navigate]);
+
   const confirmQuickAdd = () => {
     if (!parsed || addTxn.isPending) return;
     const cat = categoryById(parsed.category);
@@ -396,6 +413,7 @@ function ExpensesPage() {
         </div>
         <Link
           to="/accounts"
+          search={{}}
           aria-label="Manage accounts"
           className="flex items-center gap-1.5 rounded-[14px] bg-card px-3.5 py-2.5 text-sm font-bold text-primary shadow-tile transition-colors hover:bg-primary/10"
         >

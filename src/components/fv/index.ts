@@ -7,6 +7,7 @@ export { TxnRow, initialsOf } from "./TxnRow";
 export type { TxnStatus, TxnSwipeActions } from "./TxnRow";
 export { HoldingRow } from "./HoldingRow";
 export { MarketRow } from "./MarketRow";
+export { MarketStrip } from "./MarketStrip";
 export { TickerStrip } from "./TickerStrip";
 export { AmountInput, NumericKeypad } from "./AmountInput";
 export { PinPad } from "./PinPad";

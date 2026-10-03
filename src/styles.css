@@ -440,3 +440,15 @@
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { scroll-behavior: auto !important; transition-duration: 0.01ms !important; animation-duration: 0.01ms !important; }
 }
+
+/* Market strip marquee: seamless loop of (items + decorative duplicate).
+ * Paused on hover/focus via [animation-play-state:paused]; never rendered
+ * for prefers-reduced-motion (the component renders a static row instead). */
+@keyframes fv-marquee {
+  from { transform: translateX(0); }
+  to { transform: translateX(-50%); }
+}
+
+@utility fv-marquee {
+  animation: fv-marquee 36s linear infinite;
+}

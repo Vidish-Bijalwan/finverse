@@ -293,3 +293,67 @@ Root cause of the doubled list: `TickerStrip` rendered the 12-stock row twice fo
 | `bun run build` (vite production) | ✅ green (2767 modules) |
 | Note | 2 `scratch-harness.test.ts` failures seen mid-pass were concurrent-edit artifacts (Worker A editing `supabase.ts` while B/C ran the suite) — final full run is 92/92 green |
 | Pending (needs live browser) | Visual confirmation of the un-serifed UI, header toggle in both themes, dashboard resolving to data on a real session |
+
+---
+
+# Phase 1 — Fintech Overhaul (shell + dashboard)
+
+Date: 2026-10-03 · Branch: `feature/fintech-overhaul` · Base: `main@3841647d`
+Workdir: `~/workspace/finverse-overhaul/app`
+
+## What changed
+
+**Shell**
+- `AppHeader.tsx`: nav rebuilt as Home / Payments / Invest / Markets / Activity (`/` · `/payments` · `/portfolio` · `/watchlist` · `/expenses`) — active section gets a pill + `aria-current="page"`. SaaS-admin decoration removed. Global search, notification bell, ThemeToggle (#61), profile menu kept. No route renamed → no deep links broken.
+- `BottomTabBar.tsx`: tabs are now Home / Pay / Invest / Markets / Activity with the same destinations.
+- `GlobalSearch.tsx`: new Contacts group (people paid over simulated UPI) and Features group (14 real app destinations, keyword-matched). Transactions / Bills / Goals / Stocks unchanged.
+
+**Greeting fix**
+- New `src/lib/greeting.ts`: `greetingName()` sanitizes `profile.full_name` (rejects 2-letter lowercase fragments like "ee", email-address names, handles) and falls back to the email local part (capitalized). Returns "" when nothing is name-like — the dashboard then shows the greeting without a name instead of "Good afternoon, ee". Greeting is now a compact secondary line, never larger than the money.
+
+**Balance hero**
+- One overview surface: Net worth large (32–36px tabular numerals), honest sub-breakdown "Cash ₹X + investments ₹Y − liabilities ₹0", month net-cash-flow with % vs previous month.
+- Compact metrics row: Investments · Cash · Monthly cash flow · Investment P&L (small, not screen-thirds).
+- Eye toggle with privacy masking (`₹ ••••••`), persisted in `finverse:settings:v1` via new optional `balancePrivate` setting.
+
+**Financial-logic audit**
+- New `src/lib/finance/money-math.ts` (tested): `netWorthPaise` = cash + investments + other assets − liabilities; `investmentReturnsPaise` = current value − invested cost; `monthlyCashFlowPaise` = income − expenses; `pctChange` null-safe.
+- Every "P&L" that meant income-minus-expenses renamed to "Monthly cash flow" / "Net cash flow". "P&L" now only labels portfolio returns. The contradictory trio (Net worth ₹1,584 / Invested ₹1,578 / "P&L" −₹1,578) is gone: dashboard shows Invested cost vs Current value vs Returns separately in the portfolio snapshot.
+
+**Quick actions**
+- Giant pills deleted. `src/components/home/QuickActions.tsx`: compact icon grid (11 actions, 4-col on mobile): Scan QR, Pay contact, UPI ID, Bank transfer, Recharge, Bills, Request, More, Invest, Add expense, Add goal.
+- Routing table `src/lib/quick-actions.ts` (tested): every action resolves to a real destination — deep-links into existing flows via new `validateSearch` params on `/payments` (`flow=recipient|upi-id|upi`, `tab=razorpay`), `/accounts` (`transfer=1` → real TransferDialog), `/expenses` (`add=1` → real add sheet), `/goals` (`add=1` → real goal form). Scan QR opens `QrScannerDialog` (real camera via getUserMedia + native BarcodeDetector, UPI-intent parsing, manual UPI-ID fallback for denied/unavailable camera); Recharge opens `RechargeDialog` (real ledger expense, operator + 10-digit validation).
+
+**Market strip**
+- New `MarketStrip` component: NIFTY 50 / SENSEX / BANK NIFTY (new simulated index instruments in `src/lib/market/indices.ts`, served by the same deterministic history/jitter engine) + watched stocks. Each item: symbol, price, absolute move, % move; subtle green/red, muted neutral. ONE compact "SIMULATED DATA" pill. Marquee auto-scroll pauses on hover/focus; `prefers-reduced-motion` renders a static scroll row. Replaces TickerStrip on the dashboard (TickerStrip kept for portfolio).
+
+**Desktop IA (1440px)**
+- Header → balance overview → quick actions → market strip → 12-col grid: PRIMARY (recent activity, insight, cash flow, spend analytics) / SECONDARY (portfolio snapshot, watchlist, market snapshot with top gainers/losers). Content max-width 78rem (existing `max-w-dashboard`), cards radius 16px, 8px base spacing, tabular numerals on all currency. No serif anywhere; emerald/teal only for interaction/state; pills only for the simulated-data chip and timeframe filters.
+
+**Honesty notes**
+- No mutual-fund dataset exists in the codebase (only the SIP calculator), so global search does NOT offer a Mutual Funds group — not invented. Mutual-fund search is a known gap for a later phase.
+- Index values are illustrative (seeded near plausible NIFTY/SENSEX levels), always labeled simulated.
+- QR scan success navigates to the real payments amount phase with the scanned payee/amount prefilled; non-UPI QR codes are rejected with an honest message, never recorded.
+
+## Files added
+- `src/lib/greeting.ts` (+ test), `src/lib/finance/money-math.ts` (+ test), `src/lib/upi-qr.ts` (+ test), `src/lib/quick-actions.ts` (+ test), `src/lib/market/indices.ts`, `src/types/barcode-detector.d.ts`
+- `src/components/fv/MarketStrip.tsx` (+ test), `src/components/home/QuickActions.tsx`, `src/components/payments/QrScannerDialog.tsx`, `src/components/payments/RechargeDialog.tsx`
+
+## Files modified
+- `src/routes/index.tsx` (dashboard rewrite), `src/routes/payments.tsx` (validateSearch + recipient/up-id/QR deep-links), `src/routes/expenses.tsx`, `src/routes/goals.tsx`, `src/routes/accounts.tsx` (validateSearch deep-links), `src/components/shell/AppHeader.tsx`, `BottomTabBar.tsx`, `GlobalSearch.tsx`, `src/components/fv/index.ts` (MarketStrip export), `src/lib/market/history.ts` (indices feed index history), `src/lib/settings.ts` (`balancePrivate`), `src/styles.css` (`fv-marquee` keyframes), `src/components/markets/SipSheet.tsx`, `src/components/tools/EmergencyTab.tsx`, `src/components/tools/ForecastTab.tsx`, `src/routes/insights.tsx` (add `search={{}}` to Links — required now that the target routes declare validateSearch)
+
+## Verification (real outputs)
+| Command | Result |
+|---|---|
+| `bun run test:unit` | **125/125 pass** (18 files; baseline 92 + 33 new: greeting 9, money-math 7, upi-qr 7, quick-actions 6, MarketStrip 4) |
+| `bun x tsc --noEmit` | **52 errors, 0 in any Phase-1-touched file** (pre-existing baseline 53; one old error in the rewritten dashboard disappeared) |
+| `bun x eslint` (all touched files) | **0 errors, 0 warnings** |
+| `bun run build` | ✅ green |
+| Pending (needs live browser) | Parent coordinator's milestone screenshot review via Vercel preview: 1440×900 first viewport (hero, quick actions, portfolio snapshot, recent activity, market snapshot, part of analytics), light + dark, mobile 390px quick-action grid, QR scanner camera flow on a real device |
+
+## New-test inventory (33)
+- `greeting.test.ts` (9): time-of-day greetings; "ee" rejected; email-as-name handled; email-local fallback; capitalized short names.
+- `money-math.test.ts` (9): net-worth formula incl. liabilities/negative; returns = value − cost; cash flow = income − expenses; pctChange zero-base honesty.
+- `upi-qr.test.ts` (9): full pay intent; open-amount QR; non-UPI rejection; non-INR rejection; malformed amounts.
+- `quick-actions.test.ts` (6): unique ids/labels; every route target exists; all 11 actions resolve; dialog targets; deep-link search shapes; unknown id throws.
+- `MarketStrip.test.tsx` (4): 3 indices render with price/abs/% ; exactly one SIMULATED DATA pill; watched stocks appended; AT label.

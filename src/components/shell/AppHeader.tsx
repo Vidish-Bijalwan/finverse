@@ -16,14 +16,15 @@ import { GlobalSearch } from "@/components/shell/GlobalSearch";
 import { NotificationBell } from "@/components/shell/NotificationBell";
 import { ThemeToggle } from "@/components/shell/ThemeToggle";
 
+/** App version, shown on the More and Settings pages. */
 export const APP_VERSION = "v1.0.0";
 
 const NAV_ITEMS = [
-  { label: "Dashboard", to: "/" },
-  { label: "Expenses", to: "/expenses" },
-  { label: "Insights", to: "/insights" },
-  { label: "Portfolio", to: "/portfolio" },
-  { label: "Screener", to: "/screener" },
+  { label: "Home", to: "/" },
+  { label: "Payments", to: "/payments" },
+  { label: "Invest", to: "/portfolio" },
+  { label: "Markets", to: "/watchlist" },
+  { label: "Activity", to: "/expenses" },
 ] as const;
 
 function Logo() {
@@ -75,7 +76,7 @@ function ProfileMenu() {
         <DropdownMenuLabel>
           <span className="block truncate text-sm font-semibold">{name}</span>
           <span className="block truncate text-xs font-normal text-muted-foreground">
-            {user?.email ?? APP_VERSION}
+            {user?.email ?? "FinVerse AI"}
           </span>
         </DropdownMenuLabel>
         <DropdownMenuSeparator />
@@ -102,8 +103,11 @@ function ProfileMenu() {
 }
 
 /**
- * Sticky top header: logo, desktop nav, search (navigates to /expenses),
- * and a profile avatar with an account menu.
+ * Sticky top header: brand, the five product sections, global search,
+ * notifications, theme toggle, and the account menu.
+ *
+ * The active section gets a pill + aria-current="page". No SaaS-admin
+ * decoration — every control is product-level.
  */
 export function AppHeader() {
   return (
@@ -111,27 +115,34 @@ export function AppHeader() {
       <div className="mx-auto flex h-16 max-w-dashboard items-center justify-between gap-3 px-4 sm:px-5 lg:px-8">
         <Logo />
 
-        <nav className="hidden items-center gap-7 md:flex" aria-label="Main navigation">
+        <nav className="hidden items-center gap-1 md:flex" aria-label="Main navigation">
           {NAV_ITEMS.map((item) => (
             <Link
               key={item.label}
               to={item.to}
               {...(item.to === "/" ? { activeOptions: { exact: true } } : {})}
-              activeProps={{ className: "text-primary" }}
-              inactiveProps={{ className: "text-foreground" }}
-              className={cn("text-sm font-medium transition-colors hover:text-primary")}
+              activeProps={{
+                className: "bg-primary/10 text-primary",
+                "aria-current": "page",
+              }}
+              inactiveProps={{ className: "text-muted-foreground" }}
+              className={cn(
+                "rounded-full px-4 py-2 text-sm font-semibold transition-colors",
+                "hover:bg-muted/70 hover:text-foreground",
+              )}
             >
               {item.label}
             </Link>
           ))}
         </nav>
 
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-1.5">
           <div className="hidden sm:block">
             <GlobalSearch />
           </div>
           <Link
             to="/expenses"
+            search={{}}
             aria-label="Search transactions"
             className="grid size-10 place-items-center rounded-full text-foreground transition-colors hover:bg-muted sm:hidden"
           >

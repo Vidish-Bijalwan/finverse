@@ -1,5 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   ArrowLeft,
   ArrowUpRight,
@@ -55,7 +55,24 @@ import {
 import type { Transaction } from "@/lib/finance/types";
 import { cn } from "@/lib/utils";
 
+export interface PaymentsSearch {
+  /** Deep-link into a send flow: "recipient" | "upi-id" | "upi" (QR scan result). */
+  flow?: string | undefined;
+  /** Deep-link into a tab: "send" | "razorpay" | "history". */
+  tab?: string | undefined;
+  upiId?: string | undefined;
+  name?: string | undefined;
+  amount?: string | undefined;
+}
+
 export const Route = createFileRoute("/payments")({
+  validateSearch: (search: Record<string, unknown>): PaymentsSearch => ({
+    flow: typeof search["flow"] === "string" ? (search["flow"] as string) : undefined,
+    tab: typeof search["tab"] === "string" ? (search["tab"] as string) : undefined,
+    upiId: typeof search["upiId"] === "string" ? (search["upiId"] as string) : undefined,
+    name: typeof search["name"] === "string" ? (search["name"] as string) : undefined,
+    amount: typeof search["amount"] === "string" ? (search["amount"] as string) : undefined,
+  }),
   head: () => ({
     meta: [
       { title: "Payments — FinVerse AI" },
@@ -99,7 +116,10 @@ function formatDay(dateISO: string): string {
 }
 
 function PaymentsPage() {
-  const [tab, setTab] = useState<Tab>("send");
+  const search = Route.useSearch();
+  const [tab, setTab] = useState<Tab>(
+    search.tab === "razorpay" ? "razorpay" : search.tab === "history" ? "history" : "send",
+  );
 
   return (
     <div className="mx-auto w-full max-w-lg px-4 pt-5 pb-28">
@@ -147,7 +167,13 @@ function PaymentsPage() {
       </nav>
 
       <div className="mt-5">
-        {tab === "send" && <SendTab />}
+        {tab === "send" && (
+          <SendTab
+            initialFlow={search.flow}
+            qrName={search.name ?? search.upiId}
+            qrAmountPaise={search.amount !== undefined ? Number(search.amount) : undefined}
+          />
+        )}
         {tab === "razorpay" && <RazorpayTab />}
         {tab === "history" && <HistoryTab />}
       </div>
@@ -157,8 +183,20 @@ function PaymentsPage() {
 
 // ── Simulated UPI tab ───────────────────────────────────────────────────────
 
-function SendTab() {
+function SendTab({
+  initialFlow,
+  qrName,
+  qrAmountPaise,
+}: {
+  /** Deep-link flow from quick actions / QR scan. Applied once on mount. */
+  initialFlow?: string | undefined;
+  /** Prefilled payee display name (QR scan result). */
+  qrName?: string | undefined;
+  /** Prefilled amount in paise (QR scan result). */
+  qrAmountPaise?: number | undefined;
+}) {
   const [phase, setPhase] = useState<UpiPhase>("home");
+  const [payeeMode, setPayeeMode] = useState<"name" | "upi-id">("name");
   const [payeeName, setPayeeName] = useState("");
   const [amountPaise, setAmountPaise] = useState(0);
   const [accountId, setAccountId] = useState<string | null>(null);
@@ -203,6 +241,29 @@ function SendTab() {
     setAmountPaise(0);
     setPhase("amount");
   };
+
+  // Deep-link flows from the dashboard quick actions / QR scanner.
+  const flowApplied = useRef(false);
+  useEffect(() => {
+    if (flowApplied.current) return;
+    flowApplied.current = true;
+    if (initialFlow === "recipient") {
+      setPayeeMode("name");
+      setPhase("recipient");
+    } else if (initialFlow === "upi-id") {
+      setPayeeMode("upi-id");
+      setPhase("recipient");
+    } else if (initialFlow === "upi" && qrName) {
+      setPayeeName(qrName);
+      setReceipt(null);
+      setAmountPaise(
+        qrAmountPaise !== undefined && Number.isFinite(qrAmountPaise) && qrAmountPaise > 0
+          ? Math.round(qrAmountPaise)
+          : 0,
+      );
+      setPhase("amount");
+    }
+  }, [initialFlow, qrName, qrAmountPaise]);
 
   const confirmPayment = async () => {
     if (!effectiveAccountId) return;
@@ -311,6 +372,7 @@ function SendTab() {
             type="button"
             onClick={() => {
               setPayeeName("");
+              setPayeeMode("name");
               setReceipt(null);
               setPhase("recipient");
             }}
@@ -330,6 +392,7 @@ function SendTab() {
       {phase === "recipient" && (
         <RecipientStep
           initial={payeeName}
+          mode={payeeMode}
           onBack={() => setPhase("home")}
           onContinue={(name) => startFor(name)}
         />
@@ -487,31 +550,45 @@ function StepHeader({ title, onBack }: { title: string; onBack: () => void }) {
 
 function RecipientStep({
   initial,
+  mode = "name",
   onBack,
   onContinue,
 }: {
   initial: string;
+  /** "name" = free-text recipient; "upi-id" = UPI ID or 10-digit mobile. */
+  mode?: "name" | "upi-id";
   onBack: () => void;
   onContinue: (name: string) => void;
 }) {
   const [name, setName] = useState(initial);
-  const valid = buildUpiNote(name).length > 0;
+  const trimmed = buildUpiNote(name);
+  const valid =
+    mode === "name"
+      ? trimmed.length > 0
+      : /^[\w.-]{2,256}@[a-zA-Z]{2,64}$/.test(trimmed) || /^\d{10}$/.test(trimmed);
   return (
     <div className="flex flex-col gap-4">
       <StepHeader title="New payment" onBack={onBack} />
       <TestModeBanner />
       <label className="flex flex-col gap-2">
-        <span className="text-sm font-bold text-foreground">Recipient name</span>
+        <span className="text-sm font-bold text-foreground">
+          {mode === "name" ? "Recipient name" : "UPI ID or mobile number"}
+        </span>
         <input
           type="text"
           value={name}
           onChange={(e) => setName(e.target.value)}
-          placeholder="e.g. Aarav Sharma"
+          placeholder={mode === "name" ? "e.g. Aarav Sharma" : "name@bank or 98765 43210"}
           maxLength={120}
           autoFocus
           className="h-13 rounded-2xl border border-input bg-card px-4 text-sm text-foreground outline-none placeholder:text-muted-foreground focus:border-primary"
         />
       </label>
+      <p className="-mt-2 text-xs text-muted-foreground">
+        {mode === "name"
+          ? "Pay anyone by name — the payment is recorded in your FinVerse ledger."
+          : "Enter the recipient's UPI ID (name@bank) or 10-digit mobile number."}
+      </p>
       <button
         type="button"
         disabled={!valid}

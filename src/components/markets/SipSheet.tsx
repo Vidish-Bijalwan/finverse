@@ -147,7 +147,7 @@ export function SipSheet({
           <p className="rounded-2xl bg-muted/60 px-4 py-3 text-xs leading-5 text-muted-foreground">
             Each instalment posts an <strong className="text-foreground">Investments</strong>{" "}
             expense transaction to your shared ledger automatically. Pause or resume anytime in{" "}
-            <Link to="/expenses" className="font-bold text-primary hover:underline">
+            <Link to="/expenses" search={{}} className="font-bold text-primary hover:underline">
               Expenses → Recurring
             </Link>
             . Note: SIP instalments don't change your holding quantity — that updates when you place

@@ -207,7 +207,9 @@ export function EmergencyTab() {
               </div>
               {!emergencyGoal && (
                 <Button asChild variant="outline" className="mt-2 w-full sm:w-auto">
-                  <Link to="/goals">Track this in a savings goal</Link>
+                  <Link to="/goals" search={{}}>
+                    Track this in a savings goal
+                  </Link>
                 </Button>
               )}
             </CardContent>

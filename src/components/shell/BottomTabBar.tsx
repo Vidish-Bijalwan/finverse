@@ -1,18 +1,19 @@
 import { Link } from "@tanstack/react-router";
-import { Home, LayoutGrid, ReceiptText, Sparkles, TrendingUp } from "lucide-react";
+import { Home, LineChart, ReceiptText, Send, TrendingUp } from "lucide-react";
 
 import { cn } from "@/lib/utils";
 
 const TABS = [
   { label: "Home", to: "/", icon: Home },
-  { label: "Expenses", to: "/expenses", icon: ReceiptText },
-  { label: "Insights", to: "/insights", icon: Sparkles },
-  { label: "Portfolio", to: "/portfolio", icon: TrendingUp },
-  { label: "More", to: "/more", icon: LayoutGrid },
+  { label: "Pay", to: "/payments", icon: Send },
+  { label: "Invest", to: "/portfolio", icon: TrendingUp },
+  { label: "Markets", to: "/watchlist", icon: LineChart },
+  { label: "Activity", to: "/expenses", icon: ReceiptText },
 ] as const;
 
 /**
- * Mobile-only fixed bottom tab bar. Active tab gets an animated indicator pill.
+ * Mobile-only fixed bottom tab bar: Home / Pay / Invest / Markets / Activity.
+ * Active tab gets an animated indicator pill + aria-current.
  */
 export function BottomTabBar() {
   return (
@@ -26,8 +27,8 @@ export function BottomTabBar() {
           <Link
             key={tab.label}
             to={tab.to}
-            activeOptions={tab.to === "/" ? { exact: true } : undefined}
-            activeProps={{ "data-active": "true" }}
+            {...(tab.to === "/" ? { activeOptions: { exact: true } } : {})}
+            activeProps={{ "data-active": "true", "aria-current": "page" }}
             className={cn(
               "group relative flex flex-col items-center gap-1 py-2.5 text-[11px] font-medium",
               "text-muted-foreground transition-colors hover:text-foreground",

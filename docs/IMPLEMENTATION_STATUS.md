@@ -1,10 +1,23 @@
 # FinVerse Revamp — Implementation Status
 
-Branch: `feature/finverse-revamp` · Base: `main@d5db5c5e`
+Branch: `feature/fintech-overhaul` (Phase 1) · Base: `main@3841647d`
 Migration handoff: `supabase/migrations/0002_revamp.sql` → user runs in Supabase dashboard before deploy.
 Env handoff: `RAZORPAY_KEY_ID`, `RAZORPAY_KEY_SECRET` (test keys, server-only), `SUPABASE_SERVICE_ROLE_KEY` (server-only) → Vercel.
 
-## Completed
+## Phase 1 — fintech overhaul: shell + dashboard (DONE, awaiting parent screenshot review)
+
+- **Shell**: header nav rebuilt Home / Payments / Invest / Markets / Activity with pill active state + `aria-current`; bottom tabs match; global search gained Contacts + Features groups; no routes renamed, all deep links intact.
+- **Greeting**: `src/lib/greeting.ts` sanitizes display names ("Good afternoon, ee" fixed); compact secondary line.
+- **Balance hero**: net worth 32–36px tabular numerals, honest cash+investments−liabilities sub, month net-cash-flow + % vs prev month, compact metrics row (Investments · Cash · Monthly cash flow · Investment P&L), persisted eye-toggle privacy masking.
+- **Financial-logic audit**: `src/lib/finance/money-math.ts` (net worth = cash+investments+other−liabilities; returns = value−cost; cash flow = income−expenses); "P&L" only for portfolio returns now; contradictory trio eliminated.
+- **Quick actions**: 11-action compact icon grid, every action wired via `src/lib/quick-actions.ts` routing table — deep-links into real flows (`/payments` recipient/UPI-ID/QR flows, `/accounts` transfer dialog, `/expenses` add sheet, `/goals` goal form), real QR scanner dialog (camera + BarcodeDetector + manual fallback), real recharge dialog (ledger expense).
+- **Market strip**: indices NIFTY 50 / SENSEX / BANK NIFTY (new `src/lib/market/indices.ts` simulated instruments) + watched stocks; symbol/price/abs/% per item; one compact SIMULATED DATA pill; hover/focus pause marquee; reduced-motion static row.
+- **Desktop IA**: 12-col grid — PRIMARY (recent activity, insight, cash flow, analytics) / SECONDARY (portfolio snapshot, watchlist, market snapshot with top movers). 78rem max width, 16px card radii, Space Grotesk only, emerald/teal for interaction/state only.
+- **Known gap**: no mutual-fund dataset exists in the codebase, so global search has no Mutual Funds group (not faked) — later phase.
+- **Verification**: tsc 52 errors / 0 in touched files (baseline was 53); eslint clean on touched files; unit 125/125 (33 new tests); build green. Details: `TEST_REPORT.md` Phase 1 section.
+- **DO NOT MERGE** — parent coordinator screenshot-reviews the Vercel preview before Phase 2.
+
+## Completed (earlier phases)
 - Phase 0 recon: `docs/UI_AUDIT.md` (architecture, components, weak areas, GPay/Groww patterns, component mapping, backend integration points, risks).
 - Design system: extended oklch tokens (success/warning/danger/info+soft, focus, gain/loss, keypad) w/ intentional dark mode; 19-file `src/components/fv/` kit (NumberDisplay, TestModeBanner, StatBand, TxnRow, HoldingRow, MarketRow, AmountInput, PinPad, PaymentSheet, OrderSheet, ReceiptView, ChartCard, DonutAllocation, SearchDropdown, AppLockScreen, TickerStrip, EmptyState, ErrorState, index barrel). tsc/eslint clean.
 - Migration: `supabase/migrations/0002_revamp.sql` — payment_links, payments, app_lock; owner RLS; updated_at triggers; indexes; RLS probe queries in comments. Parses clean (pglast). NOT applied — user handoff.
