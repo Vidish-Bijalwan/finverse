@@ -4,9 +4,15 @@ import type { FinanceDB } from "./finance/types";
 import { getStock } from "./market/data";
 import { getLTP } from "./market/history";
 import { formatINR } from "./finance/format";
+import { getSupabase } from "@/lib/supabase";
 
 /**
- * Stock watchlist with price alerts, persisted in localStorage.
+ * Stock watchlist with price alerts, persisted in Supabase.
+ *
+ * Tables (owned by the Supabase-auth migration):
+ *   watchlist_items(id uuid, user_id uuid, symbol text, unique(user_id, symbol))
+ *   price_alerts(id uuid, user_id uuid, symbol text,
+ *                target_price_paise bigint, direction 'above'|'below')
  *
  * Prices are the demo jittered LTPs from lib/market/history (mock "live"
  * prices that move slightly on refresh). When an alert's condition is met,
@@ -32,10 +38,6 @@ export interface WatchlistEntry {
   addedAt: string;
 }
 
-export const WATCHLIST_KEY = "finverse:watchlist:v1";
-
-const isBrowser = () => typeof window !== "undefined" && typeof window.localStorage !== "undefined";
-
 /** Notification-shaped object produced when an alert condition is met. */
 export interface WatchlistNotification {
   id: string;
@@ -47,43 +49,198 @@ export interface WatchlistNotification {
   createdAt: string;
 }
 
-function isValidEntry(v: unknown): v is WatchlistEntry {
-  if (typeof v !== "object" || v === null) return false;
-  const e = v as Record<string, unknown>;
-  if (typeof e["symbol"] !== "string" || (e["symbol"] as string).length === 0) return false;
-  if (!Array.isArray(e["alerts"])) return false;
-  return (e["alerts"] as unknown[]).every((a) => {
-    if (typeof a !== "object" || a === null) return false;
-    const al = a as Record<string, unknown>;
-    return (
-      typeof al["id"] === "string" &&
-      (al["kind"] === "above" || al["kind"] === "below") &&
-      typeof al["pricePaise"] === "number" &&
-      Number.isInteger(al["pricePaise"]) &&
-      (al["pricePaise"] as number) > 0
-    );
-  });
+/** Input for {@link insertPriceAlert}. */
+export interface InsertPriceAlertInput {
+  symbol: string;
+  kind: AlertKind;
+  /** Integer paise threshold. */
+  pricePaise: number;
 }
 
-/** Load the watchlist. SSR-safe: returns [] on the server. */
-export function loadWatchlist(): WatchlistEntry[] {
-  if (!isBrowser()) return [];
-  try {
-    const raw = window.localStorage.getItem(WATCHLIST_KEY);
-    if (!raw) return [];
-    const parsed: unknown = JSON.parse(raw);
-    if (!Array.isArray(parsed)) return [];
-    return parsed.filter(isValidEntry);
-  } catch {
-    return [];
+// ---- Supabase row shapes (table columns are snake_case) ----
+
+interface WatchlistItemRow {
+  id: string;
+  user_id: string;
+  symbol: string;
+  created_at: string;
+}
+
+interface PriceAlertRow {
+  id: string;
+  user_id: string;
+  symbol: string;
+  target_price_paise: number;
+  direction: string;
+  created_at: string;
+}
+
+function isAlertDirection(v: unknown): v is AlertKind {
+  return v === "above" || v === "below";
+}
+
+/** Signed-in user id, or a clear error when there is no session. */
+async function requireUserId(): Promise<string> {
+  const { data, error } = await getSupabase().auth.getUser();
+  const id = data.user?.id;
+  if (error || !id) {
+    throw new Error("Sign in to use your watchlist.");
+  }
+  return id;
+}
+
+function toPriceAlert(row: PriceAlertRow): PriceAlert {
+  return {
+    id: row.id,
+    kind: isAlertDirection(row.direction) ? row.direction : "above",
+    pricePaise: Number(row.target_price_paise),
+    createdAt: row.created_at,
+  };
+}
+
+/**
+ * Last snapshot returned by {@link fetchWatchlist}. The notifications
+ * aggregator (src/lib/notify.ts) calls {@link watchlistAlerts} synchronously,
+ * so it reads this snapshot — empty until the first successful fetch.
+ */
+let cachedEntries: WatchlistEntry[] = [];
+
+/** Load the signed-in user's watchlist with its alerts (oldest first). New users get []. */
+export async function fetchWatchlist(): Promise<WatchlistEntry[]> {
+  const supabase = getSupabase();
+  const userId = await requireUserId();
+
+  const { data: itemRows, error: itemsError } = await supabase
+    .from("watchlist_items")
+    .select("id,user_id,symbol,created_at")
+    .eq("user_id", userId)
+    .order("created_at", { ascending: true });
+  if (itemsError) {
+    throw new Error(`Couldn't load your watchlist: ${itemsError.message}`);
+  }
+
+  const { data: alertRows, error: alertsError } = await supabase
+    .from("price_alerts")
+    .select("id,user_id,symbol,target_price_paise,direction,created_at")
+    .eq("user_id", userId)
+    .order("created_at", { ascending: true });
+  if (alertsError) {
+    throw new Error(`Couldn't load your price alerts: ${alertsError.message}`);
+  }
+
+  const alertsBySymbol = new Map<string, PriceAlert[]>();
+  for (const row of (alertRows ?? []) as PriceAlertRow[]) {
+    if (!isAlertDirection(row.direction)) continue;
+    const list = alertsBySymbol.get(row.symbol);
+    if (list) list.push(toPriceAlert(row));
+    else alertsBySymbol.set(row.symbol, [toPriceAlert(row)]);
+  }
+
+  const entries: WatchlistEntry[] = ((itemRows ?? []) as WatchlistItemRow[]).map((row) => ({
+    symbol: row.symbol,
+    alerts: alertsBySymbol.get(row.symbol) ?? [],
+    addedAt: row.created_at,
+  }));
+
+  cachedEntries = entries;
+  return entries;
+}
+
+/** Add a stock to the signed-in user's watchlist. Throws on unknown symbols. Idempotent. */
+export async function insertWatchlistItem(symbol: string): Promise<WatchlistEntry> {
+  const upper = symbol.trim().toUpperCase();
+  if (!getStock(upper)) throw new Error(`Unknown stock symbol: ${symbol}`);
+  const supabase = getSupabase();
+  const userId = await requireUserId();
+  const { data, error } = await supabase
+    .from("watchlist_items")
+    .upsert({ user_id: userId, symbol: upper }, { onConflict: "user_id,symbol" })
+    .select("id,user_id,symbol,created_at")
+    .single();
+  if (error) {
+    throw new Error(`Couldn't add ${upper} to your watchlist: ${error.message}`);
+  }
+  const row = data as WatchlistItemRow;
+  return { symbol: row.symbol, alerts: [], addedAt: row.created_at };
+}
+
+/** Remove a stock — and all of its price alerts — from the signed-in user's watchlist. */
+export async function removeWatchlistItem(symbol: string): Promise<void> {
+  const upper = symbol.trim().toUpperCase();
+  const supabase = getSupabase();
+  const userId = await requireUserId();
+  const { error: alertsError } = await supabase
+    .from("price_alerts")
+    .delete()
+    .eq("user_id", userId)
+    .eq("symbol", upper);
+  if (alertsError) {
+    throw new Error(`Couldn't remove ${upper} from your watchlist: ${alertsError.message}`);
+  }
+  const { error: itemError } = await supabase
+    .from("watchlist_items")
+    .delete()
+    .eq("user_id", userId)
+    .eq("symbol", upper);
+  if (itemError) {
+    throw new Error(`Couldn't remove ${upper} from your watchlist: ${itemError.message}`);
   }
 }
 
-/** Persist the watchlist. No-op on the server. */
-export function saveWatchlist(entries: WatchlistEntry[]): void {
-  if (!isBrowser()) return;
-  window.localStorage.setItem(WATCHLIST_KEY, JSON.stringify(entries));
+/** Load the signed-in user's price alerts as a flat list (oldest first). */
+export async function fetchPriceAlerts(): Promise<PriceAlert[]> {
+  const supabase = getSupabase();
+  const userId = await requireUserId();
+  const { data, error } = await supabase
+    .from("price_alerts")
+    .select("id,user_id,symbol,target_price_paise,direction,created_at")
+    .eq("user_id", userId)
+    .order("created_at", { ascending: true });
+  if (error) {
+    throw new Error(`Couldn't load your price alerts: ${error.message}`);
+  }
+  return ((data ?? []) as PriceAlertRow[])
+    .filter((row) => isAlertDirection(row.direction))
+    .map(toPriceAlert);
 }
+
+/** Add a price alert for a watched stock. */
+export async function insertPriceAlert(input: InsertPriceAlertInput): Promise<PriceAlert> {
+  assertPaise(input.pricePaise);
+  const upper = input.symbol.trim().toUpperCase();
+  const supabase = getSupabase();
+  const userId = await requireUserId();
+  const { data, error } = await supabase
+    .from("price_alerts")
+    .insert({
+      user_id: userId,
+      symbol: upper,
+      target_price_paise: input.pricePaise,
+      direction: input.kind,
+    })
+    .select("id,user_id,symbol,target_price_paise,direction,created_at")
+    .single();
+  if (error) {
+    throw new Error(`Couldn't save your price alert: ${error.message}`);
+  }
+  return toPriceAlert(data as PriceAlertRow);
+}
+
+/**
+ * Delete a price alert by id. Named delete* to avoid clashing with the pure
+ * `removePriceAlert(entries, symbol, alertId)` helper below, whose signature
+ * must stay unchanged.
+ */
+export async function deletePriceAlert(id: string): Promise<void> {
+  const supabase = getSupabase();
+  const userId = await requireUserId();
+  const { error } = await supabase.from("price_alerts").delete().eq("id", id).eq("user_id", userId);
+  if (error) {
+    throw new Error(`Couldn't delete that price alert: ${error.message}`);
+  }
+}
+
+// ---- Pure helpers (signatures unchanged) ----
 
 function newId(): string {
   return typeof crypto !== "undefined" && "randomUUID" in crypto
@@ -149,15 +306,15 @@ export function isAlertMet(alert: PriceAlert, ltpPaise: number): boolean {
 /**
  * Evaluate every watchlist alert against current mock LTPs and return one
  * notification-shaped object per alert whose condition is currently met.
- * The `db` param keeps the signature compatible with a notifications
- * aggregator that passes the finance DB (the watchlist itself is stored
- * separately under WATCHLIST_KEY).
+ * Reads the last snapshot loaded by {@link fetchWatchlist} (empty until the
+ * first successful fetch) so this stays synchronous for the notifications
+ * aggregator. The `db` param keeps the signature compatible with a
+ * notifications aggregator that passes the finance DB.
  */
 export function watchlistAlerts(_db: FinanceDB): WatchlistNotification[] {
-  const entries = loadWatchlist();
   const out: WatchlistNotification[] = [];
   const now = new Date().toISOString();
-  for (const entry of entries) {
+  for (const entry of cachedEntries) {
     const ltp = getLTP(entry.symbol);
     if (ltp <= 0) continue;
     const stock = getStock(entry.symbol);
@@ -182,62 +339,71 @@ export function watchlistAlerts(_db: FinanceDB): WatchlistNotification[] {
 
 const QK_WATCHLIST = ["finverse", "watchlist"] as const;
 
-type WatchlistMutation = (entries: WatchlistEntry[]) => WatchlistEntry[];
-type WatchlistMutateOptions = MutateOptions<WatchlistEntry[], Error, WatchlistMutation>;
-
-export function useWatchlist() {
-  return useQuery({ queryKey: QK_WATCHLIST, queryFn: loadWatchlist });
+function useInvalidateWatchlist() {
+  const qc = useQueryClient();
+  return () => qc.invalidateQueries({ queryKey: QK_WATCHLIST });
 }
 
-function useMutateWatchlist() {
-  const qc = useQueryClient();
-  return useMutation<WatchlistEntry[], Error, WatchlistMutation>({
-    mutationFn: async (fn) => {
-      const next = fn(loadWatchlist());
-      saveWatchlist(next);
-      return next;
-    },
-    onSuccess: () => qc.invalidateQueries({ queryKey: QK_WATCHLIST }),
-  });
+export function useWatchlist() {
+  return useQuery({ queryKey: QK_WATCHLIST, queryFn: fetchWatchlist, retry: false });
 }
 
 export function useAddToWatchlist() {
-  const m = useMutateWatchlist();
+  const invalidate = useInvalidateWatchlist();
+  const m = useMutation<WatchlistEntry, Error, string>({
+    mutationFn: insertWatchlistItem,
+    onSuccess: invalidate,
+  });
   return {
     ...m,
-    mutateAdd: (symbol: string, options?: WatchlistMutateOptions) =>
-      m.mutate((e) => addToWatchlist(e, symbol), options),
+    mutateAdd: (symbol: string, options?: MutateOptions<WatchlistEntry, Error, string>) =>
+      m.mutate(symbol, options),
   };
 }
 
 export function useRemoveFromWatchlist() {
-  const m = useMutateWatchlist();
+  const invalidate = useInvalidateWatchlist();
+  const m = useMutation<void, Error, string>({
+    mutationFn: removeWatchlistItem,
+    onSuccess: invalidate,
+  });
   return {
     ...m,
-    mutateRemove: (symbol: string, options?: WatchlistMutateOptions) =>
-      m.mutate((e) => removeFromWatchlist(e, symbol), options),
+    mutateRemove: (symbol: string, options?: MutateOptions<void, Error, string>) =>
+      m.mutate(symbol, options),
   };
 }
 
 export function useAddPriceAlert() {
-  const m = useMutateWatchlist();
+  const invalidate = useInvalidateWatchlist();
+  const m = useMutation<PriceAlert, Error, InsertPriceAlertInput>({
+    mutationFn: insertPriceAlert,
+    onSuccess: invalidate,
+  });
   return {
     ...m,
     mutateAddAlert: (
       symbol: string,
       kind: AlertKind,
       pricePaise: number,
-      options?: WatchlistMutateOptions,
-    ) => m.mutate((e) => addPriceAlert(e, symbol, kind, pricePaise), options),
+      options?: MutateOptions<PriceAlert, Error, InsertPriceAlertInput>,
+    ) => m.mutate({ symbol, kind, pricePaise }, options),
   };
 }
 
 export function useRemovePriceAlert() {
-  const m = useMutateWatchlist();
+  const invalidate = useInvalidateWatchlist();
+  const m = useMutation<void, Error, { symbol: string; alertId: string }>({
+    mutationFn: ({ alertId }) => deletePriceAlert(alertId),
+    onSuccess: invalidate,
+  });
   return {
     ...m,
-    mutateRemoveAlert: (symbol: string, alertId: string, options?: WatchlistMutateOptions) =>
-      m.mutate((e) => removePriceAlert(e, symbol, alertId), options),
+    mutateRemoveAlert: (
+      symbol: string,
+      alertId: string,
+      options?: MutateOptions<void, Error, { symbol: string; alertId: string }>,
+    ) => m.mutate({ symbol, alertId }, options),
   };
 }
 

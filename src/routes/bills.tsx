@@ -8,9 +8,9 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { FINVERSE_QUERY_KEYS, useBills, usePayBill } from "@/lib/finance/hooks";
+import { deleteBill, insertBill, updateBill } from "@/lib/finance/db";
 import { categoryById } from "@/lib/finance/categories";
 import { formatINR, todayISO } from "@/lib/finance/format";
-import { saveDB, seedIfEmpty } from "@/lib/finance/store";
 import type { Bill } from "@/lib/finance/types";
 import { cn } from "@/lib/utils";
 import { BillDialog, type BillFormInput } from "@/components/money/BillDialog";
@@ -39,39 +39,30 @@ type BillStatus =
 /** Local bill mutations: the shared hooks layer only exposes list + pay. */
 function useBillMutations() {
   const qc = useQueryClient();
-  const invalidate = () => qc.invalidateQueries({ queryKey: FINVERSE_QUERY_KEYS.bills });
+  const invalidate = () => {
+    qc.invalidateQueries({ queryKey: FINVERSE_QUERY_KEYS.bills });
+    qc.invalidateQueries({ queryKey: ["finverse", "db"] });
+  };
 
   const saveBill = useMutation({
-    mutationFn: (args: { id?: string; input: BillFormInput }): Bill => {
-      const db = seedIfEmpty();
+    mutationFn: (args: { id?: string; input: BillFormInput }): Promise<Bill> => {
       if (args.id) {
-        const bill = db.bills.find((b) => b.id === args.id);
-        if (!bill) throw new Error("Bill not found");
-        Object.assign(bill, args.input);
-        saveDB(db);
-        return bill;
+        return updateBill(args.id, args.input).then((bill) => {
+          if (!bill) throw new Error("Bill not found");
+          return bill;
+        });
       }
-      const bill: Bill = { ...args.input, id: crypto.randomUUID() };
-      db.bills.push(bill);
-      saveDB(db);
-      return bill;
+      return insertBill(args.input);
     },
     onSuccess: invalidate,
   });
 
-  const deleteBill = useMutation({
-    mutationFn: (id: string): boolean => {
-      const db = seedIfEmpty();
-      const idx = db.bills.findIndex((b) => b.id === id);
-      if (idx === -1) return false;
-      db.bills.splice(idx, 1);
-      saveDB(db);
-      return true;
-    },
+  const deleteBillMutation = useMutation({
+    mutationFn: (id: string): Promise<boolean> => deleteBill(id),
     onSuccess: invalidate,
   });
 
-  return { saveBill, deleteBill };
+  return { saveBill, deleteBill: deleteBillMutation };
 }
 
 function billStatus(bill: Bill, today: string): BillStatus {
@@ -186,17 +177,15 @@ function BillsPage() {
 
   const handleSave = (input: BillFormInput) => {
     const isEdit = Boolean(editing);
-    saveBill.mutate(
-      { id: editing?.id, input },
-      {
-        onSuccess: () => {
-          setDialogOpen(false);
-          setEditing(null);
-          toast.success(isEdit ? "Bill updated" : `Bill added · ${formatINR(input.amountPaise)}`);
-        },
-        onError: () => toast.error("Couldn't save — try again."),
+    const args = editing ? { id: editing.id, input } : { input };
+    saveBill.mutate(args, {
+      onSuccess: () => {
+        setDialogOpen(false);
+        setEditing(null);
+        toast.success(isEdit ? "Bill updated" : `Bill added · ${formatINR(input.amountPaise)}`);
       },
-    );
+      onError: () => toast.error("Couldn't save — try again."),
+    });
   };
 
   const handleDelete = () => {

@@ -1,51 +1,49 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback } from "react";
+import { useQuery } from "@tanstack/react-query";
 
-const KEY = "finverse:watchlist";
-
-function readWatchlist(): string[] {
-  if (typeof window === "undefined") return [];
-  try {
-    const raw = window.localStorage.getItem(KEY);
-    if (!raw) return [];
-    const parsed: unknown = JSON.parse(raw);
-    return Array.isArray(parsed) ? parsed.filter((s): s is string => typeof s === "string") : [];
-  } catch {
-    return [];
-  }
-}
+import {
+  fetchWatchlist,
+  useAddToWatchlist,
+  useRemoveFromWatchlist,
+  WATCHLIST_QUERY_KEY,
+} from "@/lib/watchlist";
 
 /**
- * Watchlist of stock symbols, persisted to localStorage.
- * SSR-safe: reads storage lazily and only writes on the client.
+ * Watchlist of stock symbols, backed by Supabase through the shared watchlist
+ * query from @/lib/watchlist. Same return shape as before; toggling now goes
+ * through the Supabase mutations (requires a signed-in user). Unresolved or
+ * unauthenticated state simply reads as an empty list.
  */
 export function useWatchlist(): {
   watchlist: string[];
   isWatched: (symbol: string) => boolean;
   toggle: (symbol: string) => void;
 } {
-  const [watchlist, setWatchlist] = useState<string[]>([]);
+  const { data: entries } = useQuery({
+    queryKey: WATCHLIST_QUERY_KEY,
+    queryFn: fetchWatchlist,
+    retry: false,
+  });
+  const addStock = useAddToWatchlist();
+  const removeStock = useRemoveFromWatchlist();
 
-  useEffect(() => {
-    setWatchlist(readWatchlist());
-  }, []);
-
-  useEffect(() => {
-    if (typeof window === "undefined") return;
-    try {
-      window.localStorage.setItem(KEY, JSON.stringify(watchlist));
-    } catch {
-      // Storage full or unavailable — watchlist simply won't persist.
-    }
-  }, [watchlist]);
-
-  const toggle = useCallback((symbol: string) => {
-    const s = symbol.toUpperCase();
-    setWatchlist((prev) => (prev.includes(s) ? prev.filter((x) => x !== s) : [...prev, s]));
-  }, []);
+  const watchlist = (entries ?? []).map((e) => e.symbol);
 
   const isWatched = useCallback(
     (symbol: string) => watchlist.includes(symbol.toUpperCase()),
     [watchlist],
+  );
+
+  const toggle = useCallback(
+    (symbol: string) => {
+      const s = symbol.toUpperCase();
+      if (isWatched(s)) {
+        removeStock.mutateRemove(s);
+      } else {
+        addStock.mutateAdd(s);
+      }
+    },
+    [addStock, isWatched, removeStock],
   );
 
   return { watchlist, isWatched, toggle };

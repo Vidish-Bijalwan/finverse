@@ -12,8 +12,8 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { buildInsights, previousMonth } from "@/lib/ai/engine";
+import { loadFinanceDB } from "@/lib/finance/db";
 import { monthKey, monthLabel } from "@/lib/finance/format";
-import { seedIfEmpty } from "@/lib/finance/store";
 import { useMonth } from "@/lib/finance/hooks";
 
 export const Route = createFileRoute("/insights")({
@@ -41,8 +41,8 @@ function InsightsPage() {
   const isCurrentMonth = month === currentMonth;
 
   const dbQuery = useQuery({
-    queryKey: ["finverse", "ai-db"],
-    queryFn: () => seedIfEmpty(),
+    queryKey: ["finverse", "db"],
+    queryFn: loadFinanceDB,
   });
 
   const insights = useMemo(

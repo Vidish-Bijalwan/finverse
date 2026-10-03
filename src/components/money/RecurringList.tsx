@@ -8,8 +8,8 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { formatDateLong } from "@/components/money/utils";
 import { categoryById } from "@/lib/finance/categories";
 import { formatINR } from "@/lib/finance/format";
-import { nextRecurringDate } from "@/lib/finance/store";
 import { todayISO } from "@/lib/finance/format";
+import type { RecurringFrequency } from "@/lib/finance/types";
 import {
   useDeleteRecurringRule,
   useRecurringRules,
@@ -25,6 +25,70 @@ const FREQUENCY_LABEL: Record<RecurringRule["frequency"], string> = {
   monthly: "Monthly",
   yearly: "Yearly",
 };
+
+/**
+ * Pure date helpers for recurring rules (copied from the old localStorage
+ * store — no storage access, safe to keep local to this component).
+ */
+function pad2(n: number): string {
+  return String(n).padStart(2, "0");
+}
+
+function addDaysISO(iso: string, days: number): string {
+  const parts = iso.split("-").map(Number);
+  const y = parts[0] ?? 1970;
+  const m = parts[1] ?? 1;
+  const d = parts[2] ?? 1;
+  const dt = new Date(y, m - 1, d);
+  dt.setDate(dt.getDate() + days);
+  return `${dt.getFullYear()}-${pad2(dt.getMonth() + 1)}-${pad2(dt.getDate())}`;
+}
+
+/** Shift a date by whole months, clamping the day to the target month length. */
+function addMonthsClamped(y: number, m: number, d: number, delta: number): string {
+  const total = y * 12 + (m - 1) + delta;
+  const ny = Math.floor(total / 12);
+  const nm = (total % 12) + 1;
+  const daysInMonth = new Date(ny, nm, 0).getDate();
+  return `${ny}-${pad2(nm)}-${pad2(Math.min(d, daysInMonth))}`;
+}
+
+/** The nth occurrence date of a rule, computed from its start (no drift). */
+function recurringOccurrenceDate(
+  startDateISO: string,
+  frequency: RecurringFrequency,
+  n: number,
+): string {
+  const parts = startDateISO.split("-").map(Number);
+  const y = parts[0] ?? 1970;
+  const m = parts[1] ?? 1;
+  const d = parts[2] ?? 1;
+  switch (frequency) {
+    case "daily":
+      return addDaysISO(startDateISO, n);
+    case "weekly":
+      return addDaysISO(startDateISO, n * 7);
+    case "monthly":
+      return addMonthsClamped(y, m, d, n);
+    case "yearly":
+      return addMonthsClamped(y, m, d, n * 12);
+  }
+}
+
+/** Next occurrence date after `fromISO` (exclusive), or null when the rule ended. */
+function nextRecurringDate(rule: RecurringRule, fromISO: string): string | null {
+  const lastPosted = rule.lastPostedDateISO ?? null;
+  for (let n = 0; n < 1000; n++) {
+    const dateISO = recurringOccurrenceDate(rule.startDateISO, rule.frequency, n);
+    if (lastPosted !== null && dateISO <= lastPosted) continue;
+    if (rule.endDateISO && dateISO > rule.endDateISO) return null;
+    if (dateISO > fromISO) return dateISO;
+    // Occurrences on or before fromISO that were never posted are overdue —
+    // surface the earliest one so the UI can show "due".
+    if (dateISO <= fromISO) return dateISO;
+  }
+  return null;
+}
 
 function RuleRow({ rule, onEdit }: { rule: RecurringRule; onEdit: (rule: RecurringRule) => void }) {
   const toggle = useToggleRecurringRule();

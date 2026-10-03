@@ -1,8 +1,10 @@
 import { useId, useMemo, useRef, useState } from "react";
 import { useNavigate } from "@tanstack/react-router";
+import { useQuery } from "@tanstack/react-query";
 import { Receipt, ReceiptIndianRupee, Search, Target, TrendingUp, X } from "lucide-react";
 
-import { seedIfEmpty } from "@/lib/finance/store";
+import { loadFinanceDB } from "@/lib/finance/db";
+import type { FinanceDB } from "@/lib/finance/types";
 import { categoryById } from "@/lib/finance/categories";
 import { formatINR } from "@/lib/finance/format";
 import { STOCKS } from "@/lib/market/data";
@@ -37,74 +39,76 @@ function parseRupees(q: string): number | null {
   return Number.isFinite(n) ? n : null;
 }
 
-function buildResults(query: string): SearchResult[] {
+function buildResults(query: string, db: FinanceDB | undefined): SearchResult[] {
   const q = query.trim().toLowerCase();
   if (!q) return [];
   const rupees = parseRupees(query.trim());
   const paise = rupees !== null ? Math.round(rupees * 100) : null;
 
-  const db = seedIfEmpty();
   const out: SearchResult[] = [];
 
-  // --- Transactions: note, category label, type, pay mode, date, amount ---
-  const txns = db.transactions
-    .filter((t) => {
+  // --- Transactions / bills / goals (need the finance DB) ---
+  if (db) {
+    // --- Transactions: note, category label, type, pay mode, date, amount ---
+    const txns = db.transactions
+      .filter((t) => {
+        const cat = categoryById(t.category);
+        const hay =
+          `${t.note} ${t.category} ${cat?.label ?? ""} ${t.type} ${t.payMode} ${t.dateISO}`.toLowerCase();
+        if (hay.includes(q)) return true;
+        if (paise !== null && t.amountPaise === paise) return true;
+        if (formatINR(t.amountPaise).toLowerCase().includes(q)) return true;
+        return false;
+      })
+      .slice(0, MAX_PER_GROUP);
+    for (const t of txns) {
       const cat = categoryById(t.category);
-      const hay =
-        `${t.note} ${t.category} ${cat?.label ?? ""} ${t.type} ${t.payMode} ${t.dateISO}`.toLowerCase();
-      if (hay.includes(q)) return true;
-      if (paise !== null && t.amountPaise === paise) return true;
-      if (formatINR(t.amountPaise).toLowerCase().includes(q)) return true;
-      return false;
-    })
-    .slice(0, MAX_PER_GROUP);
-  for (const t of txns) {
-    const cat = categoryById(t.category);
-    out.push({
-      key: `txn-${t.id}`,
-      group: "Transactions",
-      title: t.note || cat?.label || t.category,
-      subtitle: `${t.dateISO} · ${formatINR(t.amountPaise)}`,
-      to: "/expenses",
-    });
-  }
+      out.push({
+        key: `txn-${t.id}`,
+        group: "Transactions",
+        title: t.note || cat?.label || t.category,
+        subtitle: `${t.dateISO} · ${formatINR(t.amountPaise)}`,
+        to: "/expenses",
+      });
+    }
 
-  // --- Bills ---
-  const bills = db.bills
-    .filter((b) => {
-      const hay = `${b.name} ${b.category} ${b.dueDay}`.toLowerCase();
-      if (hay.includes(q)) return true;
-      if (paise !== null && b.amountPaise === paise) return true;
-      return false;
-    })
-    .slice(0, MAX_PER_GROUP);
-  for (const b of bills) {
-    out.push({
-      key: `bill-${b.id}`,
-      group: "Bills",
-      title: b.name,
-      subtitle: `${formatINR(b.amountPaise)} · due day ${b.dueDay}`,
-      to: "/bills",
-    });
-  }
+    // --- Bills ---
+    const bills = db.bills
+      .filter((b) => {
+        const hay = `${b.name} ${b.category} ${b.dueDay}`.toLowerCase();
+        if (hay.includes(q)) return true;
+        if (paise !== null && b.amountPaise === paise) return true;
+        return false;
+      })
+      .slice(0, MAX_PER_GROUP);
+    for (const b of bills) {
+      out.push({
+        key: `bill-${b.id}`,
+        group: "Bills",
+        title: b.name,
+        subtitle: `${formatINR(b.amountPaise)} · due day ${b.dueDay}`,
+        to: "/bills",
+      });
+    }
 
-  // --- Goals ---
-  const goals = db.goals
-    .filter((g) => {
-      const hay = `${g.name} ${g.deadline}`.toLowerCase();
-      if (hay.includes(q)) return true;
-      if (paise !== null && (g.targetPaise === paise || g.savedPaise === paise)) return true;
-      return false;
-    })
-    .slice(0, MAX_PER_GROUP);
-  for (const g of goals) {
-    out.push({
-      key: `goal-${g.id}`,
-      group: "Goals",
-      title: g.name,
-      subtitle: `${formatINR(g.savedPaise)} of ${formatINR(g.targetPaise)}`,
-      to: "/goals",
-    });
+    // --- Goals ---
+    const goals = db.goals
+      .filter((g) => {
+        const hay = `${g.name} ${g.deadline}`.toLowerCase();
+        if (hay.includes(q)) return true;
+        if (paise !== null && (g.targetPaise === paise || g.savedPaise === paise)) return true;
+        return false;
+      })
+      .slice(0, MAX_PER_GROUP);
+    for (const g of goals) {
+      out.push({
+        key: `goal-${g.id}`,
+        group: "Goals",
+        title: g.name,
+        subtitle: `${formatINR(g.savedPaise)} of ${formatINR(g.targetPaise)}`,
+        to: "/goals",
+      });
+    }
   }
 
   // --- Stocks (41-stock universe) ---
@@ -147,7 +151,12 @@ export function GlobalSearch({
   const [active, setActive] = useState(0);
   const inputRef = useRef<HTMLInputElement>(null);
 
-  const results = useMemo(() => buildResults(query), [query]);
+  const dbQuery = useQuery({
+    queryKey: ["finverse", "db"],
+    queryFn: loadFinanceDB,
+  });
+
+  const results = useMemo(() => buildResults(query, dbQuery.data), [query, dbQuery.data]);
   const showPanel = open && query.trim().length > 0;
 
   function go(r: SearchResult) {

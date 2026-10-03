@@ -8,16 +8,15 @@ import {
   Eye,
   Landmark,
   ReceiptIndianRupee,
-  RotateCcw,
   Settings,
   ShieldCheck,
   Sparkles,
   Target,
+  User,
   Wallet,
   WalletCards,
 } from "lucide-react";
 
-import { STORE_KEY } from "@/lib/finance/store";
 import { APP_VERSION } from "@/components/shell/AppHeader";
 
 export const Route = createFileRoute("/more")({
@@ -31,6 +30,12 @@ export const Route = createFileRoute("/more")({
 });
 
 const MENU_ROWS = [
+  {
+    label: "Profile",
+    description: "Your account, photo and sign out",
+    to: "/profile",
+    icon: User,
+  },
   {
     label: "Bills",
     description: "Recurring bills and upcoming dues",
@@ -89,15 +94,6 @@ const MENU_ROWS = [
   },
 ] as const;
 
-function resetDemoData() {
-  try {
-    window.localStorage.removeItem(STORE_KEY);
-  } catch {
-    // Storage may be unavailable; reload anyway so seeded defaults return.
-  }
-  window.location.reload();
-}
-
 function MorePage() {
   return (
     <div className="mx-auto w-full max-w-dashboard px-4 py-6 sm:px-5 lg:px-8">
@@ -133,23 +129,6 @@ function MorePage() {
         ))}
       </nav>
 
-      <button
-        type="button"
-        onClick={resetDemoData}
-        className="mt-4 flex w-full items-center gap-4 rounded-2xl border border-destructive/30 bg-card px-4 py-4 text-left transition-colors hover:bg-destructive/5"
-      >
-        <span className="grid size-10 shrink-0 place-items-center rounded-xl bg-destructive/10 text-destructive">
-          <RotateCcw className="size-5" />
-        </span>
-        <span className="min-w-0 flex-1">
-          <span className="block text-sm font-semibold text-foreground">Reset demo data</span>
-          <span className="block truncate text-xs text-muted-foreground">
-            Clear local data and restore the seeded demo
-          </span>
-        </span>
-        <ChevronRight className="size-5 shrink-0 text-muted-foreground" />
-      </button>
-
       <section className="mt-6 rounded-2xl border border-border bg-surface-soft p-5">
         <div className="flex items-center gap-2.5">
           <span className="grid size-9 place-items-center rounded-md bg-primary-dark">
@@ -163,7 +142,7 @@ function MorePage() {
           investments — with AI that always shows its reasoning.
         </p>
         <p className="mt-3 text-xs font-medium text-muted-foreground">
-          FinVerse AI {APP_VERSION} · Demo build — data stays in your browser.
+          FinVerse AI {APP_VERSION} · Your data syncs securely to your account.
         </p>
       </section>
     </div>

@@ -3,16 +3,9 @@ import { useQuery } from "@tanstack/react-query";
 
 import { anomalyInsights, billStatuses, loadStreakState, weeklyDigest } from "@/lib/ai/engine";
 import { categoryById } from "@/lib/finance/categories";
-import { formatINR, monthKey, todayISO } from "@/lib/finance/format";
-import { FINVERSE_QUERY_KEYS } from "@/lib/finance/hooks";
-import {
-  getBudgets,
-  listBills,
-  listGoals,
-  listTransactions,
-  seedIfEmpty,
-} from "@/lib/finance/store";
-import type { FinanceDB } from "@/lib/finance/types";
+import { loadFinanceDB } from "@/lib/finance/db";
+import { formatINR, todayISO } from "@/lib/finance/format";
+import type { Budget, FinanceDB } from "@/lib/finance/types";
 import { watchlistAlerts } from "@/lib/watchlist";
 
 /**
@@ -74,6 +67,11 @@ const KIND_PRIORITY: Record<AppNotification["kind"], number> = {
   streak: 5,
   info: 6,
 };
+
+/** Budgets for a month, from the passed DB (pure; replaces the store helper). */
+function getBudgets(db: FinanceDB, month: string): Budget[] {
+  return db.budgets.filter((b) => b.month === month);
+}
 
 function catLabel(id: string): string {
   return categoryById(id)?.label ?? id;
@@ -236,32 +234,11 @@ export function unreadCount(db: FinanceDB): number {
   return collectNotifications(db).filter((n) => !read.has(n.id)).length;
 }
 
-function buildNotificationsDB(
-  transactions: FinanceDB["transactions"],
-  budgets: FinanceDB["budgets"],
-  bills: FinanceDB["bills"],
-  goals: FinanceDB["goals"],
-): FinanceDB {
-  // FinanceDB grew new collections in Batch A (accounts, customCategories,
-  // recurringRules) — pull them from the canonical store so the synthetic
-  // DB stays complete.
-  const db = seedIfEmpty();
-  return {
-    transactions,
-    budgets,
-    bills,
-    goals,
-    holdings: [],
-    accounts: db.accounts,
-    customCategories: db.customCategories,
-    recurringRules: db.recurringRules,
-  };
-}
-
 /**
- * Live notifications hook. Reuses the finance query-key namespace so it stays
- * in sync with mutations (e.g. a budget breach appears as soon as the
- * overspending transaction is saved). Safe to call from the app shell.
+ * Live notifications hook. Loads the whole DB through the Supabase data
+ * layer and derives every notification from it, so it stays in sync with
+ * mutations (e.g. a budget breach appears as soon as the overspending
+ * transaction is saved). Safe to call from the app shell.
  */
 export function useNotifications(): {
   notifications: AppNotification[];
@@ -269,23 +246,9 @@ export function useNotifications(): {
   isRead(id: string): boolean;
   markAllRead(): void;
 } {
-  const month = monthKey(new Date());
-
-  const txnsQuery = useQuery({
-    queryKey: [...FINVERSE_QUERY_KEYS.transactions, "all"],
-    queryFn: () => listTransactions(seedIfEmpty()),
-  });
-  const budgetsQuery = useQuery({
-    queryKey: [...FINVERSE_QUERY_KEYS.budgets, month],
-    queryFn: () => getBudgets(seedIfEmpty(), month),
-  });
-  const billsQuery = useQuery({
-    queryKey: FINVERSE_QUERY_KEYS.bills,
-    queryFn: () => listBills(seedIfEmpty()),
-  });
-  const goalsQuery = useQuery({
-    queryKey: FINVERSE_QUERY_KEYS.goals,
-    queryFn: () => listGoals(seedIfEmpty()),
+  const dbQuery = useQuery({
+    queryKey: ["finverse", "db"],
+    queryFn: loadFinanceDB,
   });
 
   const [readIds, setReadIds] = useState<string[]>(() => readStoredIds());
@@ -298,12 +261,10 @@ export function useNotifications(): {
     return () => window.removeEventListener("focus", onFocus);
   }, []);
 
-  const notifications = useMemo(() => {
-    if (!txnsQuery.data || !budgetsQuery.data || !billsQuery.data || !goalsQuery.data) return [];
-    return collectNotifications(
-      buildNotificationsDB(txnsQuery.data, budgetsQuery.data, billsQuery.data, goalsQuery.data),
-    );
-  }, [txnsQuery.data, budgetsQuery.data, billsQuery.data, goalsQuery.data]);
+  const notifications = useMemo(
+    () => (dbQuery.data ? collectNotifications(dbQuery.data) : []),
+    [dbQuery.data],
+  );
 
   const readSet = useMemo(() => new Set(readIds), [readIds]);
   const unread = notifications.filter((n) => !readSet.has(n.id)).length;

@@ -14,7 +14,13 @@ import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { AmountField } from "./AmountField";
 import { CATEGORY_COLORS, CUSTOM_ICON_OPTIONS, iconForName } from "@/lib/finance/categories";
-import { DEFAULT_ACCOUNT_COLORS } from "@/lib/finance/store";
+
+/** Default color per account type (copied from the old localStorage store). */
+const DEFAULT_ACCOUNT_COLORS: Record<AccountType, string> = {
+  cash: "#F59E0B",
+  upi: "#10B981",
+  bank: "#3B82F6",
+};
 import { paiseToRupees, rupeesToPaise } from "@/components/money/utils";
 import { useAddAccount, useUpdateAccount } from "@/lib/finance/hooks";
 import type { Account, AccountType } from "@/lib/finance/types";

@@ -11,7 +11,6 @@ import {
   MonitorSmartphone,
   Moon,
   Palette,
-  RotateCcw,
   Sun,
   Upload,
 } from "lucide-react";
@@ -41,7 +40,18 @@ import { Separator } from "@/components/ui/separator";
 import { SectionCard } from "@/components/markets/shared";
 import { PageShell } from "@/components/markets/PageShell";
 import { APP_VERSION } from "@/components/shell/AppHeader";
-import { STORE_KEY, loadDB, saveDB } from "@/lib/finance/store";
+import {
+  insertAccount,
+  insertBill,
+  insertCustomCategory,
+  insertGoal,
+  insertHolding,
+  insertRecurringRule,
+  insertTransaction,
+  loadFinanceDB,
+  setBudget,
+} from "@/lib/finance/db";
+import type { FinanceDB } from "@/lib/finance/types";
 import {
   DEFAULT_SETTINGS,
   buildBackup,
@@ -78,11 +88,10 @@ function SettingsPage() {
   const [settings, updateSettings] = useSettings();
   const [restoreErrors, setRestoreErrors] = useState<string[]>([]);
   const [pendingBackup, setPendingBackup] = useState<BackupFile | null>(null);
-  const [resetOpen, setResetOpen] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
 
-  function handleExportCSV() {
-    const db = loadDB();
+  async function handleExportCSV() {
+    const db = await loadFinanceDB();
     if (db.transactions.length === 0) {
       toast.info("No transactions to export yet.");
       return;
@@ -95,8 +104,8 @@ function SettingsPage() {
     toast.success(`Exported ${db.transactions.length} transactions to CSV.`);
   }
 
-  function handleBackup() {
-    const backup = buildBackup(getSettings(), loadDB());
+  async function handleBackup() {
+    const backup = buildBackup(getSettings(), await loadFinanceDB());
     downloadFile(
       `finverse-backup-${todayISO()}.json`,
       JSON.stringify(backup, null, 2),
@@ -131,10 +140,183 @@ function SettingsPage() {
     reader.readAsText(file);
   }
 
-  function confirmRestore() {
+  /**
+   * Merge a validated backup into the live database: every backup row is
+   * inserted through the Supabase data layer unless a row with the same id
+   * already exists (skipped). Cross-references (accountId, billId, goalId,
+   * recurringRuleId) are re-pointed at the live rows via an id map, so
+   * restored transactions stay linked to their restored accounts/bills/goals.
+   * Per-row failures are collected and surfaced; successful rows are kept.
+   */
+  async function confirmRestore() {
     if (!pendingBackup) return;
+    setRestoreErrors([]);
+    const errors: string[] = [];
+    let inserted = 0;
+    let skipped = 0;
+    const errMsg = (e: unknown) => (e instanceof Error ? e.message : "Couldn't save.");
+
     try {
-      saveDB(pendingBackup.db);
+      const db = await loadFinanceDB();
+      const incoming: FinanceDB = pendingBackup.db;
+
+      const existingIds = new Set<string>();
+      for (const row of [
+        ...db.transactions,
+        ...db.budgets,
+        ...db.bills,
+        ...db.goals,
+        ...db.holdings,
+        ...db.accounts,
+        ...db.customCategories,
+        ...db.recurringRules,
+      ]) {
+        existingIds.add(row.id);
+      }
+
+      // Backup id -> live id, so references resolve to the right rows.
+      const idMap = new Map<string, string>();
+      const remap = (id: string | undefined): string | undefined =>
+        id === undefined ? undefined : (idMap.get(id) ?? id);
+
+      async function insertUnlessDup<T extends { id: string }>(
+        label: string,
+        row: T,
+        insert: () => Promise<{ id: string }>,
+      ): Promise<void> {
+        if (existingIds.has(row.id)) {
+          idMap.set(row.id, row.id);
+          skipped += 1;
+          return;
+        }
+        try {
+          const created = await insert();
+          idMap.set(row.id, created.id);
+          existingIds.add(created.id);
+          inserted += 1;
+        } catch (e) {
+          errors.push(`${label}: ${errMsg(e)}`);
+        }
+      }
+
+      // Accounts first — transactions reference them.
+      for (const a of incoming.accounts ?? []) {
+        await insertUnlessDup(`Account "${a.name}"`, a, () =>
+          insertAccount({
+            name: a.name,
+            type: a.type,
+            iconName: a.iconName,
+            color: a.color,
+            openingBalancePaise: a.openingBalancePaise,
+            isDefault: a.isDefault,
+          }),
+        );
+      }
+
+      // Custom categories: on a label clash, point at the existing category.
+      for (const c of incoming.customCategories ?? []) {
+        if (existingIds.has(c.id)) {
+          idMap.set(c.id, c.id);
+          skipped += 1;
+          continue;
+        }
+        const clash = db.customCategories.find(
+          (e) => e.label.toLowerCase() === c.label.toLowerCase(),
+        );
+        if (clash) {
+          idMap.set(c.id, clash.id);
+          skipped += 1;
+          continue;
+        }
+        await insertUnlessDup(`Category "${c.label}"`, c, () =>
+          insertCustomCategory({
+            label: c.label,
+            iconName: c.iconName,
+            color: c.color,
+            kind: c.kind,
+          }),
+        );
+      }
+
+      for (const b of incoming.bills ?? []) {
+        await insertUnlessDup(`Bill "${b.name}"`, b, () =>
+          insertBill({
+            name: b.name,
+            amountPaise: b.amountPaise,
+            dueDay: b.dueDay,
+            category: b.category,
+            ...(b.lastPaidOn ? { lastPaidOn: b.lastPaidOn } : {}),
+          }),
+        );
+      }
+
+      for (const g of incoming.goals ?? []) {
+        await insertUnlessDup(`Goal "${g.name}"`, g, () =>
+          insertGoal({
+            name: g.name,
+            targetPaise: g.targetPaise,
+            savedPaise: g.savedPaise,
+            deadline: g.deadline,
+            color: g.color,
+          }),
+        );
+      }
+
+      for (const h of incoming.holdings ?? []) {
+        await insertUnlessDup(`Holding "${h.symbol}"`, h, () =>
+          insertHolding({ symbol: h.symbol, qty: h.qty, avgPricePaise: h.avgPricePaise }),
+        );
+      }
+
+      // Budgets upsert by (category, month), so they are idempotent.
+      for (const b of incoming.budgets ?? []) {
+        try {
+          await setBudget({ categoryId: b.categoryId, month: b.month, limitPaise: b.limitPaise });
+          inserted += 1;
+        } catch (e) {
+          errors.push(`Budget ${b.categoryId} ${b.month}: ${errMsg(e)}`);
+        }
+      }
+
+      for (const r of incoming.recurringRules ?? []) {
+        await insertUnlessDup(`Recurring "${r.note || r.category}"`, r, () =>
+          insertRecurringRule({
+            type: r.type,
+            amountPaise: r.amountPaise,
+            category: r.category,
+            note: r.note,
+            payMode: r.payMode,
+            ...(remap(r.accountId) ? { accountId: remap(r.accountId)! } : {}),
+            ...(remap(r.toAccountId) ? { toAccountId: remap(r.toAccountId)! } : {}),
+            tags: r.tags ?? [],
+            frequency: r.frequency,
+            startDateISO: r.startDateISO,
+            ...(r.endDateISO ? { endDateISO: r.endDateISO } : {}),
+            isPaused: r.isPaused,
+          }),
+        );
+      }
+
+      // Transactions last — re-point every cross-reference at the live rows.
+      for (const t of incoming.transactions ?? []) {
+        await insertUnlessDup(`Transaction ${t.dateISO} "${t.note}"`, t, () =>
+          insertTransaction({
+            type: t.type,
+            amountPaise: t.amountPaise,
+            category: t.category,
+            note: t.note,
+            dateISO: t.dateISO,
+            payMode: t.payMode,
+            ...(remap(t.accountId) ? { accountId: remap(t.accountId)! } : {}),
+            ...(remap(t.toAccountId) ? { toAccountId: remap(t.toAccountId)! } : {}),
+            ...(remap(t.billId) ? { billId: remap(t.billId)! } : {}),
+            ...(remap(t.goalId) ? { goalId: remap(t.goalId)! } : {}),
+            ...(remap(t.recurringRuleId) ? { recurringRuleId: remap(t.recurringRuleId)! } : {}),
+            tags: t.tags ?? [],
+          }),
+        );
+      }
+
       const s = pendingBackup.settings;
       if (s && typeof s === "object") {
         setSettings({
@@ -145,25 +327,25 @@ function SettingsPage() {
         });
       }
       void queryClient.invalidateQueries();
-      toast.success("Backup restored.");
+
+      if (errors.length > 0) {
+        setRestoreErrors(errors);
+        toast.warning(
+          `Restore partially complete — ${inserted} added, ${skipped} skipped, ${errors.length} failed.`,
+        );
+        setPendingBackup(null);
+        return;
+      }
+      toast.success(
+        `Backup restored — ${inserted} records added${skipped > 0 ? `, ${skipped} already present` : ""}.`,
+      );
       setPendingBackup(null);
       // Reload so every screen (including theme + month grouping) picks up the
       // restored data in one consistent state.
       window.setTimeout(() => window.location.reload(), 400);
-    } catch {
-      setRestoreErrors(["Couldn't save the restored data — browser storage may be unavailable."]);
+    } catch (e) {
+      setRestoreErrors([`Couldn't restore: ${errMsg(e)} Check your connection and try again.`]);
     }
-  }
-
-  function confirmReset() {
-    try {
-      window.localStorage.removeItem(STORE_KEY);
-    } catch {
-      // Storage may be unavailable; reload anyway so seeded defaults return.
-    }
-    setResetOpen(false);
-    toast.success("Demo data reset — re-seeding.");
-    window.setTimeout(() => window.location.reload(), 400);
   }
 
   const backup = pendingBackup;
@@ -258,7 +440,7 @@ function SettingsPage() {
                   </p>
                 </div>
               </div>
-              <Button variant="outline" size="sm" onClick={handleExportCSV}>
+              <Button variant="outline" size="sm" onClick={() => void handleExportCSV()}>
                 Export CSV
               </Button>
             </div>
@@ -275,7 +457,7 @@ function SettingsPage() {
                   </p>
                 </div>
               </div>
-              <Button variant="outline" size="sm" onClick={handleBackup}>
+              <Button variant="outline" size="sm" onClick={() => void handleBackup()}>
                 Download
               </Button>
             </div>
@@ -289,7 +471,8 @@ function SettingsPage() {
                   <div>
                     <p className="text-sm font-semibold text-foreground">Restore backup</p>
                     <p className="text-xs text-muted-foreground">
-                      Replace all current data with a FinVerse backup file.
+                      Add a FinVerse backup file's records to your current data — records that
+                      already exist are skipped.
                     </p>
                   </div>
                 </div>
@@ -328,28 +511,6 @@ function SettingsPage() {
                 </div>
               )}
             </div>
-
-            <div className="flex items-center justify-between gap-3 rounded-xl border border-destructive/30 p-4">
-              <div className="flex items-center gap-3">
-                <span className="grid size-10 place-items-center rounded-xl bg-destructive/10 text-destructive">
-                  <RotateCcw className="size-5" />
-                </span>
-                <div>
-                  <p className="text-sm font-semibold text-foreground">Reset demo data</p>
-                  <p className="text-xs text-muted-foreground">
-                    Clear local data and restore the seeded demo.
-                  </p>
-                </div>
-              </div>
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => setResetOpen(true)}
-                className="border-destructive/40 text-destructive hover:bg-destructive/10 hover:text-destructive"
-              >
-                Reset
-              </Button>
-            </div>
           </div>
         </SectionCard>
 
@@ -372,8 +533,8 @@ function SettingsPage() {
               <Separator className="my-3" />
               <p className="flex items-start gap-1.5 text-xs text-muted-foreground">
                 <Info className="mt-0.5 size-3.5 shrink-0" />
-                Demo build — all your data stays in this browser's local storage. Nothing is sent to
-                a server.
+                Your data syncs securely to your private Supabase account — protected by row-level
+                security so only you can access it.
               </p>
             </div>
           </div>
@@ -393,41 +554,22 @@ function SettingsPage() {
           <AlertDialogHeader>
             <AlertDialogTitle>Restore this backup?</AlertDialogTitle>
             <AlertDialogDescription>
-              This replaces <strong>all</strong> current FinVerse data with the backup
-              {backup && ` from ${new Date(backup.exportedAt).toLocaleString()}`}:
+              This adds the backup
+              {backup && ` from ${new Date(backup.exportedAt).toLocaleString()}`} to your current
+              data:
               <span className="mt-2 block">
                 {backup?.db.transactions.length ?? 0} transactions ·{" "}
                 {backup?.db.budgets.length ?? 0} budgets · {backup?.db.bills.length ?? 0} bills ·{" "}
                 {backup?.db.goals.length ?? 0} goals · {backup?.db.holdings.length ?? 0} holdings.
               </span>
-              This cannot be undone.
+              Records that already exist (matched by id) are skipped, and linked records are
+              re-linked automatically. Your current data is kept.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel>Cancel</AlertDialogCancel>
-            <AlertDialogAction onClick={confirmRestore}>Restore backup</AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
-
-      {/* Reset confirm */}
-      <AlertDialog open={resetOpen} onOpenChange={setResetOpen}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>Reset demo data?</AlertDialogTitle>
-            <AlertDialogDescription>
-              This clears all your transactions, budgets, bills, goals and holdings from this
-              browser and restores the seeded demo data. Your theme and month-start settings are
-              kept. This cannot be undone.
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel>Cancel</AlertDialogCancel>
-            <AlertDialogAction
-              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
-              onClick={confirmReset}
-            >
-              Reset everything
+            <AlertDialogAction onClick={() => void confirmRestore()}>
+              Restore backup
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

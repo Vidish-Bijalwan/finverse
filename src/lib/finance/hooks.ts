@@ -11,33 +11,32 @@ import type {
   Transaction,
 } from "./types";
 import {
-  addAccount,
-  addCustomCategory,
   addFundsToGoal,
-  addGoal,
-  addHolding,
-  addRecurringRule,
-  addTransaction,
-  allTags,
+  defaultAccountId,
   deleteAccount,
   deleteCustomCategory,
   deleteGoal,
   deleteHolding,
   deleteRecurringRule,
   deleteTransaction,
-  defaultAccount,
-  getBudgets,
-  listAccounts,
-  accountSummaries,
-  listBills,
-  listCustomCategories,
-  listGoals,
-  listHoldings,
-  listRecurringRules,
-  listTransactions,
+  ensureRecurringPosted,
+  fetchAccountSummaries,
+  fetchAccounts,
+  fetchAllTags,
+  fetchBills,
+  fetchBudgets,
+  fetchCustomCategories,
+  fetchGoals,
+  fetchHoldings,
+  fetchRecurringRules,
+  fetchTransactions,
+  insertAccount,
+  insertCustomCategory,
+  insertGoal,
+  insertHolding,
+  insertRecurringRule,
+  insertTransaction,
   markBillPaid,
-  saveDB,
-  seedIfEmpty,
   setBudget,
   setDefaultAccount,
   setRecurringRulePaused,
@@ -53,17 +52,16 @@ import {
   type NewCustomCategory,
   type NewRecurringRule,
   type NewTransaction,
-} from "./store";
+  type RecurringRulePatch,
+} from "./db";
 import { monthKey as currentMonthKey, todayISO } from "./format";
 
 /**
- * React Query layer over the localStorage store.
+ * React Query layer over the Supabase data-access module (db.ts).
  *
- * Query keys are namespaced as ['finverse', ...]. Every mutation writes via
- * store.ts (load -> mutate -> saveDB) and then invalidates the relevant keys.
- *
- * SSR note: queryFns run through seedIfEmpty(), which is SSR-safe
- * (server returns an unpersisted in-memory seed; browser persists to localStorage).
+ * Query keys are namespaced as ['finverse', ...]. Every mutation calls db.ts
+ * (scoped to the signed-in user, RLS-enforced) and then invalidates the
+ * relevant keys.
  */
 
 const QK = {
@@ -87,7 +85,10 @@ export function useMonth(): [string, Dispatch<SetStateAction<string>>] {
 export function useTransactions(month?: string) {
   return useQuery({
     queryKey: [...QK.transactions, month ?? "all"],
-    queryFn: () => listTransactions(seedIfEmpty(), month),
+    queryFn: async () => {
+      await ensureRecurringPosted();
+      return fetchTransactions(month);
+    },
   });
 }
 
@@ -101,12 +102,7 @@ function invalidateMoney(qc: ReturnType<typeof useQueryClient>) {
 export function useAddTransaction() {
   const qc = useQueryClient();
   return useMutation<Transaction, Error, NewTransaction>({
-    mutationFn: async (input: NewTransaction) => {
-      const db = seedIfEmpty();
-      const txn = addTransaction(db, input);
-      saveDB(db);
-      return txn;
-    },
+    mutationFn: (input: NewTransaction) => insertTransaction(input),
     onSuccess: () => invalidateMoney(qc),
   });
 }
@@ -118,15 +114,8 @@ export function useUpdateTransaction() {
     Error,
     { id: string; patch: Partial<Omit<Transaction, "id" | "createdAt">> }
   >({
-    mutationFn: async (args: {
-      id: string;
-      patch: Partial<Omit<Transaction, "id" | "createdAt">>;
-    }) => {
-      const db = seedIfEmpty();
-      const txn = updateTransaction(db, args.id, args.patch);
-      saveDB(db);
-      return txn;
-    },
+    mutationFn: (args: { id: string; patch: Partial<Omit<Transaction, "id" | "createdAt">> }) =>
+      updateTransaction(args.id, args.patch),
     onSuccess: () => invalidateMoney(qc),
   });
 }
@@ -134,12 +123,7 @@ export function useUpdateTransaction() {
 export function useDeleteTransaction() {
   const qc = useQueryClient();
   return useMutation<boolean, Error, string>({
-    mutationFn: async (id: string) => {
-      const db = seedIfEmpty();
-      const ok = deleteTransaction(db, id);
-      saveDB(db);
-      return ok;
-    },
+    mutationFn: (id: string) => deleteTransaction(id),
     onSuccess: () => invalidateMoney(qc),
   });
 }
@@ -158,18 +142,13 @@ export function useTransfer() {
       dateISO?: string;
     }
   >({
-    mutationFn: async (input: {
+    mutationFn: (input: {
       fromAccountId: string;
       toAccountId: string;
       amountPaise: number;
       note?: string;
       dateISO?: string;
-    }) => {
-      const db = seedIfEmpty();
-      const txn = transferBetweenAccounts(db, input);
-      saveDB(db);
-      return txn;
-    },
+    }) => transferBetweenAccounts(input),
     onSuccess: () => invalidateMoney(qc),
   });
 }
@@ -177,19 +156,15 @@ export function useTransfer() {
 export function useBudgets(month: string) {
   return useQuery({
     queryKey: [...QK.budgets, month],
-    queryFn: () => getBudgets(seedIfEmpty(), month),
+    queryFn: () => fetchBudgets(month),
   });
 }
 
 export function useSetBudget() {
   const qc = useQueryClient();
   return useMutation<Budget, Error, { categoryId: string; month: string; limitPaise: number }>({
-    mutationFn: async (input: { categoryId: string; month: string; limitPaise: number }) => {
-      const db = seedIfEmpty();
-      const b = setBudget(db, input);
-      saveDB(db);
-      return b;
-    },
+    mutationFn: (input: { categoryId: string; month: string; limitPaise: number }) =>
+      setBudget(input),
     onSuccess: () => qc.invalidateQueries({ queryKey: QK.budgets }),
   });
 }
@@ -197,7 +172,7 @@ export function useSetBudget() {
 export function useBills() {
   return useQuery({
     queryKey: QK.bills,
-    queryFn: () => listBills(seedIfEmpty()),
+    queryFn: () => fetchBills(),
   });
 }
 
@@ -205,26 +180,8 @@ export function useBills() {
 export function usePayBill() {
   const qc = useQueryClient();
   return useMutation<Bill | undefined, Error, { id: string; dateISO?: string }>({
-    mutationFn: async (args: { id: string; dateISO?: string }) => {
-      const db = seedIfEmpty();
-      const dateISO = args.dateISO ?? todayISO();
-      const bill = markBillPaid(db, args.id, dateISO);
-      if (bill) {
-        const fallbackAccountId = defaultAccount(db)?.id;
-        addTransaction(db, {
-          type: "expense",
-          amountPaise: bill.amountPaise,
-          category: bill.category,
-          note: `${bill.name} bill paid`,
-          dateISO,
-          payMode: "UPI",
-          ...(fallbackAccountId ? { accountId: fallbackAccountId } : {}),
-          billId: bill.id,
-        });
-      }
-      saveDB(db);
-      return bill;
-    },
+    mutationFn: (args: { id: string; dateISO?: string }) =>
+      markBillPaid(args.id, args.dateISO ?? todayISO()),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: QK.bills });
       invalidateMoney(qc);
@@ -235,19 +192,14 @@ export function usePayBill() {
 export function useGoals() {
   return useQuery({
     queryKey: QK.goals,
-    queryFn: () => listGoals(seedIfEmpty()),
+    queryFn: () => fetchGoals(),
   });
 }
 
 export function useAddGoal() {
   const qc = useQueryClient();
   return useMutation<Goal, Error, Omit<Goal, "id">>({
-    mutationFn: async (input: Omit<Goal, "id">) => {
-      const db = seedIfEmpty();
-      const g = addGoal(db, input);
-      saveDB(db);
-      return g;
-    },
+    mutationFn: (input: Omit<Goal, "id">) => insertGoal(input),
     onSuccess: () => qc.invalidateQueries({ queryKey: QK.goals }),
   });
 }
@@ -255,12 +207,8 @@ export function useAddGoal() {
 export function useUpdateGoal() {
   const qc = useQueryClient();
   return useMutation<Goal | undefined, Error, { id: string; patch: Partial<Omit<Goal, "id">> }>({
-    mutationFn: async (args: { id: string; patch: Partial<Omit<Goal, "id">> }) => {
-      const db = seedIfEmpty();
-      const g = updateGoal(db, args.id, args.patch);
-      saveDB(db);
-      return g;
-    },
+    mutationFn: (args: { id: string; patch: Partial<Omit<Goal, "id">> }) =>
+      updateGoal(args.id, args.patch),
     onSuccess: () => qc.invalidateQueries({ queryKey: QK.goals }),
   });
 }
@@ -268,12 +216,7 @@ export function useUpdateGoal() {
 export function useDeleteGoal() {
   const qc = useQueryClient();
   return useMutation<boolean, Error, string>({
-    mutationFn: async (id: string) => {
-      const db = seedIfEmpty();
-      const ok = deleteGoal(db, id);
-      saveDB(db);
-      return ok;
-    },
+    mutationFn: (id: string) => deleteGoal(id),
     onSuccess: () => qc.invalidateQueries({ queryKey: QK.goals }),
   });
 }
@@ -282,26 +225,8 @@ export function useDeleteGoal() {
 export function useAddToGoal() {
   const qc = useQueryClient();
   return useMutation<Goal | undefined, Error, { id: string; amountPaise: number; note?: string }>({
-    mutationFn: async (args: { id: string; amountPaise: number; note?: string }) => {
-      const db = seedIfEmpty();
-      const goal = addFundsToGoal(db, args.id, args.amountPaise);
-      if (goal) {
-        const dateISO = todayISO();
-        const fallbackAccountId = defaultAccount(db)?.id;
-        addTransaction(db, {
-          type: "transfer",
-          amountPaise: args.amountPaise,
-          category: "investments",
-          note: args.note ?? `Saved towards ${goal.name}`,
-          dateISO,
-          payMode: "Bank",
-          ...(fallbackAccountId ? { accountId: fallbackAccountId } : {}),
-          goalId: goal.id,
-        });
-      }
-      saveDB(db);
-      return goal;
-    },
+    mutationFn: (args: { id: string; amountPaise: number; note?: string }) =>
+      addFundsToGoal(args.id, args.amountPaise, args.note),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: QK.goals });
       invalidateMoney(qc);
@@ -312,19 +237,14 @@ export function useAddToGoal() {
 export function useHoldings() {
   return useQuery({
     queryKey: QK.holdings,
-    queryFn: () => listHoldings(seedIfEmpty()),
+    queryFn: () => fetchHoldings(),
   });
 }
 
 export function useAddHolding() {
   const qc = useQueryClient();
   return useMutation<Holding, Error, Omit<Holding, "id">>({
-    mutationFn: async (input: Omit<Holding, "id">) => {
-      const db = seedIfEmpty();
-      const h = addHolding(db, input);
-      saveDB(db);
-      return h;
-    },
+    mutationFn: (input: Omit<Holding, "id">) => insertHolding(input),
     onSuccess: () => qc.invalidateQueries({ queryKey: QK.holdings }),
   });
 }
@@ -336,12 +256,8 @@ export function useUpdateHolding() {
     Error,
     { id: string; patch: Partial<Omit<Holding, "id">> }
   >({
-    mutationFn: async (args: { id: string; patch: Partial<Omit<Holding, "id">> }) => {
-      const db = seedIfEmpty();
-      const h = updateHolding(db, args.id, args.patch);
-      saveDB(db);
-      return h;
-    },
+    mutationFn: (args: { id: string; patch: Partial<Omit<Holding, "id">> }) =>
+      updateHolding(args.id, args.patch),
     onSuccess: () => qc.invalidateQueries({ queryKey: QK.holdings }),
   });
 }
@@ -349,12 +265,7 @@ export function useUpdateHolding() {
 export function useDeleteHolding() {
   const qc = useQueryClient();
   return useMutation<boolean, Error, string>({
-    mutationFn: async (id: string) => {
-      const db = seedIfEmpty();
-      const ok = deleteHolding(db, id);
-      saveDB(db);
-      return ok;
-    },
+    mutationFn: (id: string) => deleteHolding(id),
     onSuccess: () => qc.invalidateQueries({ queryKey: QK.holdings }),
   });
 }
@@ -364,7 +275,7 @@ export function useDeleteHolding() {
 export function useAccounts() {
   return useQuery({
     queryKey: QK.accounts,
-    queryFn: () => listAccounts(seedIfEmpty()),
+    queryFn: () => fetchAccounts(),
   });
 }
 
@@ -372,7 +283,7 @@ export function useAccounts() {
 export function useAccountSummaries(): ReturnType<typeof useQuery<AccountSummary[]>> {
   return useQuery({
     queryKey: QK.accountSummaries,
-    queryFn: () => accountSummaries(seedIfEmpty()),
+    queryFn: () => fetchAccountSummaries(),
   });
 }
 
@@ -385,12 +296,7 @@ function invalidateAccounts(qc: ReturnType<typeof useQueryClient>) {
 export function useAddAccount() {
   const qc = useQueryClient();
   return useMutation<Account, Error, NewAccount>({
-    mutationFn: async (input: NewAccount) => {
-      const db = seedIfEmpty();
-      const a = addAccount(db, input);
-      saveDB(db);
-      return a;
-    },
+    mutationFn: (input: NewAccount) => insertAccount(input),
     onSuccess: () => invalidateAccounts(qc),
   });
 }
@@ -405,15 +311,10 @@ export function useUpdateAccount() {
       patch: Partial<Pick<Account, "name" | "type" | "iconName" | "color" | "openingBalancePaise">>;
     }
   >({
-    mutationFn: async (args: {
+    mutationFn: (args: {
       id: string;
       patch: Partial<Pick<Account, "name" | "type" | "iconName" | "color" | "openingBalancePaise">>;
-    }) => {
-      const db = seedIfEmpty();
-      const a = updateAccount(db, args.id, args.patch);
-      saveDB(db);
-      return a;
-    },
+    }) => updateAccount(args.id, args.patch),
     onSuccess: () => invalidateAccounts(qc),
   });
 }
@@ -421,11 +322,7 @@ export function useUpdateAccount() {
 export function useDeleteAccount() {
   const qc = useQueryClient();
   return useMutation<void, Error, string>({
-    mutationFn: async (id: string) => {
-      const db = seedIfEmpty();
-      deleteAccount(db, id);
-      saveDB(db);
-    },
+    mutationFn: (id: string) => deleteAccount(id),
     onSuccess: () => {
       invalidateAccounts(qc);
       invalidateMoney(qc);
@@ -436,12 +333,7 @@ export function useDeleteAccount() {
 export function useSetDefaultAccount() {
   const qc = useQueryClient();
   return useMutation<Account, Error, string>({
-    mutationFn: async (id: string) => {
-      const db = seedIfEmpty();
-      const a = setDefaultAccount(db, id);
-      saveDB(db);
-      return a;
-    },
+    mutationFn: (id: string) => setDefaultAccount(id),
     onSuccess: () => invalidateAccounts(qc),
   });
 }
@@ -451,14 +343,16 @@ export function useSetDefaultAccount() {
 export function useCustomCategories() {
   return useQuery({
     queryKey: QK.customCategories,
-    queryFn: () => listCustomCategories(seedIfEmpty()),
+    // fetchCustomCategories also refreshes the synchronous category lookup cache
+    // in categories.ts, so categoryById resolves fresh names everywhere.
+    queryFn: () => fetchCustomCategories(),
   });
 }
 
 function invalidateCategories(qc: ReturnType<typeof useQueryClient>) {
   qc.invalidateQueries({ queryKey: QK.customCategories });
-  // categoryById resolves custom categories straight from the store,
-  // so refreshing transactions/budgets picks up renames everywhere.
+  // categoryById resolves custom categories from the lookup cache, so
+  // refreshing transactions/budgets picks up renames everywhere.
   qc.invalidateQueries({ queryKey: QK.transactions });
   qc.invalidateQueries({ queryKey: QK.budgets });
 }
@@ -466,12 +360,7 @@ function invalidateCategories(qc: ReturnType<typeof useQueryClient>) {
 export function useAddCustomCategory() {
   const qc = useQueryClient();
   return useMutation<CustomCategory, Error, NewCustomCategory>({
-    mutationFn: async (input: NewCustomCategory) => {
-      const db = seedIfEmpty();
-      const c = addCustomCategory(db, input);
-      saveDB(db);
-      return c;
-    },
+    mutationFn: (input: NewCustomCategory) => insertCustomCategory(input),
     onSuccess: () => invalidateCategories(qc),
   });
 }
@@ -483,15 +372,10 @@ export function useUpdateCustomCategory() {
     Error,
     { id: string; patch: Partial<Pick<CustomCategory, "label" | "iconName" | "color">> }
   >({
-    mutationFn: async (args: {
+    mutationFn: (args: {
       id: string;
       patch: Partial<Pick<CustomCategory, "label" | "iconName" | "color">>;
-    }) => {
-      const db = seedIfEmpty();
-      const c = updateCustomCategory(db, args.id, args.patch);
-      saveDB(db);
-      return c;
-    },
+    }) => updateCustomCategory(args.id, args.patch),
     onSuccess: () => invalidateCategories(qc),
   });
 }
@@ -499,12 +383,7 @@ export function useUpdateCustomCategory() {
 export function useDeleteCustomCategory() {
   const qc = useQueryClient();
   return useMutation<boolean, Error, string>({
-    mutationFn: async (id: string) => {
-      const db = seedIfEmpty();
-      const ok = deleteCustomCategory(db, id);
-      saveDB(db);
-      return ok;
-    },
+    mutationFn: (id: string) => deleteCustomCategory(id),
     onSuccess: () => invalidateCategories(qc),
   });
 }
@@ -514,36 +393,23 @@ export function useDeleteCustomCategory() {
 export function useRecurringRules() {
   return useQuery({
     queryKey: QK.recurringRules,
-    queryFn: () => listRecurringRules(seedIfEmpty()),
+    queryFn: () => fetchRecurringRules(),
   });
 }
 
 export function useAddRecurringRule() {
   const qc = useQueryClient();
   return useMutation<RecurringRule, Error, NewRecurringRule>({
-    mutationFn: async (input: NewRecurringRule) => {
-      const db = seedIfEmpty();
-      const r = addRecurringRule(db, input);
-      saveDB(db);
-      return r;
-    },
+    mutationFn: (input: NewRecurringRule) => insertRecurringRule(input),
     onSuccess: () => qc.invalidateQueries({ queryKey: QK.recurringRules }),
   });
 }
 
 export function useUpdateRecurringRule() {
   const qc = useQueryClient();
-  return useMutation<
-    RecurringRule | undefined,
-    Error,
-    { id: string; patch: Parameters<typeof updateRecurringRule>[2] }
-  >({
-    mutationFn: async (args: { id: string; patch: Parameters<typeof updateRecurringRule>[2] }) => {
-      const db = seedIfEmpty();
-      const r = updateRecurringRule(db, args.id, args.patch);
-      saveDB(db);
-      return r;
-    },
+  return useMutation<RecurringRule | undefined, Error, { id: string; patch: RecurringRulePatch }>({
+    mutationFn: (args: { id: string; patch: RecurringRulePatch }) =>
+      updateRecurringRule(args.id, args.patch),
     onSuccess: () => qc.invalidateQueries({ queryKey: QK.recurringRules }),
   });
 }
@@ -551,12 +417,7 @@ export function useUpdateRecurringRule() {
 export function useDeleteRecurringRule() {
   const qc = useQueryClient();
   return useMutation<boolean, Error, string>({
-    mutationFn: async (id: string) => {
-      const db = seedIfEmpty();
-      const ok = deleteRecurringRule(db, id);
-      saveDB(db);
-      return ok;
-    },
+    mutationFn: (id: string) => deleteRecurringRule(id),
     onSuccess: () => qc.invalidateQueries({ queryKey: QK.recurringRules }),
   });
 }
@@ -564,12 +425,8 @@ export function useDeleteRecurringRule() {
 export function useToggleRecurringRule() {
   const qc = useQueryClient();
   return useMutation<RecurringRule | undefined, Error, { id: string; isPaused: boolean }>({
-    mutationFn: async (args: { id: string; isPaused: boolean }) => {
-      const db = seedIfEmpty();
-      const r = setRecurringRulePaused(db, args.id, args.isPaused);
-      saveDB(db);
-      return r;
-    },
+    mutationFn: (args: { id: string; isPaused: boolean }) =>
+      setRecurringRulePaused(args.id, args.isPaused),
     onSuccess: () => qc.invalidateQueries({ queryKey: QK.recurringRules }),
   });
 }
@@ -579,9 +436,12 @@ export function useToggleRecurringRule() {
 export function useAllTags() {
   return useQuery({
     queryKey: QK.tags,
-    queryFn: () => allTags(seedIfEmpty()),
+    queryFn: () => fetchAllTags(),
   });
 }
+
+/** Re-exported so other modules can resolve the default account without a hook. */
+export { defaultAccountId };
 
 /** Exported query-key namespace so feature workers can invalidate consistently. */
 export { QK as FINVERSE_QUERY_KEYS };

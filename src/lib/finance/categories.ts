@@ -161,57 +161,29 @@ export function customCategoryToCategory(c: CustomCategory): Category {
   };
 }
 
-const isBrowser = () => typeof window !== "undefined" && typeof window.localStorage !== "undefined";
-
 /**
- * Custom categories live in localStorage (the v2 store), but categoryById is a
- * synchronous pure lookup used by every route. This lazily hydrates stored
- * custom categories with a raw-string cache so repeated renders stay cheap.
- * SSR-safe: returns empty on the server.
+ * In-memory cache of the user's custom categories, populated by the Supabase
+ * data-access layer (db.ts calls setCustomCategoryCache after every fetch).
+ * categoryById stays a synchronous pure lookup: built-ins first, then this
+ * cache. Empty until the first fetchCustomCategories() resolves.
  */
-let customCache: { raw: string | null; map: Map<string, Category> } = {
-  raw: null,
-  map: new Map(),
-};
+let customCache = new Map<string, Category>();
 
-function customCategoryMap(): Map<string, Category> {
-  if (!isBrowser()) return new Map();
-  let raw: string | null = null;
-  try {
-    raw = window.localStorage.getItem("finverse:v2");
-  } catch {
-    return customCache.map;
-  }
-  if (raw === customCache.raw) return customCache.map;
-  const map = new Map<string, Category>();
-  try {
-    const parsed: unknown = raw ? JSON.parse(raw) : null;
-    const list = (parsed as { customCategories?: unknown } | null)?.customCategories;
-    if (Array.isArray(list)) {
-      for (const item of list) {
-        const c = item as Partial<CustomCategory>;
-        if (typeof c.id === "string" && typeof c.label === "string") {
-          map.set(c.id, customCategoryToCategory(c as CustomCategory));
-        }
-      }
-    }
-  } catch {
-    // Corrupt storage: behave as if there are no custom categories.
-  }
-  customCache = { raw, map };
-  return map;
+/** Replace the custom-category lookup cache (called by db.ts after fetches). */
+export function setCustomCategoryCache(list: CustomCategory[]): void {
+  customCache = new Map(list.map((c) => [c.id, customCategoryToCategory(c)]));
 }
 
 /**
  * Returns the category for an id: built-in first, then user-created custom
- * categories (resolved from the v2 store), else undefined for unknown /
+ * categories (from the in-memory cache), else undefined for unknown /
  * legacy free-form values.
  */
 export function categoryById(id: string): Category | undefined {
-  return ALL_CATEGORIES.find((c) => c.id === id) ?? customCategoryMap().get(id);
+  return ALL_CATEGORIES.find((c) => c.id === id) ?? customCache.get(id);
 }
 
 /** Built-in plus user-created categories, for pickers and filters. */
 export function allCategories(): Category[] {
-  return [...ALL_CATEGORIES, ...customCategoryMap().values()];
+  return [...ALL_CATEGORIES, ...customCache.values()];
 }

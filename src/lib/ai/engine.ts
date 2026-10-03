@@ -25,8 +25,22 @@
 
 import { categoryById } from "../finance/categories";
 import { formatINR, monthLabel, todayISO } from "../finance/format";
-import { getBudgets, listTransactions } from "../finance/store";
-import type { Bill, FinanceDB, Insight, Transaction } from "../finance/types";
+import type { Bill, Budget, FinanceDB, Insight, Transaction } from "../finance/types";
+
+/**
+ * Local pure replacements for the store.ts helpers this engine used.
+ * They operate on the FinanceDB passed in — no storage access.
+ */
+function listTransactions(db: FinanceDB, monthKey?: string): Transaction[] {
+  const txns = monthKey
+    ? db.transactions.filter((t) => t.dateISO.startsWith(monthKey))
+    : db.transactions;
+  return [...txns].sort((a, b) => b.dateISO.localeCompare(a.dateISO));
+}
+
+function getBudgets(db: FinanceDB, month: string): Budget[] {
+  return db.budgets.filter((b) => b.month === month);
+}
 
 /** "2026-10" -> "2026-09" (works across year boundaries). Exported for chat reuse. */
 export function previousMonth(key: string): string {
