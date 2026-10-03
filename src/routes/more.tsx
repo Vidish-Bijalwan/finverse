@@ -133,7 +133,7 @@ function MorePage() {
       <section className="mt-6 rounded-2xl border border-border bg-surface-soft p-5">
         <div className="flex items-center gap-2.5">
           <span className="grid size-9 place-items-center rounded-md bg-primary-dark">
-            <Landmark className="size-5 text-primary-foreground" />
+            <Landmark className="size-5 text-logo-mark-fg" />
           </span>
           <h2 className="text-base font-bold text-foreground">About FinVerse</h2>
         </div>

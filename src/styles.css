@@ -69,6 +69,7 @@
   --color-sidebar-ring: var(--sidebar-ring);
   --color-primary-hover: var(--primary-hover);
   --color-primary-dark: var(--primary-dark);
+  --color-logo-mark-fg: var(--logo-mark-fg);
   --color-tint: var(--tint);
   --color-surface-soft: var(--surface-soft);
   --color-success: var(--success);
@@ -116,6 +117,10 @@
   --primary-hover: oklch(0.55 0.13 163);
   --primary-dark: oklch(0.165 0.02 270);
   --primary-foreground: oklch(0.165 0.02 270);
+  /* Icon ink for the brand mark (bg-primary-dark): white on the near-black
+     light-mode mark. The old text-primary-foreground was ALSO near-black in
+     light mode, rendering the mark's icon invisible. */
+  --logo-mark-fg: oklch(1 0 0);
   --secondary: oklch(0.965 0.008 250);
   --secondary-foreground: oklch(0.2 0.015 260);
   --muted: oklch(0.955 0.005 250);
@@ -187,6 +192,9 @@
      brand-dark slot becomes a luminous icy blue here. */
   --primary-dark: oklch(0.82 0.1 210);
   --primary-foreground: oklch(0.185 0.02 270);
+  /* Icon ink for the brand mark: near-black on the luminous icy-blue
+     dark-mode mark. */
+  --logo-mark-fg: oklch(0.165 0.02 270);
   --secondary: oklch(0.28 0.032 265);
   --secondary-foreground: oklch(0.95 0.008 250);
   --muted: oklch(0.26 0.03 265);
