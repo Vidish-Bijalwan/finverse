@@ -56,13 +56,15 @@ function formatAmount(paise: number): string {
 
 /**
  * GPay-style amount entry: giant readout + custom numeric keypad (no system
- * keyboard). Paise-safe integer math. Confirm stays disabled until valid.
+ * keyboard). Paise-safe integer math. Confirm stays disabled until valid,
+ * and while `processing` (a pending submit — double-submit guard).
  */
 export function AmountInput({
   maxPaise,
   onConfirm,
   onChange,
   confirmLabel = "Confirm",
+  processing = false,
   className,
 }: {
   /** Maximum allowed amount in paise. Defaults to unlimited. */
@@ -70,6 +72,8 @@ export function AmountInput({
   onConfirm: (amountPaise: number) => void;
   onChange?: (amountPaise: number) => void;
   confirmLabel?: string;
+  /** True while the submit mutation is in flight: the confirm button is disabled. */
+  processing?: boolean;
   className?: string;
 }) {
   const maxDigits = 10;
@@ -120,11 +124,11 @@ export function AmountInput({
 
       <button
         type="button"
-        disabled={!valid}
+        disabled={!valid || processing}
         onClick={() => onConfirm(paise)}
         className={cn(
           "h-13 rounded-full py-3.5 text-base font-bold transition-colors",
-          valid
+          valid && !processing
             ? "bg-primary text-primary-foreground hover:bg-primary-hover"
             : "cursor-not-allowed bg-muted text-muted-foreground",
         )}

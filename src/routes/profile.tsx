@@ -6,6 +6,7 @@ import { toast } from "sonner";
 import { useAuth } from "@/lib/auth";
 import { getSupabase } from "@/lib/supabase";
 import { avatarInitials } from "@/lib/names";
+import { isValidMobileNumber } from "@/lib/payment-contacts";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -122,12 +123,17 @@ function ProfilePage() {
     setSaving(true);
     try {
       const supabase = getSupabase();
+      const phoneTrimmed = phone.trim();
+      if (phoneTrimmed !== "" && !isValidMobileNumber(phoneTrimmed)) {
+        toast.error("Enter a valid 10-digit Indian mobile number (starting with 6–9).");
+        return;
+      }
       const { error } = await supabase
         .from("profiles")
         .update({
           full_name: fullName.trim() || null,
           bio: bio.trim() || null,
-          phone: phone.trim() || null,
+          phone: phoneTrimmed || null,
         })
         .eq("id", userId);
       if (error) throw error;

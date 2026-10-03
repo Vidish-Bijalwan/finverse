@@ -6,6 +6,7 @@ import { AmountInput, NumberDisplay, PaymentSheet, ReceiptView, pressable } from
 import { AccountDialog } from "@/components/money/AccountDialog";
 import { useAccountSummaries, useAddTransaction } from "@/lib/finance/hooks";
 import { formatINR, todayISO } from "@/lib/finance/format";
+import { canAfford } from "@/lib/finance/afford";
 import { buildBankNote, isValidAccountNumber, isValidIfsc } from "@/lib/payment-contacts";
 import { MAX_PAYMENT_PAISE } from "@/lib/payments";
 import { cn } from "@/lib/utils";
@@ -67,11 +68,23 @@ export function BankTransferFlow({
   const detailsValid = nameValid && accountValid && confirmValid && ifscValid;
 
   const overBalance =
-    selectedAccount != null && amountPaise > 0 && amountPaise > selectedAccount.balancePaise;
+    selectedAccount != null &&
+    amountPaise > 0 &&
+    !canAfford(selectedAccount.balancePaise, amountPaise);
 
   const confirmTransfer = async () => {
     if (!effectiveAccountId) return;
     setSheetOpen(false);
+    // Defense in depth: the proceed button is disabled while overBalance,
+    // but the mutation path itself must never record an uncovered transfer.
+    if (overBalance) {
+      setReceipt({
+        status: "failure",
+        reason: `Insufficient balance in ${selectedAccount?.account.name ?? "the account"} — the transfer was not recorded.`,
+      });
+      setPhase("receipt");
+      return;
+    }
     setPhase("processing");
     try {
       const [created] = await Promise.all([
@@ -348,6 +361,8 @@ export function BankTransferFlow({
         amountPaise={amountPaise}
         fundingSource={selectedAccount?.account.name ?? "Account"}
         onProceed={confirmTransfer}
+        processing={addTransaction.isPending}
+        proceedDisabled={overBalance}
         onUseAnotherMethod={() => setSheetOpen(false)}
       >
         {note.trim() && (
@@ -359,7 +374,7 @@ export function BankTransferFlow({
         {overBalance && (
           <p
             role="alert"
-            className="mt-3 rounded-2xl bg-danger-soft px-4 py-2.5 text-sm font-medium text-danger"
+            className="mt-3 rounded-2xl border border-danger/40 bg-danger-soft px-4 py-2.5 text-sm font-semibold text-danger"
           >
             Insufficient balance in {selectedAccount?.account.name}. Lower the amount or pick
             another account.

@@ -1,4 +1,4 @@
-import { createFileRoute, Navigate } from "@tanstack/react-router";
+import { createFileRoute, Link, Navigate } from "@tanstack/react-router";
 import { useState, type FormEvent } from "react";
 import { BadgeCheck, ChartNoAxesCombined, Eye, EyeOff, Loader2, PiggyBank } from "lucide-react";
 
@@ -10,7 +10,15 @@ import { useAuth } from "@/lib/auth";
 import { pressable, Sparkline } from "@/components/fv";
 import { AmbientOrbs } from "@/components/auth/AmbientOrbs";
 
+interface LoginSearch {
+  /** Set to "1" when the reset-password flow hands the user back here after
+   *  a successful password update, so we can show a one-time notice. */
+  reset?: "1";
+}
+
 export const Route = createFileRoute("/login")({
+  validateSearch: (search: Record<string, unknown>): LoginSearch =>
+    search["reset"] === "1" ? { reset: "1" as const } : {},
   head: () => ({
     meta: [{ title: "Sign in — FinVerse AI" }],
   }),
@@ -42,7 +50,13 @@ function GoogleIcon() {
   );
 }
 
-function AuthForm({ mode }: { mode: "login" | "signup" }) {
+function AuthForm({
+  mode,
+  showForgotLink,
+}: {
+  mode: "login" | "signup";
+  showForgotLink?: boolean;
+}) {
   const { signIn, signUp } = useAuth();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -145,6 +159,16 @@ function AuthForm({ mode }: { mode: "login" | "signup" }) {
             {fieldErrors.password}
           </p>
         )}
+        {showForgotLink && (
+          <p className="pt-1 text-right">
+            <Link
+              to="/forgot-password"
+              className="text-xs text-muted-foreground transition-colors hover:text-foreground"
+            >
+              Forgot password?
+            </Link>
+          </p>
+        )}
       </div>
 
       {serverError && (
@@ -168,9 +192,11 @@ function AuthForm({ mode }: { mode: "login" | "signup" }) {
 
 function LoginPage() {
   const { user, profile, loading, signInWithGoogle } = useAuth();
+  const search = Route.useSearch();
   const [tab, setTab] = useState<"login" | "signup">("login");
   const [googleError, setGoogleError] = useState<string | null>(null);
   const [googleLoading, setGoogleLoading] = useState(false);
+  const showResetNotice = search.reset === "1" && tab === "login";
 
   if (!loading && user) {
     return <Navigate to={profile?.onboarding_completed ? "/" : "/onboarding"} />;
@@ -216,7 +242,15 @@ function LoginPage() {
                 <TabsTrigger value="signup">Sign up</TabsTrigger>
               </TabsList>
               <TabsContent value="login" className="pt-4">
-                <AuthForm mode="login" />
+                {showResetNotice && (
+                  <p
+                    role="status"
+                    className="mb-4 rounded-md bg-success-soft px-3 py-2 text-xs text-success"
+                  >
+                    Password updated — sign in with your new password.
+                  </p>
+                )}
+                <AuthForm mode="login" showForgotLink />
               </TabsContent>
               <TabsContent value="signup" className="pt-4">
                 <AuthForm mode="signup" />

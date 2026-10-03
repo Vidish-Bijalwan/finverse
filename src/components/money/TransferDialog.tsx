@@ -21,6 +21,7 @@ import {
 import { AmountField } from "./AmountField";
 import { rupeesToPaise } from "@/components/money/utils";
 import { formatINR, todayISO } from "@/lib/finance/format";
+import { canAfford } from "@/lib/finance/afford";
 import { iconForName } from "@/lib/finance/categories";
 import { useAccountSummaries, useTransfer } from "@/lib/finance/hooks";
 import { cn } from "@/lib/utils";
@@ -70,10 +71,16 @@ export function TransferDialog({
   const fromSummary = accounts.find((s) => s.account.id === from);
   const toSummary = accounts.find((s) => s.account.id === to);
 
+  const amountPaise = rupeesToPaise(amount);
+  const amountEntered = !Number.isNaN(amountPaise) && amountPaise > 0;
+  // Block (don't warn): the source account must cover the transfer.
+  const unaffordable =
+    amountEntered && fromSummary != null && !canAfford(fromSummary.balancePaise, amountPaise);
+
   const handleSave = () => {
     if (transfer.isPending) return;
-    const amountPaise = rupeesToPaise(amount);
-    if (Number.isNaN(amountPaise) || amountPaise <= 0) {
+    const paise = rupeesToPaise(amount);
+    if (Number.isNaN(paise) || paise <= 0) {
       setError("Enter an amount greater than zero.");
       return;
     }
@@ -81,13 +88,19 @@ export function TransferDialog({
       setError("Pick both accounts.");
       return;
     }
+    // Defense in depth: the confirm button is disabled while unaffordable,
+    // but the mutation path itself throws too.
+    if (fromSummary && !canAfford(fromSummary.balancePaise, paise)) {
+      setError(`Insufficient balance in ${fromSummary.account.name}.`);
+      return;
+    }
     setError(null);
     transfer.mutate(
-      { fromAccountId: from, toAccountId: to, amountPaise, note: note.trim(), dateISO },
+      { fromAccountId: from, toAccountId: to, amountPaise: paise, note: note.trim(), dateISO },
       {
         onSuccess: () => {
           toast.success(
-            `Transferred ${formatINR(amountPaise)} · ${fromSummary?.account.name} → ${toSummary?.account.name}`,
+            `Transferred ${formatINR(paise)} · ${fromSummary?.account.name} → ${toSummary?.account.name}`,
           );
           onOpenChange(false);
         },
@@ -221,11 +234,17 @@ export function TransferDialog({
               {error}
             </p>
           )}
+          {!error && unaffordable && fromSummary && (
+            <p role="alert" className="text-sm font-medium text-destructive">
+              Insufficient balance in {fromSummary.account.name}. Lower the amount or pick another
+              account.
+            </p>
+          )}
 
           <button
             type="button"
             onClick={handleSave}
-            disabled={transfer.isPending || accounts.length < 2}
+            disabled={transfer.isPending || accounts.length < 2 || unaffordable}
             className={cn(
               "flex items-center justify-center gap-2 rounded-2xl bg-primary py-3.5 text-base font-bold text-primary-foreground",
               "transition-all hover:opacity-90 active:scale-[0.98] disabled:opacity-60",

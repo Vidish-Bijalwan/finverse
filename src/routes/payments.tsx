@@ -56,6 +56,7 @@ import {
   useUpdateTransaction,
 } from "@/lib/finance/hooks";
 import { formatINR, todayISO } from "@/lib/finance/format";
+import { canAfford } from "@/lib/finance/afford";
 import {
   MAX_PAYMENT_PAISE,
   buildUpiNote,
@@ -77,6 +78,7 @@ import { usePaymentRequests } from "@/lib/payment-requests";
 import {
   buildUpiNoteWithUserNote,
   extractPeople,
+  isValidMobileNumber,
   isValidUpiId,
   parsePayeeNote,
   type PayeePerson,
@@ -268,7 +270,9 @@ function PayTab({ search }: { search: PaymentsSearch }) {
     accounts[0];
   const effectiveAccountId = selectedAccount?.account.id ?? null;
   const overBalance =
-    selectedAccount != null && amountPaise > 0 && amountPaise > selectedAccount.balancePaise;
+    selectedAccount != null &&
+    amountPaise > 0 &&
+    !canAfford(selectedAccount.balancePaise, amountPaise);
 
   const resetSend = () => {
     setPayeeName("");
@@ -331,6 +335,16 @@ function PayTab({ search }: { search: PaymentsSearch }) {
   const confirmPayment = async () => {
     if (!effectiveAccountId) return;
     setSheetOpen(false);
+    // Defense in depth: the proceed button is disabled while overBalance,
+    // but the mutation path itself must never record an uncovered payment.
+    if (overBalance) {
+      setReceipt({
+        status: "failure",
+        reason: `Insufficient balance in ${selectedAccount?.account.name ?? "the account"} — the payment was not recorded.`,
+      });
+      setView({ name: "send-receipt" });
+      return;
+    }
     setView({ name: "send-processing" });
     try {
       const [created] = await Promise.all([
@@ -496,6 +510,8 @@ function PayTab({ search }: { search: PaymentsSearch }) {
               }
             : {})}
           onProceed={confirmPayment}
+          processing={addTransaction.isPending}
+          proceedDisabled={overBalance}
           onUseAnotherMethod={() => setSheetOpen(false)}
         >
           {note.trim() && (
@@ -507,7 +523,7 @@ function PayTab({ search }: { search: PaymentsSearch }) {
           {overBalance && (
             <p
               role="alert"
-              className="mt-3 rounded-2xl bg-danger-soft px-4 py-2.5 text-sm font-medium text-danger"
+              className="mt-3 rounded-2xl border border-danger/40 bg-danger-soft px-4 py-2.5 text-sm font-semibold text-danger"
             >
               Insufficient balance in {selectedAccount?.account.name}. Lower the amount or pick
               another account.
@@ -868,7 +884,7 @@ function RecipientStep({
   const [name, setName] = useState(initial);
   const trimmed = buildUpiNote(name);
   const valid =
-    mode === "name" ? trimmed.length > 0 : isValidUpiId(trimmed) || /^\d{10}$/.test(trimmed);
+    mode === "name" ? trimmed.length > 0 : isValidUpiId(trimmed) || isValidMobileNumber(trimmed);
   return (
     <div className="flex flex-col gap-4">
       <div className="flex items-center gap-2">
@@ -1074,7 +1090,11 @@ function RazorpayTab() {
               success is confirmed by the webhook, never by this screen.
             </p>
           </div>
-          <AmountInput confirmLabel="Create test payment link" onConfirm={startLink} />
+          <AmountInput
+            confirmLabel={createLink.isPending ? "Creating…" : "Create test payment link"}
+            processing={createLink.isPending}
+            onConfirm={startLink}
+          />
           {createError && (
             <p
               role="alert"

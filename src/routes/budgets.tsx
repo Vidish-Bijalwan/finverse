@@ -13,7 +13,7 @@ import { cn } from "@/lib/utils";
 import { AnimatedProgress } from "@/components/money/AnimatedProgress";
 import { BudgetDialog } from "@/components/money/BudgetDialog";
 import { addMonthsToKey, monthLabel } from "@/components/money/utils";
-import { pressable } from "@/components/fv";
+import { ErrorState, pressable } from "@/components/fv";
 import { isInvestmentOrder } from "@/lib/finance/investments";
 
 export const Route = createFileRoute("/budgets")({
@@ -116,8 +116,18 @@ function BudgetCard({
 
 function BudgetsPage() {
   const [month, setMonth] = useMonth();
-  const { data: budgets = [], isLoading: budgetsLoading } = useBudgets(month);
-  const { data: txns = [], isLoading: txnsLoading } = useTransactions(month);
+  const {
+    data: budgets = [],
+    isLoading: budgetsLoading,
+    isError: budgetsError,
+    refetch: refetchBudgets,
+  } = useBudgets(month);
+  const {
+    data: txns = [],
+    isLoading: txnsLoading,
+    isError: txnsError,
+    refetch: refetchTxns,
+  } = useTransactions(month);
   const setBudget = useSetBudget();
 
   const [dialogOpen, setDialogOpen] = useState(false);
@@ -125,6 +135,7 @@ function BudgetsPage() {
   const [presetCategoryId, setPresetCategoryId] = useState<string | undefined>();
 
   const loading = budgetsLoading || txnsLoading;
+  const loadFailed = budgetsError || txnsError;
 
   const spentByCategory = useMemo(() => {
     const map = new Map<string, number>();
@@ -214,6 +225,15 @@ function BudgetsPage() {
             <Skeleton key={i} className="h-44 w-full rounded-xl" />
           ))}
         </div>
+      ) : loadFailed ? (
+        <ErrorState
+          title="Couldn't load your budgets"
+          body="Your budgets and spending failed to load. Check your connection and try again."
+          onRetry={() => {
+            void refetchBudgets();
+            void refetchTxns();
+          }}
+        />
       ) : budgets.length === 0 && unbudgeted.length === 0 ? (
         <Card>
           <CardContent className="flex flex-col items-center gap-3 py-12 text-center">
@@ -311,7 +331,7 @@ function BudgetsPage() {
         onOpenChange={setDialogOpen}
         month={month}
         existing={editing}
-        presetCategoryId={presetCategoryId}
+        {...(presetCategoryId !== undefined ? { presetCategoryId } : {})}
         onSave={handleSave}
         saving={setBudget.isPending}
       />

@@ -24,6 +24,7 @@ export function PaymentSheet({
   fundingDetail,
   onProceed,
   processing = false,
+  proceedDisabled = false,
   proceedLabel = "Proceed to pay",
   onUseAnotherMethod,
   children,
@@ -37,10 +38,17 @@ export function PaymentSheet({
   fundingDetail?: string;
   onProceed: () => void;
   processing?: boolean;
+  /**
+   * Hard block on the CTA (e.g. insufficient balance in the funding
+   * account). Distinct from `processing`: this is a data problem, not a
+   * pending mutation.
+   */
+  proceedDisabled?: boolean;
   proceedLabel?: string;
   onUseAnotherMethod?: () => void;
   children?: ReactNode;
 }) {
+  const ctaDisabled = processing || proceedDisabled;
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
       <SheetContent
@@ -104,12 +112,12 @@ export function PaymentSheet({
           <button
             type="button"
             onClick={onProceed}
-            disabled={processing}
+            disabled={ctaDisabled}
             className={cn(
               pressable,
               "mt-3 flex h-13 w-full items-center justify-center gap-2 rounded-full py-3.5 text-base font-bold",
-              processing
-                ? "cursor-wait bg-primary/70 text-primary-foreground"
+              ctaDisabled
+                ? "cursor-not-allowed bg-muted text-muted-foreground"
                 : "bg-primary text-primary-foreground hover:bg-primary-hover",
             )}
           >

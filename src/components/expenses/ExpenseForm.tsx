@@ -401,7 +401,13 @@ export function ExpenseForm({
           <input
             type="date"
             value={dateISO}
-            onChange={(e) => e.target.value && setDateISO(e.target.value)}
+            onChange={(e) => {
+              const v = e.target.value;
+              if (!v) return;
+              // `max` doesn't stop typing a future date — clamp it here.
+              const today = todayISO();
+              setDateISO(v > today ? today : v);
+            }}
             max={todayISO()}
             className="h-11 rounded-xl border border-input bg-background px-3 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-ring"
           />

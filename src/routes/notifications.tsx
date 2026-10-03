@@ -14,9 +14,10 @@ import {
 
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
+import { Skeleton } from "@/components/ui/skeleton";
+import { ErrorState, pressable } from "@/components/fv";
 import { cn } from "@/lib/utils";
 import { useNotifications, type AppNotification } from "@/lib/notify";
-import { pressable } from "@/components/fv";
 
 export const Route = createFileRoute("/notifications")({
   head: () => ({
@@ -77,7 +78,8 @@ function timeLabel(iso: string): string {
 }
 
 function NotificationsPage() {
-  const { notifications, unread, isRead, markAllRead } = useNotifications();
+  const { notifications, unread, isRead, markAllRead, isLoading, isError, refetch } =
+    useNotifications();
 
   const groups = GROUP_ORDER.map((kind) => ({
     kind,
@@ -93,7 +95,13 @@ function NotificationsPage() {
               <Bell className="size-4" /> NOTIFICATIONS
             </div>
             <h1 className="mt-1 text-2xl font-black tracking-tight sm:text-3xl">
-              {unread > 0 ? `${unread} unread` : "You're all caught up"}
+              {isLoading
+                ? "Loading notifications"
+                : isError
+                  ? "Couldn't load notifications"
+                  : unread > 0
+                    ? `${unread} unread`
+                    : "You're all caught up"}
             </h1>
             <p className="mt-2 text-sm leading-6 text-muted-foreground">
               Bills due, budget alerts, goal milestones, anomaly flags and streaks — generated from
@@ -105,7 +113,7 @@ function NotificationsPage() {
             size="sm"
             className={`mt-1 shrink-0 gap-1.5 ${pressable}`}
             onClick={markAllRead}
-            disabled={unread === 0}
+            disabled={unread === 0 || isLoading || isError}
           >
             <CheckCheck className="size-4" aria-hidden />
             Mark all read
@@ -113,7 +121,23 @@ function NotificationsPage() {
         </header>
 
         <div className="mt-6 grid gap-6">
-          {notifications.length === 0 && (
+          {isLoading && (
+            <div className="grid gap-3" aria-label="Loading notifications">
+              {Array.from({ length: 4 }).map((_, i) => (
+                <Skeleton key={i} className="h-20 w-full rounded-xl" />
+              ))}
+            </div>
+          )}
+
+          {!isLoading && isError && (
+            <ErrorState
+              title="Couldn't load your notifications"
+              body="We couldn't check what's new. Check your connection and try again."
+              onRetry={() => void refetch()}
+            />
+          )}
+
+          {!isLoading && !isError && notifications.length === 0 && (
             <Card>
               <CardContent className="flex flex-col items-center px-6 py-12 text-center">
                 <span className="grid size-12 place-items-center rounded-full bg-primary/10">

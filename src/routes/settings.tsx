@@ -48,7 +48,7 @@ import { PageShell } from "@/components/markets/PageShell";
 import { APP_VERSION } from "@/components/shell/AppHeader";
 import { PinPad } from "@/components/fv";
 import { useAuth } from "@/lib/auth";
-import { APP_LOCK_TIMEOUTS, isLockEnabled } from "@/lib/applock";
+import { APP_LOCK_TIMEOUTS, isLockEnabled, isWeakPin } from "@/lib/applock";
 import {
   useAppLock,
   useChangePin,
@@ -678,6 +678,10 @@ function AppLockSection() {
     setPinError(null);
     if (mode === "set") {
       if (step === "new") {
+        if (isWeakPin(pin)) {
+          setPinError("Choose a less predictable PIN — avoid repeated digits or simple sequences.");
+          return;
+        }
         setFirstPin(pin);
         setStep("confirm");
         return;
@@ -706,6 +710,10 @@ function AppLockSection() {
         return;
       }
       if (step === "new") {
+        if (isWeakPin(pin)) {
+          setPinError("Choose a less predictable PIN — avoid repeated digits or simple sequences.");
+          return;
+        }
         setFirstPin(pin);
         setStep("confirm");
         return;

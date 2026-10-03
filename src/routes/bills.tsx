@@ -16,7 +16,7 @@ import { cn } from "@/lib/utils";
 import { BillDialog, type BillFormInput } from "@/components/money/BillDialog";
 import { ConfirmDeleteDialog } from "@/components/money/ConfirmDeleteDialog";
 import { ordinal } from "@/components/money/utils";
-import { pressable } from "@/components/fv";
+import { ErrorState, pressable } from "@/components/fv";
 
 export const Route = createFileRoute("/bills")({
   head: () => ({
@@ -174,7 +174,7 @@ function BillRow({
 
 function BillsPage() {
   const [today] = useState(() => todayISO());
-  const { data: bills = [], isLoading } = useBills();
+  const { data: bills = [], isLoading, isError, refetch } = useBills();
   const payBill = usePayBill();
   const { saveBill, deleteBill } = useBillMutations();
 
@@ -233,6 +233,12 @@ function BillsPage() {
             <Skeleton key={i} className="h-20 w-full rounded-xl" />
           ))}
         </div>
+      ) : isError ? (
+        <ErrorState
+          title="Couldn't load your bills"
+          body="Your bills failed to load. Check your connection and try again."
+          onRetry={() => void refetch()}
+        />
       ) : bills.length === 0 ? (
         <Card>
           <CardContent className="flex flex-col items-center gap-3 py-12 text-center">

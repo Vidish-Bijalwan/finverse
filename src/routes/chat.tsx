@@ -268,6 +268,25 @@ function ChatPage() {
           <h1 className="text-lg font-black tracking-tight">FinVerse AI Chat</h1>
           <p className="text-xs text-muted-foreground">Answers computed from your real data</p>
         </div>
+        {dbQuery.isError && (
+          <div
+            role="alert"
+            className="mt-2 flex items-center justify-between gap-3 rounded-xl border border-danger/30 bg-danger-soft/40 px-3.5 py-2.5"
+          >
+            <p className="text-sm text-muted-foreground">
+              <span className="font-semibold text-foreground">Your data didn't load.</span> I can
+              only answer from the welcome message above until it's back.
+            </p>
+            <Button
+              variant="outline"
+              size="sm"
+              className="shrink-0"
+              onClick={() => void dbQuery.refetch()}
+            >
+              Retry
+            </Button>
+          </div>
+        )}
         <div
           role="log"
           aria-live="polite"

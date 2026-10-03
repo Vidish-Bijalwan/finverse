@@ -1,7 +1,8 @@
 import { useState } from "react";
-import { Minus, Plus } from "lucide-react";
+import { Loader2, Minus, Plus } from "lucide-react";
 import { Sheet, SheetContent } from "@/components/ui/sheet";
 import { cn } from "@/lib/utils";
+import { canAfford } from "@/lib/finance/afford";
 import { NumberDisplay } from "./NumberDisplay";
 import { pressable } from "./press";
 
@@ -24,7 +25,10 @@ const toPaise = (rupeesText: string): number => {
 /**
  * Bottom-sheet order ticket: Market/Limit segmented control, qty/amount
  * toggle input, live estimated-cost readout. Confirm stays disabled until
- * the order is valid.
+ * the order is valid, and is additionally disabled while the order mutation
+ * is pending (double-submit guard) and — for buys — while the estimated
+ * cost exceeds the funding account's available balance (hard block, not a
+ * warning).
  *
  * The summary footer (estimated cost + confirm CTA) is sticky — always
  * visible even when the ticket content scrolls.
@@ -36,6 +40,9 @@ export function OrderSheet({
   name,
   ltpPaise,
   side = "buy",
+  pending = false,
+  availableBalancePaise,
+  availableAccountName,
   onConfirm,
 }: {
   open: boolean;
@@ -45,6 +52,16 @@ export function OrderSheet({
   /** Live last-traded price, paise per unit. */
   ltpPaise: number;
   side?: "buy" | "sell";
+  /** True while the place-order mutation is in flight: confirm is disabled. */
+  pending?: boolean;
+  /**
+   * Funding account's available balance (paise) for buy orders. When set,
+   * the confirm button is disabled and an inline error shows if the
+   * estimated cost exceeds it.
+   */
+  availableBalancePaise?: number;
+  /** Funding account name, used in the insufficient-balance error. */
+  availableAccountName?: string;
   onConfirm: (order: FvOrder) => void;
 }) {
   const [type, setType] = useState<"market" | "limit">("market");
@@ -62,6 +79,12 @@ export function OrderSheet({
         : 0;
   const estimatedPaise = qtyFromMode * pricePaise;
   const valid = qtyFromMode > 0 && pricePaise > 0;
+  const overBalance =
+    side === "buy" &&
+    availableBalancePaise != null &&
+    estimatedPaise > 0 &&
+    !canAfford(availableBalancePaise, estimatedPaise);
+  const confirmDisabled = !valid || pending || overBalance;
 
   const segmented = <T,>(
     options: { value: T; label: string }[],
@@ -215,22 +238,29 @@ export function OrderSheet({
             </span>
             <NumberDisplay paise={estimatedPaise} className="text-lg font-bold text-foreground" />
           </div>
+          {overBalance && (
+            <p role="alert" className="mt-2 text-sm font-medium text-loss">
+              Insufficient balance in {availableAccountName ?? "your account"}. Lower the quantity
+              or amount.
+            </p>
+          )}
 
           <button
             type="button"
-            disabled={!valid}
+            disabled={confirmDisabled}
             onClick={() => onConfirm({ type, mode, qty: qtyFromMode, pricePaise })}
             className={cn(
               pressable,
-              "mt-3 h-13 w-full rounded-full py-3.5 text-base font-bold text-white transition-colors",
-              valid
-                ? side === "buy"
+              "mt-3 flex h-13 w-full items-center justify-center gap-2 rounded-full py-3.5 text-base font-bold text-white transition-colors",
+              confirmDisabled
+                ? "cursor-not-allowed bg-muted text-muted-foreground"
+                : side === "buy"
                   ? "bg-gain hover:opacity-90"
-                  : "bg-loss hover:opacity-90"
-                : "cursor-not-allowed bg-muted text-muted-foreground",
+                  : "bg-loss hover:opacity-90",
             )}
           >
-            {side === "buy" ? "Buy" : "Sell"} {symbol}
+            {pending && <Loader2 className="size-5 animate-spin" aria-hidden />}
+            {pending ? "Placing…" : `${side === "buy" ? "Buy" : "Sell"} ${symbol}`}
           </button>
         </div>
       </SheetContent>

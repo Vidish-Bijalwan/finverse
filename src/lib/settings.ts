@@ -268,6 +268,14 @@ function isPaise(v: unknown): v is number {
   return typeof v === "number" && Number.isInteger(v) && v >= 0;
 }
 
+/** Integer paise strictly greater than zero — zero-amount money rows must not restore. */
+function isPositivePaise(v: unknown): v is number {
+  return typeof v === "number" && Number.isInteger(v) && v > 0;
+}
+
+const CATEGORY_KINDS = ["expense", "income"] as const;
+const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
+
 /** Validate a parsed backup file. Returns human-readable errors ([] = valid). */
 export function validateBackup(parsed: unknown): string[] {
   const errors: string[] = [];
@@ -282,7 +290,16 @@ export function validateBackup(parsed: unknown): string[] {
   }
   const db = parsed["db"];
   if (!isObject(db)) return ["The backup is missing its data section."];
-  for (const key of ["transactions", "budgets", "bills", "goals", "holdings"] as const) {
+  for (const key of [
+    "transactions",
+    "budgets",
+    "bills",
+    "goals",
+    "holdings",
+    "accounts",
+    "customCategories",
+    "recurringRules",
+  ] as const) {
     if (!Array.isArray(db[key])) errors.push(`Data section "${key}" is missing or not a list.`);
   }
   if (errors.length > 0) return errors;
@@ -297,11 +314,67 @@ export function validateBackup(parsed: unknown): string[] {
     if (typeof t["type"] !== "string" || !(TXN_TYPES as readonly string[]).includes(t["type"])) {
       errors.push(`Transaction #${i + 1} has an invalid type "${String(t["type"])}".`);
     }
-    if (!isPaise(t["amountPaise"])) {
-      errors.push(`Transaction #${i + 1} has an invalid amount (must be integer paise ≥ 0).`);
+    if (!isPositivePaise(t["amountPaise"])) {
+      errors.push(
+        `Transaction #${i + 1} has an invalid amount (must be a positive integer paise amount).`,
+      );
     }
-    if (typeof t["dateISO"] !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(t["dateISO"])) {
+    if (typeof t["dateISO"] !== "string" || !DATE_RE.test(t["dateISO"])) {
       errors.push(`Transaction #${i + 1} has an invalid date "${String(t["dateISO"])}".`);
+    }
+  });
+
+  const accounts = db["accounts"] as unknown[];
+  accounts.forEach((a, i) => {
+    if (!isObject(a)) {
+      errors.push(`Account #${i + 1} is not an object.`);
+      return;
+    }
+    if (typeof a["id"] !== "string") errors.push(`Account #${i + 1} is missing an id.`);
+    if (typeof a["name"] !== "string" || a["name"].trim().length === 0) {
+      errors.push(`Account #${i + 1} is missing a name.`);
+    }
+    // A zero opening balance is legitimate — only the shape is validated.
+    if (!isPaise(a["openingBalancePaise"])) {
+      errors.push(`Account #${i + 1} has an invalid opening balance.`);
+    }
+  });
+
+  const categories = db["customCategories"] as unknown[];
+  categories.forEach((c, i) => {
+    if (!isObject(c)) {
+      errors.push(`Category #${i + 1} is not an object.`);
+      return;
+    }
+    if (typeof c["id"] !== "string") errors.push(`Category #${i + 1} is missing an id.`);
+    if (typeof c["label"] !== "string" || c["label"].trim().length === 0) {
+      errors.push(`Category #${i + 1} is missing a label.`);
+    }
+    if (
+      typeof c["kind"] !== "string" ||
+      !(CATEGORY_KINDS as readonly string[]).includes(c["kind"])
+    ) {
+      errors.push(`Category #${i + 1} has an invalid kind "${String(c["kind"])}".`);
+    }
+  });
+
+  const rules = db["recurringRules"] as unknown[];
+  rules.forEach((r, i) => {
+    if (!isObject(r)) {
+      errors.push(`Recurring rule #${i + 1} is not an object.`);
+      return;
+    }
+    if (typeof r["id"] !== "string") errors.push(`Recurring rule #${i + 1} is missing an id.`);
+    if (typeof r["type"] !== "string" || !(TXN_TYPES as readonly string[]).includes(r["type"])) {
+      errors.push(`Recurring rule #${i + 1} has an invalid type "${String(r["type"])}".`);
+    }
+    if (!isPositivePaise(r["amountPaise"])) {
+      errors.push(
+        `Recurring rule #${i + 1} has an invalid amount (must be a positive integer paise amount).`,
+      );
+    }
+    if (typeof r["startDateISO"] !== "string" || !DATE_RE.test(r["startDateISO"])) {
+      errors.push(`Recurring rule #${i + 1} has an invalid start date.`);
     }
   });
 

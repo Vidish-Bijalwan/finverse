@@ -36,7 +36,7 @@ import { buildTransactionsCSV } from "@/lib/settings";
 import { useVoiceInput } from "@/lib/voice";
 import type { PayMode, Transaction } from "@/lib/finance/types";
 import { cn, downloadFile } from "@/lib/utils";
-import { pressable } from "@/components/fv";
+import { ErrorState, pressable } from "@/components/fv";
 
 export const Route = createFileRoute("/expenses")({
   /** `?add=1` deep-link opens the add-expense sheet (dashboard quick action). */
@@ -192,7 +192,7 @@ function ExpensesPage() {
   );
   const [prefill, setPrefill] = useState<ExpenseDraft | null>(null);
 
-  const { data: txns, isLoading } = useTransactions(month);
+  const { data: txns, isLoading, isError, refetch } = useTransactions(month);
   const { data: accounts } = useAccounts();
   const { data: allTagList } = useAllTags();
   const addTxn = useAddTransaction();
@@ -696,7 +696,15 @@ function ExpensesPage() {
               </div>
             )}
 
-            {!isLoading && filtered.length === 0 && (
+            {!isLoading && isError && (
+              <ErrorState
+                title="Couldn't load your transactions"
+                body="Your transactions failed to load. Check your connection and try again."
+                onRetry={() => void refetch()}
+              />
+            )}
+
+            {!isLoading && !isError && filtered.length === 0 && (
               <div className="flex flex-col items-center gap-3 rounded-[14px] bg-card px-6 py-12 text-center shadow-tile">
                 <div className="flex h-14 w-14 items-center justify-center rounded-[14px] bg-muted">
                   <Plus className="h-7 w-7 text-muted-foreground" />
@@ -721,6 +729,7 @@ function ExpensesPage() {
             )}
 
             {!isLoading &&
+              !isError &&
               groups.map(([dateISO, items]) => {
                 let daySpent = 0;
                 let dayEarned = 0;

@@ -8,6 +8,7 @@ import {
   hashPin,
   isLockEnabled,
   isValidPin,
+  isWeakPin,
   timingSafeEqualHex,
   verifyPin,
 } from "./applock";
@@ -109,5 +110,41 @@ describe("applock pure helpers", () => {
     expect(MAX_FAILED_ATTEMPTS).toBe(5);
     expect(LOCKOUT_SECONDS).toBe(30);
     expect(PBKDF2_ITERATIONS).toBe(100_000);
+  });
+});
+
+describe("isWeakPin", () => {
+  it("rejects all-same-digit PINs", () => {
+    expect(isWeakPin("000000")).toBe(true);
+    expect(isWeakPin("111111")).toBe(true);
+    expect(isWeakPin("777777")).toBe(true);
+    expect(isWeakPin("999999")).toBe(true);
+  });
+
+  it("rejects full ascending and descending runs", () => {
+    expect(isWeakPin("123456")).toBe(true);
+    expect(isWeakPin("234567")).toBe(true);
+    expect(isWeakPin("654321")).toBe(true);
+    expect(isWeakPin("987654")).toBe(true);
+  });
+
+  it("rejects wrap-around runs", () => {
+    expect(isWeakPin("901234")).toBe(true);
+    expect(isWeakPin("109876")).toBe(true);
+  });
+
+  it("accepts non-trivial PINs", () => {
+    expect(isWeakPin("482910")).toBe(false);
+    expect(isWeakPin("121212")).toBe(false);
+    expect(isWeakPin("123455")).toBe(false);
+    expect(isWeakPin("112233")).toBe(false);
+    expect(isWeakPin("135790")).toBe(false);
+  });
+
+  it("fails closed on malformed input", () => {
+    expect(isWeakPin("")).toBe(true);
+    expect(isWeakPin("12345")).toBe(true);
+    expect(isWeakPin("1234567")).toBe(true);
+    expect(isWeakPin("abcdef")).toBe(true);
   });
 });

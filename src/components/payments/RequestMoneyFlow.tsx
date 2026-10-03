@@ -271,6 +271,7 @@ function RequestAmountStep({ onBack, onSent }: { onBack: () => void; onSent: () 
       </p>
       <AmountInput
         confirmLabel={createRequest.isPending ? "Sending…" : "Send request"}
+        processing={createRequest.isPending}
         onConfirm={async (paise) => {
           setError(null);
           draft.amountPaise = paise;

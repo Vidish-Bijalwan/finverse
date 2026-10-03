@@ -795,3 +795,53 @@ The final screenshot review gave a SHIP verdict with 3 remaining real issues. Al
 | `bun x tsc --noEmit` | **52 errors — identical to pre-existing baseline** (0 in any touched file) |
 | `bun x eslint` | **0 errors** |
 | `bun run build` | ✅ green |
+
+## Robustness pass — deep-audit fixes (branch fix/audit-robustness, base 50753aa1)
+
+Fixes every code-side finding from the 2026-10-04 deep audit (`~/workspace/finverse-audit/deep-audit-report.md`). Owner dashboard actions (Supabase rate limits, email confirmation, HaveIBeenPwned, migrations 0003+0004) are NOT in this branch.
+
+### A. Forgot-password flow (P2) — built
+- New `src/routes/forgot-password.tsx`: email form → `resetPasswordForEmail(email, { redirectTo: origin + "/auth/reset-password" })`; idle/loading/success ("Check your inbox")/error states; client-side email validation; friendly error mapping.
+- New `src/routes/auth.reset-password.tsx`: checks `getSession()` on mount — no session → expired/invalid UI linking back to /forgot-password; new-password form (min 8 + policy module, confirm-match) → `updateUser({ password })` → sign out recovery session → `/login?reset=1`.
+- `src/routes/login.tsx`: "Forgot password?" link under password field (login tab); `validateSearch` for `reset=1` → "Password updated — sign in with your new password." notice.
+
+### B. Error states no longer masquerade as empty states (P2)
+- `expenses`, `budgets`, `goals`, `bills`: `isError` → `<ErrorState>` with retry (refetch); empty state only on successful zero-row queries.
+- `insights`: `isError` → ErrorState instead of blank content.
+- `notifications`: loading → skeletons; error → ErrorState; empty → "all caught up" (header copy also fixed for loading/error); "Mark all read" disabled unless loaded. `useNotifications()` extended with `isLoading`/`isError`/`refetch` (backwards-compatible).
+- `chat`: upfront `role="alert"` banner + retry when the backing DB query fails.
+
+### C. Insufficient balance BLOCKS (P2)
+- New pure `canAfford(balancePaise, amountPaise)` in `src/lib/finance/afford.ts` (+ 9 unit tests).
+- UPI send, bank transfer (`BankTransferFlow`), account-to-account (`transferBetweenAccounts` in `db.ts` throws; `TransferDialog` confirm disabled), stock BUY (`usePlaceOrder` throws; `OrderSheet` confirm disabled with `pending`/`availableBalancePaise` props): proceed disabled + inline "Insufficient balance in <account>" error. Mutations also early-return/throw as defense in depth.
+
+### D. Security headers (P2)
+- New `vercel.json`: `X-Content-Type-Options: nosniff`, `Referrer-Policy: strict-origin-when-cross-origin`, `X-Frame-Options: DENY`, conservative CSP (`script-src 'self'`; Supabase + Google Fonts + Google OAuth allowlisted). Grepped built JS — no external host missed. HSTS already provided by Vercel.
+
+### E. Password policy (P2)
+- New pure `src/lib/auth/password-policy.ts`: min 8 + curated blocklist (15 entries, case-insensitive) → `validatePassword(pw): string | null` (+ 5 unit tests). Wired into signup (before Supabase call) and reset-password form.
+- Client-side signup throttle: 3 attempts per rolling 10-min window via localStorage (`fv_signup_attempts`), fail-open; documented as defense-in-depth only.
+
+### F. P3 batch
+1. Strict amount parsing: new pure `parseStrictDecimal()` (`src/lib/parse-decimal.ts`, +6 tests) — rejects `1e5`, `0x10`, `Infinity`, negatives, `12.345`; wired into `rupeesToPaise`, `CalcField`, `SipSheet`.
+2. App-lock PIN: new pure `isWeakPin()` (`src/lib/applock.ts`, +5 tests) — rejects all-same-digit, ascending/descending runs incl. wrap-arounds; wired into set-PIN and change-PIN.
+3. Expense date: onChange clamps typed values to today.
+4. Profile phone: `/^[6-9]\d{9}$/` validation on save.
+5. UPI mobile: manual entry unified to shared `isValidMobileNumber`.
+6. Backup restore: `accounts`/`customCategories`/`recurringRules` validated; money-row amount rule ≥0 → >0 (zero-balance accounts still allowed).
+7. `.env.example`: already blank at this base — no change needed.
+8. New migration `supabase/migrations/0004_robustness_constraints.sql` (idempotent DO blocks, 0003 style): `transactions_amount_positive`, `bills_due_day_range` (1–31), `holdings_qty_positive`, `goals_saved_within_target`, `budgets_limit_positive`. NOTE: ADD CONSTRAINT validates existing rows — owner must clean violating rows before running.
+
+### G. Double-submit protection
+Audited 14 money-mutation buttons: 5 were missing pending-disable (PaymentSheet proceed ×2, OrderSheet buy/sell, request-money AmountInput, Razorpay link AmountInput) — all fixed. 9 were already safe.
+
+### Consolidation note
+Four parallel workers built the above in isolated workdirs; the coordinator merged via content comparison against a clean control clone (`base2/`). The only cross-worker conflict (`src/routes/payments.tsx`: balance-blocking vs mobile-regex) was resolved with a 3-way merge — both changes verified present, old regex gone.
+
+## Verification (robustness pass — final consolidated state)
+| Command | Result |
+|---|---|
+| `bun run test:unit` | **306/306 pass** (36 files): new — password-policy 5, afford 9, parse-decimal 6, money/utils 3, settings 6, applock PIN 5 |
+| `bun x tsc --noEmit` | **51 errors — pre-existing baseline minus one** (worker fixed a pre-existing budgets.tsx error; 0 in any touched file) |
+| `bun x eslint` (39 touched files) | **0 errors** (2 pre-existing warnings) |
+| `bun run build` | ✅ green |
