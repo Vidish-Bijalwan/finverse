@@ -425,6 +425,91 @@
   }
 }
 
+/* Ambient "colored bulbs" background for auth screens. */
+.fv-orbs {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  pointer-events: none;
+}
+
+.fv-orb {
+  position: absolute;
+  border-radius: 9999px;
+  mix-blend-mode: screen;
+  will-change: transform;
+}
+
+.fv-vignette {
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(
+    120% 90% at 50% 42%,
+    transparent 52%,
+    oklch(0.1 0.02 270 / 0.6)
+  );
+}
+
+/* Three distinct slow drift paths so the orbs never move in lockstep. */
+@keyframes fv-orb-drift-a {
+  from {
+    transform: translate(0, 0) scale(1);
+  }
+  50% {
+    transform: translate(6rem, 4rem) scale(1.12);
+  }
+  to {
+    transform: translate(-4rem, 8rem) scale(0.95);
+  }
+}
+
+@keyframes fv-orb-drift-b {
+  from {
+    transform: translate(0, 0) scale(1.05);
+  }
+  50% {
+    transform: translate(-7rem, 5rem) scale(0.92);
+  }
+  to {
+    transform: translate(5rem, -6rem) scale(1.1);
+  }
+}
+
+@keyframes fv-orb-drift-c {
+  from {
+    transform: translate(0, 0) scale(0.95);
+  }
+  50% {
+    transform: translate(4rem, -7rem) scale(1.15);
+  }
+  to {
+    transform: translate(-6rem, 3rem) scale(1);
+  }
+}
+
+/* Gentle bob for floating glass cards on the login visual panel. */
+@keyframes fv-float-soft {
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-10px);
+  }
+}
+
+.fv-float-soft {
+  animation: fv-float-soft 7s ease-in-out infinite;
+  will-change: transform;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .fv-orb,
+  .fv-float-soft {
+    animation: none !important;
+  }
+}
+
 @utility page-transition-enter {
   animation: page-enter 220ms ease-out;
 }
