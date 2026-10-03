@@ -1,12 +1,12 @@
 /** FinVerse design-system kit: GPay/Groww-pattern primitives on our tokens. */
 export { NumberDisplay } from "./NumberDisplay";
-export { TestModeBanner } from "./TestModeBanner";
 export { StatBand } from "./StatBand";
 export type { StatBandStat } from "./StatBand";
 export { TxnRow, initialsOf } from "./TxnRow";
 export type { TxnStatus, TxnSwipeActions } from "./TxnRow";
 export { HoldingRow } from "./HoldingRow";
 export { MarketRow } from "./MarketRow";
+export { MarketStrip } from "./MarketStrip";
 export { TickerStrip } from "./TickerStrip";
 export { AmountInput, NumericKeypad } from "./AmountInput";
 export { PinPad } from "./PinPad";
@@ -20,6 +20,7 @@ export { ChartCard, chartTooltipLines, chartTooltipFormatter, CHART_RANGES } fro
 export type { ChartRangeKey, ChartPoint, ChartRenderContext } from "./ChartCard";
 export { DonutAllocation } from "./DonutAllocation";
 export type { AllocationSlice } from "./DonutAllocation";
+export { Sparkline } from "./Sparkline";
 export { SearchDropdown } from "./SearchDropdown";
 export type { SearchResultItem, SearchResultGroup } from "./SearchDropdown";
 export { AppLockScreen } from "./AppLockScreen";

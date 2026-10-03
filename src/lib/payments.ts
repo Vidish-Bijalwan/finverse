@@ -4,7 +4,8 @@
  * Two rails:
  *   (a) Simulated UPI — always available. Writes a `transactions` row
  *       (type=expense, pay_mode=`upi_test`) via the existing useAddTransaction
- *       mutation path. No real money moves; every surface shows TestModeBanner.
+ *       mutation path. No real money moves; every surface carries a quiet
+ *       "simulated" disclosure line.
  *   (b) Razorpay test mode — only when the server reports configured
  *       (useRazorpayStatus). Link creation runs in a server function
  *       (src/lib/razorpay.server.ts); the short_url opens in a new tab and
@@ -19,12 +20,14 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { getSupabase } from "./supabase";
 import { createPaymentLinkFn, getRazorpayStatusFn } from "./razorpay.server";
-import type { Transaction } from "./finance/types";
+import { insertTransaction } from "./finance/db";
+import { monthKey, todayISO } from "./finance/format";
+import type { Bill, Transaction } from "./finance/types";
 
 // ── Types ──────────────────────────────────────────────────────────────────
 
-export type PaymentRail = "upi_test" | "razorpay_test";
-export const PAYMENT_PAY_MODES: PaymentRail[] = ["upi_test", "razorpay_test"];
+export type PaymentRail = "upi_test" | "razorpay_test" | "bank_test";
+export const PAYMENT_PAY_MODES: PaymentRail[] = ["upi_test", "razorpay_test", "bank_test"];
 
 export type PaymentLinkStatus = "created" | "paid" | "expired" | "cancelled";
 export type PaymentStatus = "created" | "attempted" | "captured" | "failed";
@@ -51,12 +54,21 @@ export interface PaymentRecord {
   createdAt: string;
 }
 
+/** Stable code stamped on every PaymentsSetupPendingError. */
+export const SETUP_PENDING_CODE = "FINVERSE_SETUP_PENDING" as const;
+
+/** Branded message text — matched as a fallback in case the error is ever
+ *  re-created as a plain Error (losing both prototype and `code`). */
+export const SETUP_PENDING_MESSAGE =
+  "Payments database setup pending — run supabase/migrations/0002_revamp.sql in the Supabase SQL editor." as const;
+
 /** Branded error: the payments tables don't exist yet (migration not run). */
 export class PaymentsSetupPendingError extends Error {
+  /** Stable machine-readable marker — survives re-throws and (de)serialization
+   *  where `instanceof` checks break (SSR, worker boundaries, query dehydration). */
+  readonly code = SETUP_PENDING_CODE;
   constructor() {
-    super(
-      "Payments database setup pending — run supabase/migrations/0002_revamp.sql in the Supabase SQL editor.",
-    );
+    super(SETUP_PENDING_MESSAGE);
     this.name = "PaymentsSetupPendingError";
   }
 }
@@ -65,10 +77,15 @@ export class PaymentsSetupPendingError extends Error {
 export function isSetupPendingError(err: unknown): boolean {
   if (err instanceof PaymentsSetupPendingError) return true;
   if (err != null && typeof err === "object") {
-    const code = (err as { code?: unknown }).code;
-    if (code === "42P01") return true;
-    const message = (err as { message?: unknown }).message;
-    if (typeof message === "string" && /relation .* does not exist/i.test(message)) return true;
+    const e = err as { code?: unknown; message?: unknown };
+    // Stable code survives re-throws / serialization where `instanceof` fails.
+    if (e.code === SETUP_PENDING_CODE) return true;
+    // Native Postgrest shape: { code: "42P01", message: 'relation "x" does not exist' }.
+    if (e.code === "42P01") return true;
+    if (typeof e.message === "string") {
+      if (/relation .* does not exist/i.test(e.message)) return true;
+      if (e.message.includes(SETUP_PENDING_MESSAGE)) return true;
+    }
   }
   return false;
 }
@@ -144,9 +161,55 @@ export function groupTransactionsByMonth(transactions: Transaction[]): MonthGrou
     }));
 }
 
+/** True when a bill hasn't been paid in the current calendar month. */
+export function isBillDue(bill: Bill, monthKeyStr: string = monthKey(new Date())): boolean {
+  return !bill.lastPaidOn || !bill.lastPaidOn.startsWith(monthKeyStr);
+}
+
 /** True when this transaction is a test-rail payment (either rail). */
 export function isPaymentTransaction(t: Transaction): boolean {
   return (PAYMENT_PAY_MODES as string[]).includes(t.payMode);
+}
+
+// ── Refunds (simulated rails) ──────────────────────────────────────────────
+
+/**
+ * Ids of payments that have been refunded: any transaction id that appears
+ * as `refundOf` on a refund (income) transaction. Requires migration 0003
+ * (transactions.refund_of); without it this simply returns an empty set.
+ */
+export function refundedTxnIds(transactions: Transaction[]): Set<string> {
+  const ids = new Set<string>();
+  for (const t of transactions) {
+    if (t.refundOf) ids.add(t.refundOf);
+  }
+  return ids;
+}
+
+/**
+ * True when this payment can be refunded: a successful simulated-rail
+ * expense that hasn't been refunded yet. Razorpay test payments can't be
+ * refunded from here (no refund rail is configured).
+ */
+export function canRefundPayment(t: Transaction, refundedIds: Set<string>): boolean {
+  return (
+    t.type === "expense" &&
+    (t.payMode === "upi_test" || t.payMode === "bank_test") &&
+    !refundedIds.has(t.id) &&
+    !t.refundOf
+  );
+}
+
+/** Payment status including the refunded state, for history rows/details. */
+export type PaymentDisplayStatus = "success" | "pending" | "failed" | "refunded";
+
+/** Resolve the display status of a ledger payment transaction. */
+export function paymentDisplayStatus(
+  t: Transaction,
+  refundedIds: Set<string>,
+): PaymentDisplayStatus {
+  if (refundedIds.has(t.id)) return "refunded";
+  return "success";
 }
 
 // ── Data access (Supabase, RLS-scoped to the signed-in user) ────────────────
@@ -264,6 +327,60 @@ export interface CreatedPaymentLink {
   razorpayLinkId: string;
   shortUrl: string;
   status: string;
+}
+
+/**
+ * Refund a simulated-rail payment: records a real reversing income
+ * transaction linked via `refund_of`, crediting the same account the payment
+ * debited. The original payment then displays the "Refunded" status.
+ *
+ * Needs migration 0003 (transactions.refund_of). If the column is missing,
+ * the insert fails with 42703 and we surface the setup-pending error so the
+ * UI can say so honestly instead of showing a fake success.
+ */
+export function useRefundPayment() {
+  const qc = useQueryClient();
+  return useMutation<Transaction, Error, { payment: Transaction }>({
+    mutationFn: async ({ payment }) => {
+      if (payment.type !== "expense") {
+        throw new Error("Only payments (expenses) can be refunded.");
+      }
+      if (payment.payMode !== "upi_test" && payment.payMode !== "bank_test") {
+        throw new Error("Only simulated UPI / bank payments can be refunded here.");
+      }
+      const parsed =
+        payment.payMode === "upi_test"
+          ? payment.note.split(" · ")[0]?.trim()
+          : payment.note.split(" · ")[1]?.trim();
+      try {
+        return await insertTransaction({
+          type: "income",
+          amountPaise: payment.amountPaise,
+          category: "other-income",
+          note: `Refund · ${parsed || "payment"}`,
+          dateISO: todayISO(),
+          payMode: payment.payMode,
+          ...(payment.accountId ? { accountId: payment.accountId } : {}),
+          tags: [],
+          refundOf: payment.id,
+        });
+      } catch (err) {
+        if (
+          err != null &&
+          typeof err === "object" &&
+          ((err as { code?: string }).code === "42703" ||
+            /refund_of/i.test((err as { message?: string }).message ?? ""))
+        ) {
+          throw new PaymentsSetupPendingError();
+        }
+        throw err;
+      }
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["finverse", "transactions"] });
+      qc.invalidateQueries({ queryKey: ["finverse", "account-summaries"] });
+    },
+  });
 }
 
 /**

@@ -17,6 +17,8 @@ export interface AppSettings {
   theme: ThemeMode;
   /** Day of month (1-28) the financial month starts on. */
   monthStartDay: number;
+  /** Mask money figures across the dashboard (persisted privacy preference). */
+  balancePrivate?: boolean;
 }
 
 export const SETTINGS_KEY = "finverse:settings:v1";
@@ -38,7 +40,8 @@ function isValidSettings(v: unknown): v is AppSettings {
     typeof monthStartDay === "number" &&
     Number.isInteger(monthStartDay) &&
     monthStartDay >= 1 &&
-    monthStartDay <= 28
+    monthStartDay <= 28 &&
+    (s["balancePrivate"] === undefined || typeof s["balancePrivate"] === "boolean")
   );
 }
 

@@ -23,6 +23,7 @@ import {
   sectorMedianPE,
   sectorMedianReturn,
   MCAP_BANDS,
+  STOCKS,
   type StockInfo,
 } from "@/lib/market/data";
 import { dayChange, genHistory, getLTP, refreshLTP, type PricePoint } from "@/lib/market/history";
@@ -32,7 +33,7 @@ import {
   type ChartPoint,
   type ChartRangeKey,
 } from "@/components/fv/ChartCard";
-import { TestModeBanner } from "@/components/fv/TestModeBanner";
+import { Pill } from "@/components/fv";
 import { OrderSheet, type FvOrder } from "@/components/fv/OrderSheet";
 import { EmptyState } from "@/components/markets/shared";
 import { PageShell } from "@/components/markets/PageShell";
@@ -288,6 +289,114 @@ function Fundamentals({ stock }: { stock: StockInfo }) {
   );
 }
 
+function Overview({ stock }: { stock: StockInfo }) {
+  const band = mcapBandOf(stock.marketCapCr);
+  const medianPE = sectorMedianPE(stock.sector);
+  const medianRet = sectorMedianReturn(stock.sector);
+  const peers = STOCKS.filter((s) => s.sector === stock.sector && s.symbol !== stock.symbol)
+    .sort((a, b) => b.marketCapCr - a.marketCapCr)
+    .slice(0, 4);
+
+  const facts: Array<[string, string]> = [
+    ["Sector", stock.sector],
+    ["Market-cap band", MCAP_BANDS[band].label],
+    ["Market cap", formatINRShort(stock.marketCapCr * 1_00_00_00_000)],
+    [
+      `Sector median P/E`,
+      medianPE > 0 ? `${medianPE.toFixed(1)} (stock: ${stock.pe.toFixed(1)})` : "—",
+    ],
+    [
+      "Sector median 1Y return",
+      `${medianRet >= 0 ? "+" : "−"}${Math.abs(medianRet).toFixed(1)}% (stock: ${stock.oneYReturnPct >= 0 ? "+" : "−"}${Math.abs(stock.oneYReturnPct).toFixed(1)}%)`,
+    ],
+  ];
+
+  return (
+    <div>
+      <p className="text-sm leading-6 text-muted-foreground">
+        <span className="font-bold text-foreground">{stock.name}</span> is a{" "}
+        {MCAP_BANDS[band].label.toLowerCase()} {stock.sector.toLowerCase()} listing in the FinVerse
+        demo stock universe of {STOCKS.length} instruments. Figures below are illustrative data for
+        a college project — not company research.
+      </p>
+      <dl className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-3">
+        {facts.map(([label, value]) => (
+          <div key={label} className="rounded-md border border-border bg-surface-soft px-4 py-3">
+            <dt className="text-xs font-medium text-muted-foreground">{label}</dt>
+            <dd className="mt-1 font-bold text-primary-dark tabular-nums">{value}</dd>
+          </div>
+        ))}
+      </dl>
+      {peers.length > 0 && (
+        <div className="mt-4">
+          <h3 className="mb-2 text-xs font-bold uppercase tracking-wider text-muted-foreground">
+            Sector peers
+          </h3>
+          <ul className="flex flex-wrap gap-2">
+            {peers.map((p) => (
+              <li key={p.symbol}>
+                <Link
+                  to="/stocks/$symbol"
+                  params={{ symbol: p.symbol }}
+                  className={cn(
+                    "inline-flex items-center gap-2 rounded-full border border-border bg-card px-3 py-1.5 text-sm font-bold text-foreground transition-colors hover:border-primary/40 hover:text-primary",
+                    pressable,
+                  )}
+                >
+                  {p.symbol}
+                  <span className="text-xs font-semibold tabular-nums text-muted-foreground">
+                    {formatINR(p.pricePaise)}
+                  </span>
+                </Link>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+    </div>
+  );
+}
+
+/**
+ * Per-share and valuation ratios derived honestly from the demo dataset:
+ * earnings yield = EPS ÷ price, dividend per share = yield × price, implied
+ * book value per share = EPS ÷ ROE. No real company financials are involved.
+ */
+function Financials({ stock, pricePaise }: { stock: StockInfo; pricePaise: number }) {
+  const earningsYieldPct = pricePaise > 0 ? (stock.epsPaise / pricePaise) * 100 : 0;
+  const dpsPaise = (stock.divYield / 100) * pricePaise;
+  const bvpsPaise = stock.roe !== null && stock.roe > 0 ? (stock.epsPaise / stock.roe) * 100 : null;
+  const priceToBook = bvpsPaise !== null && bvpsPaise > 0 ? pricePaise / bvpsPaise : null;
+
+  const items: Array<[string, string]> = [
+    ["Earnings per share", formatINR(stock.epsPaise)],
+    ["Earnings yield", `${earningsYieldPct.toFixed(2)}%`],
+    ["Dividend per share", formatINR(dpsPaise)],
+    ["Dividend yield", `${stock.divYield.toFixed(2)}%`],
+    ["Implied book value / share", bvpsPaise === null ? "—" : formatINR(bvpsPaise)],
+    ["Implied price / book", priceToBook === null ? "—" : `${priceToBook.toFixed(2)}×`],
+    ["P/E ratio", stock.pe.toFixed(1)],
+    ["ROE", stock.roe === null ? "—" : `${stock.roe.toFixed(1)}%`],
+    ["Debt / Equity", stock.debtEquity === null ? "—" : stock.debtEquity.toFixed(2)],
+  ];
+
+  return (
+    <div>
+      <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
+        {items.map(([label, value]) => (
+          <div key={label} className="rounded-md border border-border bg-surface-soft px-4 py-3">
+            <p className="text-xs font-medium text-muted-foreground">{label}</p>
+            <p className="mt-1 font-bold text-primary-dark tabular-nums">{value}</p>
+          </div>
+        ))}
+      </div>
+      <p className="mt-3 text-xs text-muted-foreground">
+        Illustrative ratios derived from the FinVerse demo dataset — not real company financials.
+      </p>
+    </div>
+  );
+}
+
 function StockDetailPage() {
   const { symbol } = Route.useParams();
   const sym = symbol.toUpperCase();
@@ -308,7 +417,7 @@ function StockDetailPage() {
     if (stock) setLtp(getLTP(sym));
   }, [stock, sym]);
 
-  const history = useMemo(() => genHistory(sym), [sym]);
+  const history = useMemo(() => genHistory(sym, 1260), [sym]); // 5Y ≈ 1260 trading days
   const change = useMemo(() => dayChange(history), [history]);
   const prevClose = history.length >= 2 ? history[history.length - 2]!.closePaise : undefined;
 
@@ -319,7 +428,16 @@ function StockDetailPage() {
       if (range === "1D") {
         return intradaySeries(sym, prevClose ?? displayPrice, displayPrice);
       }
-      const days = range === "1W" ? 5 : range === "1M" ? 22 : 252;
+      const days =
+        range === "1W"
+          ? 5
+          : range === "1M"
+            ? 22
+            : range === "3M"
+              ? 63
+              : range === "5Y"
+                ? 1260
+                : 252;
       return history
         .slice(-days)
         .map((p: PricePoint) => ({ time: shortDate(p.date), value: p.closePaise }));
@@ -407,7 +525,12 @@ function StockDetailPage() {
         </Link>
         <Badge variant="secondary">{stock.symbol}</Badge>
         <Badge variant="outline">{stock.sector}</Badge>
-        <TestModeBanner />
+        <Pill variant="neutral" size="sm" label="Simulated data">
+          SIMULATION
+        </Pill>
+        <span className="text-xs text-muted-foreground">
+          Simulated price — not live market data
+        </span>
       </div>
 
       <div className="mb-4 flex flex-wrap items-end justify-between gap-4">
@@ -459,6 +582,7 @@ function StockDetailPage() {
       {/* Chart */}
       <ChartCard
         title="Price history"
+        ranges={["1D", "1W", "1M", "3M", "1Y", "5Y"]}
         defaultRange="1D"
         seriesForRange={seriesForRange}
         {...(prevClose !== undefined ? { prevClose } : {})}
@@ -560,10 +684,22 @@ function StockDetailPage() {
         }}
       </ChartCard>
 
+      {/* Overview */}
+      <section className="mb-6 rounded-2xl border border-border bg-card p-5 shadow-card sm:p-6">
+        <h2 className="mb-4 text-base font-bold text-primary-dark">Overview</h2>
+        <Overview stock={stock} />
+      </section>
+
       {/* Fundamentals */}
       <section className="mb-6 rounded-2xl border border-border bg-card p-5 shadow-card sm:p-6">
         <h2 className="mb-4 text-base font-bold text-primary-dark">Fundamentals</h2>
         <Fundamentals stock={stock} />
+      </section>
+
+      {/* Financials */}
+      <section className="mb-6 rounded-2xl border border-border bg-card p-5 shadow-card sm:p-6">
+        <h2 className="mb-4 text-base font-bold text-primary-dark">Financials</h2>
+        <Financials stock={stock} pricePaise={displayPrice} />
       </section>
 
       {/* AI analysis */}

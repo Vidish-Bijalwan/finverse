@@ -439,4 +439,54 @@
 
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { scroll-behavior: auto !important; transition-duration: 0.01ms !important; animation-duration: 0.01ms !important; }
+  /* Success check must land in its final drawn state immediately — the
+     global duration clamp above does not cover the 250ms draw delay. */
+  .fv-check-draw { animation: none !important; stroke-dashoffset: 0 !important; }
+  .fv-check-pop { animation: none !important; }
+}
+
+/* Market strip marquee: seamless loop of (items + decorative duplicate).
+ * Paused on hover/focus via [animation-play-state:paused]; never rendered
+ * for prefers-reduced-motion (the component renders a static row instead). */
+@keyframes fv-marquee {
+  from { transform: translateX(0); }
+  to { transform: translateX(-50%); }
+}
+
+@utility fv-marquee {
+  animation: fv-marquee 36s linear infinite;
+}
+
+/*
+ * Success-check animation (payment/invest receipts): the circle pops in
+ * (350ms) then the check stroke draws (450ms, 250ms delay). Both keyframes
+ * collapse to their final state under prefers-reduced-motion via the
+ * global reduce rule below (animation-duration -> 0.01ms) — no separate
+ * media query needed per call site.
+ */
+@keyframes fv-check-pop {
+  0% {
+    transform: scale(0.6);
+    opacity: 0;
+  }
+  100% {
+    transform: scale(1);
+    opacity: 1;
+  }
+}
+
+@keyframes fv-check-draw {
+  to {
+    stroke-dashoffset: 0;
+  }
+}
+
+@utility fv-check-pop {
+  animation: fv-check-pop 0.35s ease-out;
+}
+
+@utility fv-check-draw {
+  stroke-dasharray: 60;
+  stroke-dashoffset: 60;
+  animation: fv-check-draw 0.45s ease-out 0.25s forwards;
 }

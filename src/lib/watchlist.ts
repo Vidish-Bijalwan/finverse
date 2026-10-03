@@ -326,7 +326,7 @@ export function watchlistAlerts(_db: FinanceDB): WatchlistNotification[] {
         kind: "price",
         title: `${entry.symbol} price alert`,
         body: `${name} ${direction} your ${alert.kind} alert of ${formatINR(alert.pricePaise)} — now at ${formatINR(ltp)}.`,
-        to: "/watchlist",
+        to: "/markets",
         createdAt: now,
       });
     }

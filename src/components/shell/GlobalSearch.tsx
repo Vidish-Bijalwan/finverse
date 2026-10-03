@@ -1,7 +1,16 @@
 import { useId, useMemo, useRef, useState } from "react";
 import { useNavigate } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
-import { Receipt, ReceiptIndianRupee, Search, Target, TrendingUp, X } from "lucide-react";
+import {
+  LayoutGrid,
+  Receipt,
+  ReceiptIndianRupee,
+  Search,
+  Target,
+  TrendingUp,
+  Users,
+  X,
+} from "lucide-react";
 
 import { loadFinanceDB } from "@/lib/finance/db";
 import type { FinanceDB } from "@/lib/finance/types";
@@ -10,7 +19,7 @@ import { formatINR } from "@/lib/finance/format";
 import { STOCKS } from "@/lib/market/data";
 import { cn } from "@/lib/utils";
 
-type Group = "Transactions" | "Bills" | "Goals" | "Stocks";
+type Group = "Transactions" | "Contacts" | "Bills" | "Goals" | "Stocks" | "Features";
 
 interface SearchResult {
   key: string;
@@ -23,12 +32,42 @@ interface SearchResult {
 
 const GROUP_ICON: Record<Group, typeof Search> = {
   Transactions: Receipt,
+  Contacts: Users,
   Bills: ReceiptIndianRupee,
   Goals: Target,
   Stocks: TrendingUp,
+  Features: LayoutGrid,
 };
 
-const GROUP_ORDER: Group[] = ["Transactions", "Bills", "Goals", "Stocks"];
+/** App destinations searchable as "features". Real routes only. */
+const FEATURES: { title: string; keywords: string; to: string }[] = [
+  { title: "Dashboard", keywords: "home overview net worth", to: "/" },
+  { title: "Payments", keywords: "upi send pay qr scan razorpay request money", to: "/payments" },
+  {
+    title: "Invest · Portfolio",
+    keywords: "invest stocks holdings buy sell portfolio sip",
+    to: "/portfolio",
+  },
+  {
+    title: "Markets · Watchlist",
+    keywords: "markets watchlist stocks screener nifty sensex",
+    to: "/markets",
+  },
+  {
+    title: "Activity · Transactions",
+    keywords: "activity transactions expenses income history",
+    to: "/expenses",
+  },
+  { title: "Insights", keywords: "insights ai analysis spending", to: "/insights" },
+  { title: "Goals", keywords: "goals savings target emergency fund", to: "/goals" },
+  { title: "Bills", keywords: "bills utilities recharge due recurring", to: "/bills" },
+  { title: "Budgets", keywords: "budgets limits monthly", to: "/budgets" },
+  { title: "Accounts", keywords: "accounts cash upi bank transfer balance", to: "/accounts" },
+  { title: "Screener", keywords: "screener stocks filter pe market cap", to: "/screener" },
+  { title: "Chat", keywords: "chat assistant ask ai", to: "/chat" },
+  { title: "Settings", keywords: "settings theme app lock profile preferences", to: "/settings" },
+  { title: "More", keywords: "more tools calculators emi fd tax", to: "/more" },
+];
 const MAX_PER_GROUP = 5;
 
 /** Parse a rupee amount out of the query ("₹1,500", "1500", "1500.50"). */
@@ -69,6 +108,26 @@ function buildResults(query: string, db: FinanceDB | undefined): SearchResult[] 
         title: t.note || cat?.label || t.category,
         subtitle: `${t.dateISO} · ${formatINR(t.amountPaise)}`,
         to: "/expenses",
+      });
+    }
+
+    // --- Contacts: people you've paid over simulated UPI ---
+    const seen = new Map<string, string>();
+    for (const t of db.transactions) {
+      if (t.payMode !== "upi_test") continue;
+      const name = t.note.trim();
+      if (!name) continue;
+      const key = name.toLowerCase();
+      if (!seen.has(key) && key.includes(q)) seen.set(key, name);
+      if (seen.size >= MAX_PER_GROUP) break;
+    }
+    for (const name of seen.values()) {
+      out.push({
+        key: `contact-${name.toLowerCase()}`,
+        group: "Contacts",
+        title: name,
+        subtitle: "Recent UPI payee",
+        to: "/payments",
       });
     }
 
@@ -129,16 +188,30 @@ function buildResults(query: string, db: FinanceDB | undefined): SearchResult[] 
     });
   }
 
+  // --- Features: app destinations ---
+  for (const f of FEATURES.filter(
+    (f) => f.title.toLowerCase().includes(q) || f.keywords.toLowerCase().includes(q),
+  ).slice(0, MAX_PER_GROUP)) {
+    out.push({
+      key: `feature-${f.to}`,
+      group: "Features",
+      title: f.title,
+      subtitle: "Open in FinVerse",
+      to: f.to,
+    });
+  }
+
   return out;
 }
 
 /**
  * Standalone global search. Mounted by the coordinator in the app header.
- * Searches transactions, bills, goals and the stock universe with grouped,
- * keyboard-accessible results; activating a result navigates to the right page.
+ * Searches transactions, contacts, bills, goals, the stock universe and app
+ * destinations with grouped, keyboard-accessible results; activating a result
+ * navigates to the right page.
  */
 export function GlobalSearch({
-  placeholder = "Search transactions, bills, goals, stocks…",
+  placeholder = "Search FinVerse…",
   onNavigate,
 }: {
   placeholder?: string;
@@ -216,7 +289,7 @@ export function GlobalSearch({
           }}
           onFocus={() => setOpen(true)}
           onKeyDown={onKeyDown}
-          className="w-36 bg-transparent text-sm text-foreground outline-none transition-all placeholder:text-muted-foreground focus:w-44 sm:w-44 sm:focus:w-56 [&::-webkit-search-cancel-button]:hidden"
+          className="w-40 bg-transparent text-sm text-foreground outline-none transition-all placeholder:text-muted-foreground focus:w-52 sm:w-48 sm:focus:w-64 [&::-webkit-search-cancel-button]:hidden"
         />
         {query && (
           <button

@@ -25,6 +25,7 @@
 
 import { categoryById } from "../finance/categories";
 import { formatINR, monthLabel, todayISO } from "../finance/format";
+import { isInvestmentOrder } from "../finance/investments";
 import type { Bill, Budget, FinanceDB, Insight, Transaction } from "../finance/types";
 
 /**
@@ -60,11 +61,11 @@ function monthTxns(db: FinanceDB, key: string): Transaction[] {
 }
 
 function expenseTxns(db: FinanceDB, key: string): Transaction[] {
-  return monthTxns(db, key).filter((t) => t.type === "expense");
+  return monthTxns(db, key).filter((t) => t.type === "expense" && !isInvestmentOrder(t));
 }
 
 function incomeTxns(db: FinanceDB, key: string): Transaction[] {
-  return monthTxns(db, key).filter((t) => t.type === "income");
+  return monthTxns(db, key).filter((t) => t.type === "income" && !isInvestmentOrder(t));
 }
 
 function spendByCategory(txns: Transaction[]): Map<string, number> {
@@ -651,8 +652,8 @@ export function weeklyDigest(db: FinanceDB, today: string): WeeklyDigest {
   const endISO = dateToISO(end);
 
   const weekTxns = db.transactions.filter((t) => t.dateISO >= startISO && t.dateISO <= endISO);
-  const spent = weekTxns.filter((t) => t.type === "expense");
-  const income = weekTxns.filter((t) => t.type === "income");
+  const spent = weekTxns.filter((t) => t.type === "expense" && !isInvestmentOrder(t));
+  const income = weekTxns.filter((t) => t.type === "income" && !isInvestmentOrder(t));
   const spentPaise = spent.reduce((s, t) => s + t.amountPaise, 0);
   const incomePaise = income.reduce((s, t) => s + t.amountPaise, 0);
   const savedPaise = incomePaise - spentPaise;
@@ -683,6 +684,7 @@ export function weeklyDigest(db: FinanceDB, today: string): WeeklyDigest {
         .filter(
           (t) =>
             t.type === "expense" &&
+            !isInvestmentOrder(t) &&
             t.category === topId &&
             t.dateISO >= psISO &&
             t.dateISO <= peISO,
@@ -826,7 +828,8 @@ export function resolveDailyTargetPaise(db: FinanceDB, month: string): number {
   const today = todayISO();
   const cutoff = dateToISO(new Date(new Date(`${today}T00:00:00`).getTime() - 90 * 86_400_000));
   const recent = db.transactions.filter(
-    (t) => t.type === "expense" && t.dateISO >= cutoff && t.dateISO <= today,
+    (t) =>
+      t.type === "expense" && !isInvestmentOrder(t) && t.dateISO >= cutoff && t.dateISO <= today,
   );
   if (recent.length > 0) {
     const total = recent.reduce((s, t) => s + t.amountPaise, 0);
@@ -845,6 +848,7 @@ export function computeStreakDays(db: FinanceDB, targetPaise: number, today: str
   const spendByDay = new Map<string, number>();
   for (const t of db.transactions) {
     if (t.type !== "expense") continue;
+    if (isInvestmentOrder(t)) continue;
     spendByDay.set(t.dateISO, (spendByDay.get(t.dateISO) ?? 0) + t.amountPaise);
   }
 

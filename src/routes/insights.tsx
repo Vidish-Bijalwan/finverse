@@ -126,7 +126,9 @@ function InsightsPage() {
                   and savings rate. Everything looks healthy.
                 </p>
                 <Button variant="outline" size="sm" className={`mt-4 ${pressable}`} asChild>
-                  <Link to="/expenses">Review transactions</Link>
+                  <Link to="/expenses" search={{}}>
+                    Review transactions
+                  </Link>
                 </Button>
               </CardContent>
             </Card>

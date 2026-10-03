@@ -1,10 +1,42 @@
 # FinVerse Revamp — Implementation Status
 
-Branch: `feature/finverse-revamp` · Base: `main@d5db5c5e`
+Branch: `feature/fintech-overhaul` (Phases 1–5) · Base: `main@3841647d`
 Migration handoff: `supabase/migrations/0002_revamp.sql` → user runs in Supabase dashboard before deploy.
 Env handoff: `RAZORPAY_KEY_ID`, `RAZORPAY_KEY_SECRET` (test keys, server-only), `SUPABASE_SERVICE_ROLE_KEY` (server-only) → Vercel.
 
-## Completed
+## Phase 5 — microinteractions, mobile 390px, responsive QA (DONE, awaiting parent screenshot review)
+
+- **Microinteractions (§18)**: new `src/lib/motion.ts` — canonical motion contract (`MOTION`: micro 120 / standard 220 / sheet 280 / countUp 800ms, `MOTION_EASE_OUT`, `motionIf`, `useReducedMotion`) + `motion.test.ts` (4 tests pinning the 100–180 / 160–240 / 200–320ms bands). Success-check keyframes → design-token `@utility` `fv-check-pop`/`fv-check-draw` in `styles.css` (inline `<style>` removed from `ReceiptView.tsx`); reduced-motion final-state rule added (the global rule only clamped duration, not the 250ms draw delay). Bottom sheet open 500→280ms; hero net worth counts up on mount (`PrivateMoney` `animate` pass-through); watch toggle toasts on mutation result; `pressable` on nav pills, bottom tabs (`min-h-[56px]`), bell, theme toggle, profile trigger. Everything gated on `prefers-reduced-motion`; no glow/pulse/bounce.
+- **Mobile 390px (§19)**: `AppHeader` — mobile bar (`md:hidden`) = avatar + compact greeting + search + bell + theme toggle; desktop bar unchanged. Dashboard greeting hidden on mobile, month switcher `ml-auto`. Touch targets ≥44px (header `size-11`, month chevrons `size-11 md:size-8`, chart range pills + expense chips `min-h-[44px]`). **New mobile-only "Pay again" people row** on the dashboard (`md:hidden`, between QuickActions and MarketStrip) — reuses `extractPeople` + `PeopleStrip`, deep-links `/payments?flow=upi&name=…`; skipped when empty. BottomTabBar audit: active state, safe-area padding, z-50 < sheets z-[80], mobile `main` `pb-24`; buy/sell, txn details, payment review are bottom sheets already.
+- **Responsive QA (§26)**: headless Playwright (meta-chromium, file:// LNA trampoline) — 5 viewports (390×844, 768×1024, 1366×768, 1440×900, 1920×1080) × /login + /, asserting `scrollWidth ≤ innerWidth` + no out-of-viewport elements (scrollable snap-rows excluded) + screenshots. **10/10 PASS**. One real defect fixed: `/login` was `min-h-[calc(100vh-4rem)]` on the headerless bare-chrome path → 64px white band under the dark mesh at 1366×768; now `min-h-[100dvh]`, re-screenshot verified. **Honest limitation:** no local Supabase env → auth gates on splash; authenticated pages unverifiable headless (dummy env renders the login form only). Parent's live-browser milestone loop covers them.
+- **Carry-over**: legacy investment rows guarded with `isInvestmentOrder` in `budgets.tsx`, `readiness.tsx`, `notify.ts`.
+- **Verification**: tsc 52 = baseline (0 in touched files); eslint 0 on touched files; unit 264/264 (30 files); build green. Details: `TEST_REPORT.md` Phase 5 section.
+- **DO NOT MERGE** — parent coordinator screenshot-reviews the Vercel preview before merge.
+
+## Phase 4 — portfolio, cash flow, activity, copy + Phase 3 review fixes (DONE, awaiting parent screenshot review)
+
+- **Phase 3 review fixes**: (A) SENSEX sparkline — `Sparkline` now takes explicit `direction: "up"|"down"|"flat"` (day's direction, muted under ±0.05%); all usages audited. (B) Most Active — now ranks by intraday `rangePct` (documented activity proxy; demo feed has no volume), verified ≠ Top Gainers on demo data + regression test. (C) Market strip — labeled "Indices" and "Watchlist" groups (role=group + aria-labelledby), compact empty hint. FAB-clipping report resolved: Vercel Toolbar preview widget, not in app DOM — no app change.
+- **Investment summary (§11)**: `src/routes/portfolio.tsx` rewritten — summary card (current value large/tabular + Simulated pill, invested, returns +₹X · +X.XX%, today's returns), `PortfolioChart` 1D/1W/1M/1Y/ALL with tooltips, tabs Holdings/Orders/SIPs/Watchlist (count badges, real ledger data; "Executed" = genuine ledger state). Pure `portfolio-math.ts` (+18 tests). Zero monthly cash-flow numbers on the page. NOTE: per-holding dividend-yield override editor removed (didn't fit §11 structure; underlying dividend data untouched — restorable on request).
+- **Cash flow (§13)**: `CashFlowCard` — 1M/3M/6M/1Y pills, Income/Spent/Net summary (never "P&L"), compact chart with tooltips, top-4 categories; `home-data.ts` pure logic (+18 tests); `MonthBars.tsx` deleted.
+- **Recent activity (§14)**: `RecentActivity` — up to 7 rows (avatar, name, datetime/category/pay-mode, signed tabular amounts, no badges), View all → /expenses, tap → `TxnDetailSheet` (real ledger data only).
+- **Copy (§25)**: "Here's your money at a glance" killed; `HomeInsight` renders only from real data, copy kept purely factual ("Food & Dining fell ₹20,000 (40% less) vs Sep 2026").
+- **Verification**: tsc 52 = baseline (0 in touched files); eslint 0 on 22 touched files; unit 234/234 (27 files); build green. Details: `TEST_REPORT.md` Phase 4 section.
+- **DO NOT MERGE** — parent coordinator screenshot-reviews the Vercel preview before Phase 5 (mobile + microinteractions + full QA loop).
+
+## Phase 1 — fintech overhaul: shell + dashboard (DONE, awaiting parent screenshot review)
+
+- **Shell**: header nav rebuilt Home / Payments / Invest / Markets / Activity with pill active state + `aria-current`; bottom tabs match; global search gained Contacts + Features groups; no routes renamed, all deep links intact.
+- **Greeting**: `src/lib/greeting.ts` sanitizes display names ("Good afternoon, ee" fixed); compact secondary line.
+- **Balance hero**: net worth 32–36px tabular numerals, honest cash+investments−liabilities sub, month net-cash-flow + % vs prev month, compact metrics row (Investments · Cash · Monthly cash flow · Investment P&L), persisted eye-toggle privacy masking.
+- **Financial-logic audit**: `src/lib/finance/money-math.ts` (net worth = cash+investments+other−liabilities; returns = value−cost; cash flow = income−expenses); "P&L" only for portfolio returns now; contradictory trio eliminated.
+- **Quick actions**: 11-action compact icon grid, every action wired via `src/lib/quick-actions.ts` routing table — deep-links into real flows (`/payments` recipient/UPI-ID/QR flows, `/accounts` transfer dialog, `/expenses` add sheet, `/goals` goal form), real QR scanner dialog (camera + BarcodeDetector + manual fallback), real recharge dialog (ledger expense).
+- **Market strip**: indices NIFTY 50 / SENSEX / BANK NIFTY (new `src/lib/market/indices.ts` simulated instruments) + watched stocks; symbol/price/abs/% per item; one compact SIMULATED DATA pill; hover/focus pause marquee; reduced-motion static row.
+- **Desktop IA**: 12-col grid — PRIMARY (recent activity, insight, cash flow, analytics) / SECONDARY (portfolio snapshot, watchlist, market snapshot with top movers). 78rem max width, 16px card radii, Space Grotesk only, emerald/teal for interaction/state only.
+- **Known gap**: no mutual-fund dataset exists in the codebase, so global search has no Mutual Funds group (not faked) — later phase.
+- **Verification**: tsc 52 errors / 0 in touched files (baseline was 53); eslint clean on touched files; unit 125/125 (33 new tests); build green. Details: `TEST_REPORT.md` Phase 1 section.
+- **DO NOT MERGE** — parent coordinator screenshot-reviews the Vercel preview before Phase 2.
+
+## Completed (earlier phases)
 - Phase 0 recon: `docs/UI_AUDIT.md` (architecture, components, weak areas, GPay/Groww patterns, component mapping, backend integration points, risks).
 - Design system: extended oklch tokens (success/warning/danger/info+soft, focus, gain/loss, keypad) w/ intentional dark mode; 19-file `src/components/fv/` kit (NumberDisplay, TestModeBanner, StatBand, TxnRow, HoldingRow, MarketRow, AmountInput, PinPad, PaymentSheet, OrderSheet, ReceiptView, ChartCard, DonutAllocation, SearchDropdown, AppLockScreen, TickerStrip, EmptyState, ErrorState, index barrel). tsc/eslint clean.
 - Migration: `supabase/migrations/0002_revamp.sql` — payment_links, payments, app_lock; owner RLS; updated_at triggers; indexes; RLS probe queries in comments. Parses clean (pglast). NOT applied — user handoff.
@@ -186,3 +218,22 @@ full per-item table and command outputs.
 - Authenticated E2E of the QA fixes (rapid keypad input, portfolio timeout path,
   undo toasts, swipe actions)
 - Pre-existing: RLS live probes, Razorpay live test-mode flow (need owner / test keys)
+
+## Screenshot-review bug fixes (2026-10-03, bug-fix subagent — NOT pushed)
+
+1. **Floating button clipped at ~1920px** — root cause NOT found by static analysis; NOT claimed fixed. Only fixed-position rounded button (expenses FAB) sits `1.5rem` inset at 1920px — not clipped. Needs a real 1920px render by someone with browser tools (see TEST_REPORT.md regression note).
+2. **SIMULATED badges** — `TestModeBanner` deleted (19 usages across payments/bank-transfer/request/portfolio/stock flows); MarketStrip "SIMULATED DATA" pill → quiet muted text; screener badge → quiet text. One quiet disclosure line per page/flow header retained (e.g. payments "Simulated rails — no real money moves"); Razorpay tab's inaccurate "Simulated" pill removed (it's test-mode, not simulated).
+3. **`greetingName()` casing** — `src/lib/greeting.ts` now title-cases only all-lowercase tokens ("QA Reviewer" preserved); junk rejection unchanged. +4 tests.
+4. **Avatar initials** — new `src/lib/names.ts` `avatarInitials()`: first letters of first two words ("QT"), blank → "FV". Applied in TxnRow + AppHeader + profile. +6 tests.
+5. **Request setup-pending** — `isSetupPendingError` hardened (stable `code="FINVERSE_SETUP_PENDING"` + branded-message fallback, still matching 42P01/relation-regex); copy softened to "Requests aren't set up yet / Requests unlock after a quick database update…". +3 tests.
+6. **Request quick action** — dashboard "Request" now opens `/payments?flow=request` (in-payments Requests tracker). Paise keypad behavior confirmed correct, untouched.
+- Verification: unit 168/168 · tsc 52 pre-existing (0 new) · eslint 0 on touched files · build green. Details: TEST_REPORT.md (Screenshot-review bug fixes section).
+
+## Phase 3 — markets (2026-10-03, feature worker — NOT pushed)
+
+- **Market snapshot** (`src/components/home/MarketSnapshot.tsx`): NIFTY 50 / SENSEX / BANK NIFTY index cards with sparklines + Top Gainers / Top Losers / Most Active (3 rows each); every stock row links to `/stocks/$symbol`. New pure logic in `src/lib/market/movers.ts` (movers, sparkline downsampling/path, signed % labels) + `src/lib/market/movers.test.ts` (17 tests). New `src/components/fv/Sparkline.tsx` kit component (fv barrel). Most Active = largest absolute day % move (no traded-volume data in the demo feed — documented in code).
+- **Watchlist card** (`src/components/home/WatchlistCard.tsx`): dashboard secondary column, ≤5 compact rows (icon, name, ticker, price, change, sparkline), tap → stock detail; shares the watchlist page's query cache. Compact empty state (≤220px): "Build your watchlist" / "Track stocks you care about." + "Explore stocks" CTA.
+- **Stock detail** (`src/routes/stocks.$symbol.tsx`): chart ranges 1D/1W/1M/3M/1Y/5Y (1260-day deterministic history, memoized); new Overview section (cap band, sector medians, peer links — no fake descriptions) + Financials section (honestly-derived per-share ratios, "not real company financials" footnote); subtle neutral SIMULATION pill in the header. Buy/Sell order flow untouched.
+- **Dashboard** (`src/routes/index.tsx`): secondary column now Portfolio snapshot → WatchlistCard → MarketSnapshot; removed the old MarketRow preview + MoverList; desktop IA unchanged.
+- Simulated-data honesty: one quiet muted line per section header; no per-section badges reintroduced.
+- Verification: unit 185/185 · tsc 52 pre-existing, 0 new (error lists byte-identical) · eslint 0 errors on touched files · build green. Live-browser visual QA not performed (no browser control) — milestone screenshot loop belongs to the parent coordinator.

@@ -75,7 +75,9 @@ export function ForecastTab() {
             page will project your next 3 months automatically.
           </p>
           <Button asChild>
-            <Link to="/expenses">Add your first transaction</Link>
+            <Link to="/expenses" search={{}}>
+              Add your first transaction
+            </Link>
           </Button>
         </CardContent>
       </Card>

@@ -2,7 +2,6 @@ import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useMemo, useState } from "react";
 import { ArrowDown, ArrowUp } from "lucide-react";
 
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import {
@@ -22,7 +21,8 @@ import {
   type McapBand,
   type StockInfo,
 } from "@/lib/market/data";
-import { dayChange, genHistory, getLTP } from "@/lib/market/history";
+import { getLTP } from "@/lib/market/history";
+import { getQuote } from "@/lib/market/quote";
 import {
   EmptyState,
   MarketRow,
@@ -92,13 +92,15 @@ function ScreenerPage() {
       {
         label: "Stocks",
         items: matches.map((s) => {
-          const changePct = dayChange(genHistory(s.symbol, 2)).changePct;
+          // Single quote source: displayed price and % share one basis.
+          const q = getQuote(s.symbol);
+          const changePct = q?.changePct ?? 0;
           const up = changePct >= 0;
           return {
             id: s.symbol,
             title: s.symbol,
             subtitle: `${s.name} · ${s.sector}`,
-            right: `${formatINR(getLTP(s.symbol))} ${up ? "+" : "−"}${Math.abs(changePct).toFixed(2)}%`,
+            right: `${formatINR(q?.pricePaise ?? getLTP(s.symbol))} ${up ? "+" : "−"}${Math.abs(changePct).toFixed(2)}%`,
             rightTone: (up ? "gain" : "loss") as "gain" | "loss",
           };
         }),
@@ -125,9 +127,11 @@ function ScreenerPage() {
   const live = useMemo(() => {
     const map = new Map<string, { pricePaise: number; changePct: number }>();
     for (const s of results) {
+      // Single quote source: displayed price and % share one basis.
+      const q = getQuote(s.symbol);
       map.set(s.symbol, {
-        pricePaise: getLTP(s.symbol),
-        changePct: dayChange(genHistory(s.symbol, 2)).changePct,
+        pricePaise: q?.pricePaise ?? getLTP(s.symbol),
+        changePct: q?.changePct ?? 0,
       });
     }
     return map;
@@ -267,9 +271,9 @@ function ScreenerPage() {
             stocks
             {filterCount > 0 && ` · ${filterCount} filter${filterCount > 1 ? "s" : ""} active`}
           </p>
-          <Badge variant="secondary" className="text-[11px]">
+          <p className="text-xs text-muted-foreground">
             Demo dataset · simulated prices — not live
-          </Badge>
+          </p>
         </div>
         <div className="flex items-center gap-2">
           <Label htmlFor="screener-sort" className="sr-only">

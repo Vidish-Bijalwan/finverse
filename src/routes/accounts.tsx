@@ -1,5 +1,5 @@
-import { createFileRoute } from "@tanstack/react-router";
-import { useState } from "react";
+import { createFileRoute, useNavigate } from "@tanstack/react-router";
+import { useEffect, useRef, useState } from "react";
 import { ArrowRightLeft, Landmark, Pencil, Plus, Star, Trash2, Wallet } from "lucide-react";
 import { toast } from "sonner";
 
@@ -15,6 +15,10 @@ import { cn } from "@/lib/utils";
 import { pressable } from "@/components/fv";
 
 export const Route = createFileRoute("/accounts")({
+  /** `?transfer=1` deep-link opens the transfer dialog (dashboard quick action). */
+  validateSearch: (search: Record<string, unknown>): { transfer?: "1" } => ({
+    ...(search["transfer"] === "1" ? { transfer: "1" as const } : {}),
+  }),
   head: () => ({
     meta: [
       { title: "Accounts — FinVerse AI" },
@@ -34,12 +38,26 @@ const TYPE_LABEL: Record<AccountType, string> = {
 };
 
 function AccountsPage() {
+  const search = Route.useSearch();
+  const navigate = useNavigate();
   const { data: summaries, isLoading, isError } = useAccountSummaries();
   const deleteAccount = useDeleteAccount();
   const setDefault = useSetDefaultAccount();
 
   const [accountDialog, setAccountDialog] = useState<null | { editing?: Account | null }>(null);
   const [transferDialog, setTransferDialog] = useState<null | { fromAccountId?: string }>(null);
+
+  // `?transfer=1` deep-link (dashboard "Bank transfer" quick action): open
+  // the real transfer dialog once, then drop the param.
+  const transferHandled = useRef(false);
+  const transferParam = search["transfer"];
+  useEffect(() => {
+    if (transferParam === "1" && !transferHandled.current) {
+      transferHandled.current = true;
+      setTransferDialog({});
+      void navigate({ to: "/accounts", search: {}, replace: true });
+    }
+  }, [transferParam, navigate]);
   const [deleting, setDeleting] = useState<Account | null>(null);
 
   const list = summaries ?? [];

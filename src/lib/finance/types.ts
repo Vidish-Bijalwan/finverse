@@ -10,7 +10,7 @@
 
 export type TransactionType = "expense" | "income" | "transfer";
 
-export type PayMode = "UPI" | "Cash" | "Card" | "Bank" | "upi_test" | "razorpay_test";
+export type PayMode = "UPI" | "Cash" | "Card" | "Bank" | "upi_test" | "razorpay_test" | "bank_test";
 
 export type CategoryKind = "expense" | "income";
 
@@ -40,6 +40,12 @@ export interface Transaction {
   tags?: string[];
   /** Recurring rule that posted this occurrence (drives idempotent auto-post). */
   recurringRuleId?: string;
+  /**
+   * Set on a refund (income) transaction: the id of the original payment
+   * (expense) being refunded. The original then renders with the "Refunded"
+   * payment status. Requires migration 0003 (transactions.refund_of).
+   */
+  refundOf?: string;
   createdAt: string;
   updatedAt: string;
 }

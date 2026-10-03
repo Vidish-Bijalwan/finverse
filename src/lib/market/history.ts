@@ -1,3 +1,4 @@
+import { getIndex } from "./indices";
 import { getStock } from "./data";
 
 /**
@@ -59,12 +60,12 @@ function stepBackTradingDay(d: Date): void {
  * listed pricePaise. Deterministic per symbol. Returns [] for unknown symbols.
  */
 export function genHistory(symbol: string, tradingDays = RANGE_DAYS["1Y"]): PricePoint[] {
-  const stock = getStock(symbol);
-  if (!stock || tradingDays <= 0) return [];
+  const instrument = getStock(symbol) ?? getIndex(symbol);
+  if (!instrument || tradingDays <= 0) return [];
   const rand = mulberry32(hashSymbol(symbol.toUpperCase()));
   const points: PricePoint[] = [];
   const d = new Date();
-  let price = stock.pricePaise;
+  let price = instrument.pricePaise;
   for (let i = 0; i < tradingDays; i++) {
     points.unshift({ date: isoDay(d), closePaise: Math.max(1, Math.round(price)) });
     stepBackTradingDay(d);
@@ -84,10 +85,10 @@ export function sliceRange(history: PricePoint[], range: RangeKey): PricePoint[]
 const ltpCache = new Map<string, number>();
 
 function jittered(symbol: string): number {
-  const stock = getStock(symbol);
-  if (!stock) return 0;
+  const instrument = getStock(symbol) ?? getIndex(symbol);
+  if (!instrument) return 0;
   const jitter = (Math.random() - 0.5) * 2 * 0.006; // ±0.6%
-  return Math.max(1, Math.round(stock.pricePaise * (1 + jitter)));
+  return Math.max(1, Math.round(instrument.pricePaise * (1 + jitter)));
 }
 
 /** Stable LTP for a symbol within this session (SSR-safe: pure function of cache). */

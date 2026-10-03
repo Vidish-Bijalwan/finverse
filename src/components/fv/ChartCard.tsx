@@ -2,8 +2,9 @@ import { useState } from "react";
 import { cn } from "@/lib/utils";
 import { formatINR } from "@/lib/finance/format";
 import { usePrefersReducedMotion } from "@/hooks/use-prefers-reduced-motion";
+import { pressable } from "./press";
 
-export type ChartRangeKey = "1D" | "1W" | "1M" | "1Y";
+export type ChartRangeKey = "1D" | "1W" | "1M" | "3M" | "1Y" | "5Y";
 
 export const CHART_RANGES: ChartRangeKey[] = ["1D", "1W", "1M", "1Y"];
 
@@ -69,7 +70,8 @@ export function ChartCard({
               aria-pressed={range === r}
               onClick={() => setRange(r)}
               className={cn(
-                "rounded-full px-3 py-1 text-xs font-bold transition-colors",
+                pressable,
+                "min-h-[44px] rounded-full px-3 text-xs font-bold transition-colors",
                 range === r
                   ? "bg-card text-foreground shadow-card"
                   : "text-muted-foreground hover:text-foreground",

@@ -1,4 +1,4 @@
-import { createFileRoute, Link } from "@tanstack/react-router";
+import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import {
   Camera,
@@ -22,6 +22,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { toast } from "sonner";
 import { allCategories, categoryById } from "@/lib/finance/categories";
 import { formatINR, monthKey, monthLabel, todayISO } from "@/lib/finance/format";
+import { isInvestmentOrder } from "@/lib/finance/investments";
 import {
   useAccounts,
   useAllTags,
@@ -38,6 +39,10 @@ import { cn, downloadFile } from "@/lib/utils";
 import { pressable } from "@/components/fv";
 
 export const Route = createFileRoute("/expenses")({
+  /** `?add=1` deep-link opens the add-expense sheet (dashboard quick action). */
+  validateSearch: (search: Record<string, unknown>): { add?: "1" } => ({
+    ...(search["add"] === "1" ? { add: "1" as const } : {}),
+  }),
   head: () => ({
     meta: [
       { title: "Expenses — FinVerse AI" },
@@ -168,6 +173,8 @@ const MOCK_RECEIPTS: {
 ];
 
 function ExpensesPage() {
+  const routeSearch = Route.useSearch();
+  const navigate = useNavigate();
   const [month, setMonth] = useMonth();
   const [tab, setTab] = useState<Tab>("transactions");
   const [search, setSearch] = useState("");
@@ -277,6 +284,8 @@ function ExpensesPage() {
     let spent = 0;
     let earned = 0;
     for (const t of txns ?? []) {
+      // Investment orders are transfers, not spending/income.
+      if (isInvestmentOrder(t)) continue;
       if (t.type === "expense") spent += t.amountPaise;
       else if (t.type === "income") earned += t.amountPaise;
     }
@@ -287,6 +296,17 @@ function ExpensesPage() {
     setPrefill(draft ?? null);
     setSheet({ mode: "add" });
   };
+
+  // `?add=1` deep-link (dashboard "Add expense" quick action): open the real
+  // add sheet once, then drop the param so back/forward stays clean.
+  const addHandled = useRef(false);
+  useEffect(() => {
+    if (routeSearch["add"] === "1" && !addHandled.current) {
+      addHandled.current = true;
+      openAdd();
+      void navigate({ to: "/expenses", search: {}, replace: true });
+    }
+  }, [routeSearch, navigate]);
 
   const confirmQuickAdd = () => {
     if (!parsed || addTxn.isPending) return;
@@ -396,6 +416,7 @@ function ExpensesPage() {
         </div>
         <Link
           to="/accounts"
+          search={{}}
           aria-label="Manage accounts"
           className="flex items-center gap-1.5 rounded-[14px] bg-card px-3.5 py-2.5 text-sm font-bold text-primary shadow-tile transition-colors hover:bg-primary/10"
         >
@@ -574,7 +595,7 @@ function ExpensesPage() {
                   onClick={() => setTypeFilter(value)}
                   className={cn(
                     pressable,
-                    "rounded-xl px-3.5 py-1.5 text-sm font-semibold transition-colors",
+                    "min-h-[44px] rounded-xl px-3.5 text-sm font-semibold transition-colors",
                     typeFilter === value
                       ? "bg-card text-foreground shadow-sm"
                       : "text-muted-foreground hover:text-foreground",
@@ -633,7 +654,7 @@ function ExpensesPage() {
                     }
                     className={cn(
                       pressable,
-                      "shrink-0 rounded-full px-3 py-1.5 text-xs font-semibold transition-colors",
+                      "min-h-[44px] shrink-0 rounded-full px-3 text-xs font-semibold transition-colors",
                       active
                         ? "bg-primary text-primary-foreground"
                         : "bg-muted text-muted-foreground hover:text-foreground",
@@ -704,6 +725,7 @@ function ExpensesPage() {
                 let daySpent = 0;
                 let dayEarned = 0;
                 for (const t of items) {
+                  if (isInvestmentOrder(t)) continue;
                   if (t.type === "expense") daySpent += t.amountPaise;
                   else if (t.type === "income") dayEarned += t.amountPaise;
                 }
@@ -785,7 +807,7 @@ function ExpensesPage() {
         aria-label="Add transaction"
         className={cn(
           pressable,
-          "fixed bottom-6 right-6 z-40 flex h-14 w-14 items-center justify-center rounded-full",
+          "fixed z-40 flex h-14 w-14 items-center justify-center rounded-full bottom-[calc(5.5rem+env(safe-area-inset-bottom))] right-[max(1.5rem,env(safe-area-inset-right))] md:bottom-6 md:right-6",
           "bg-primary text-primary-foreground shadow-modal transition-transform hover:scale-105",
         )}
       >

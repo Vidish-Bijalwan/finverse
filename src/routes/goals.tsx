@@ -1,5 +1,5 @@
-import { useMemo, useState } from "react";
-import { createFileRoute } from "@tanstack/react-router";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { Pencil, Plus, Target, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
@@ -23,6 +23,10 @@ import { addMonthsToKey, formatDateLong, monthDiff, monthLabel } from "@/compone
 import { pressable } from "@/components/fv";
 
 export const Route = createFileRoute("/goals")({
+  /** `?add=1` deep-link opens the goal form (dashboard quick action). */
+  validateSearch: (search: Record<string, unknown>): { add?: "1" } => ({
+    ...(search["add"] === "1" ? { add: "1" as const } : {}),
+  }),
   head: () => ({
     meta: [
       { title: "Goals — FinVerse AI" },
@@ -205,6 +209,8 @@ function ProjectionLine({ goal, projection }: { goal: Goal; projection: Projecti
 }
 
 function GoalsPage() {
+  const search = Route.useSearch();
+  const navigate = useNavigate();
   const [today] = useState(() => todayISO());
   const { data: goals = [], isLoading: goalsLoading } = useGoals();
   const { data: txns = [], isLoading: txnsLoading } = useTransactions();
@@ -217,6 +223,19 @@ function GoalsPage() {
   const [editing, setEditing] = useState<Goal | null>(null);
   const [fundsFor, setFundsFor] = useState<Goal | null>(null);
   const [deleting, setDeleting] = useState<Goal | null>(null);
+
+  // `?add=1` deep-link (dashboard "Add goal" quick action): open the real
+  // goal form once, then drop the param so back/forward stays clean.
+  const addHandled = useRef(false);
+  const addParam = search["add"];
+  useEffect(() => {
+    if (addParam === "1" && !addHandled.current) {
+      addHandled.current = true;
+      setEditing(null);
+      setFormOpen(true);
+      void navigate({ to: "/goals", search: {}, replace: true });
+    }
+  }, [addParam, navigate]);
 
   const loading = goalsLoading || txnsLoading;
 

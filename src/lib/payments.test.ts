@@ -2,10 +2,15 @@ import { describe, expect, it } from "vitest";
 import {
   MAX_PAYMENT_PAISE,
   PaymentsSetupPendingError,
+  SETUP_PENDING_CODE,
   buildUpiNote,
+  canRefundPayment,
   groupTransactionsByMonth,
+  isBillDue,
   isPaymentTransaction,
   isSetupPendingError,
+  paymentDisplayStatus,
+  refundedTxnIds,
   toTxnStatus,
   validatePaymentAmount,
 } from "./payments";
@@ -76,6 +81,7 @@ describe("isPaymentTransaction", () => {
   it("matches only test-rail pay modes", () => {
     expect(isPaymentTransaction(txn({ payMode: "upi_test" }))).toBe(true);
     expect(isPaymentTransaction(txn({ payMode: "razorpay_test" }))).toBe(true);
+    expect(isPaymentTransaction(txn({ payMode: "bank_test" }))).toBe(true);
     expect(isPaymentTransaction(txn({ payMode: "UPI" }))).toBe(false);
     expect(isPaymentTransaction(txn({ payMode: "Cash" }))).toBe(false);
   });
@@ -98,6 +104,60 @@ describe("groupTransactionsByMonth", () => {
   });
 });
 
+describe("refunds", () => {
+  const payment = () => txn({ id: "pay1", type: "expense", payMode: "upi_test" });
+  const refund = () => txn({ id: "ref1", type: "income", payMode: "upi_test", refundOf: "pay1" });
+
+  it("collects refunded ids from refundOf links", () => {
+    expect(refundedTxnIds([payment(), refund()])).toEqual(new Set(["pay1"]));
+    expect(refundedTxnIds([payment()])).toEqual(new Set());
+    expect(refundedTxnIds([])).toEqual(new Set());
+  });
+
+  it("paymentDisplayStatus reports refunded for refunded payments", () => {
+    const ids = refundedTxnIds([payment(), refund()]);
+    expect(paymentDisplayStatus(payment(), ids)).toBe("refunded");
+    expect(paymentDisplayStatus(txn({ id: "other" }), ids)).toBe("success");
+  });
+
+  it("canRefundPayment guards the refund action", () => {
+    const ids = new Set<string>();
+    // Simulated-rail expenses are refundable.
+    expect(canRefundPayment(payment(), ids)).toBe(true);
+    expect(canRefundPayment(txn({ id: "b", type: "expense", payMode: "bank_test" }), ids)).toBe(
+      true,
+    );
+    // Already refunded → no.
+    expect(canRefundPayment(payment(), new Set(["pay1"]))).toBe(false);
+    // A refund transaction itself is not refundable.
+    expect(canRefundPayment(refund(), ids)).toBe(false);
+    // Income without a refund link is not refundable.
+    expect(canRefundPayment(txn({ id: "i", type: "income", payMode: "upi_test" }), ids)).toBe(
+      false,
+    );
+    // Razorpay test payments have no refund rail here.
+    expect(canRefundPayment(txn({ id: "r", type: "expense", payMode: "razorpay_test" }), ids)).toBe(
+      false,
+    );
+    // Real-rail manual expenses are not refundable.
+    expect(canRefundPayment(txn({ id: "m", type: "expense", payMode: "UPI" }), ids)).toBe(false);
+  });
+});
+describe("isBillDue", () => {
+  const bill = (lastPaidOn?: string) => ({
+    id: "b1",
+    name: "Electricity",
+    amountPaise: 150000,
+    dueDay: 10,
+    category: "bills",
+    ...(lastPaidOn ? { lastPaidOn } : {}),
+  });
+  it("flags unpaid or stale bills as due", () => {
+    expect(isBillDue(bill(), "2026-10")).toBe(true);
+    expect(isBillDue(bill("2026-09-10"), "2026-10")).toBe(true);
+    expect(isBillDue(bill("2026-10-05"), "2026-10")).toBe(false);
+  });
+});
 describe("isSetupPendingError", () => {
   it("detects the branded error and Postgrest 42P01", () => {
     expect(isSetupPendingError(new PaymentsSetupPendingError())).toBe(true);
@@ -107,8 +167,21 @@ describe("isSetupPendingError", () => {
     expect(isSetupPendingError(new Error('relation "payment_links" does not exist'))).toBe(true);
   });
 
+  it("matches the stable code even when the prototype is lost (re-thrown / serialized)", () => {
+    // Plain object with our code — e.g. after JSON round-trip or cross-realm re-throw.
+    expect(isSetupPendingError({ code: SETUP_PENDING_CODE })).toBe(true);
+    expect(isSetupPendingError({ code: SETUP_PENDING_CODE, message: "boom" })).toBe(true);
+  });
+
+  it("matches the branded message text when the error is re-created as a plain Error", () => {
+    const branded = new PaymentsSetupPendingError();
+    expect(branded.code).toBe(SETUP_PENDING_CODE);
+    expect(isSetupPendingError(new Error(branded.message))).toBe(true);
+  });
+
   it("ignores unrelated errors", () => {
     expect(isSetupPendingError(new Error("network down"))).toBe(false);
+    expect(isSetupPendingError({ code: "PGRST301" })).toBe(false);
     expect(isSetupPendingError(null)).toBe(false);
     expect(isSetupPendingError(undefined)).toBe(false);
   });
