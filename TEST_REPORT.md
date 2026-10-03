@@ -101,3 +101,76 @@ Workdir: `~/workspace/finverse-revamp/app`
 - [x] Production build passes
 - [x] Secrets scanned (repo + bundle)
 - [x] TEST_REPORT.md exists (this file)
+
+---
+
+# UI polish pass (issues #52–#58)
+
+Date: 2026-10-03 · Base: `main@5798cae1` (PR #51 merged)
+Workdir: `~/workspace/finverse-polish/app` · Worker D (docs); src changes by sibling workers
+
+## Verification commands run (real outputs)
+| Command | Result |
+|---|---|
+| `bun run test:unit` (vitest run) | **67/67 pass** (8 files): applock crypto (9), sip calc (7), order-math (10), formatINR (11), payments pure fns (11), razorpay webhook HMAC (7), tabsNav (6), amount-keys keypad reducer (6). Baseline was 45/45; +22 new tests from the polish QA fixes |
+| `bun x tsc --noEmit` | exit 2 — **53 errors, all pre-existing** in untouched files (market/*, money/*, readiness, budgets, BottomSheet/BottomTabBar, finance/format). **Zero errors in any polish/revamp/perf/fv file** |
+| `bun x eslint .` | **0 errors, 9 warnings** (all benign `react-refresh/only-export-components` in pre-existing files: ui/button, ui/toggle, lib/auth, routes/chat) |
+| `bun run build` (vite production) | ✅ green; nitro + wrangler config generated |
+| Client JS bundle `.output/public/assets/*.js` | **1,743,130 bytes** (105 chunks) vs 1,718,293 pre-polish baseline → **+1.45%** |
+
+## Bundle shape (#57 perf — verified in the built output)
+- recharts is a **separate 340KB lazy chunk** (`generateCategoricalChart-*`), NOT in the root chunk — the eager dashboard chunk actually shrank; charts stream in behind `chartsReady` + `ChartSkeleton` Suspense fallbacks
+- Root `index-*` chunk: 492KB; supabase: 228KB; next largest route chunks: tools 56KB, expenses 52KB, payments 40KB
+- 21 unused shadcn `ui/*` files deleted (accordion, aspect-ratio, breadcrumb, calendar, carousel, chart, checkbox, command, context-menu, drawer, form, hover-card, input-otp, menubar, navigation-menu, pagination, popover, radio-group, resizable, sidebar) — zero had importers; source hygiene, no byte delta
+- 21 unused prod deps removed from `package.json` (@hookform/resolvers, 9× @radix-ui/react-{accordion,aspect-ratio,checkbox,context-menu,hover-card,menubar,navigation-menu,popover,radio-group}, react-resizable-panels, @tailwindcss/vite, @tanstack/router-plugin, cmdk, date-fns, embla-carousel-react, input-otp, react-day-picker, react-hook-form, vaul, vite-tsconfig-paths)
+- Supabase query dedupe: `useAccountSummaries()` now resolves through `qc.fetchQuery` on the existing `["finverse","transactions","all"]` key instead of a second full-table fetch → 1 fetch per dashboard/portfolio mount
+
+## Per-item status — the 30 polish items (#52–#56)
+Status key: ✅ code-verified (grepped in code + covered by the green build/tsc/eslint/unit above) ·
+⏳ needs live-browser visual QA (coordinator's pass).
+
+| # | Item | Status | Evidence |
+|---|---|---|---|
+| 1 | Signature mint `#00E5A0` accent | ✅ | `src/styles.css` comment + primary/focus/ring oklch tokens (0.62 0.135 163); `--tint` |
+| 2 | Profit `#00C853` / loss `#FF5252` | ✅ | `--gain`/`--loss` oklch tokens (150/25 hue), intentional dark-mode values |
+| 3 | Dark `#0B0E17` → charcoal discipline | ✅ | dark tokens in `:root` under `[data-theme=dark]`; no gray-soup |
+| 4 | Light warm paper `#FAFAF8` | ✅ | `--background: oklch(0.985 0.004 100)` light theme |
+| 5 | Section accents (payments blue, investments green, insights amber) | ✅ | per-section tint tokens; insights amber token in styles.css |
+| 6 | Fraunces serif headings + Space Grotesk money numerals + 11px uppercase eyebrows | ✅ | `--font-display-serif: Fraunces`, `--font-display: Space Grotesk`; `@utility fv-eyebrow` (11px/600/uppercase/0.12em) |
+| 7 | Hero numbers 40px+ | ✅ | `@utility fv-hero` — 2.5rem (40px), tight tracking, grotesque not serif |
+| 8 | 1400px desktop grid | ✅ | dashboard `max-w-[1400px]` (index.tsx:419) |
+| 9 | 3-up mobile stat bands | ✅ | `StatBand` 3-up grid |
+| 10 | Snap-scroll rails | ✅ | `snap-x` rails in `Carousel`, dashboard, insights |
+| 11 | Sticky sheet footers | ✅ | PaymentSheet/OrderSheet sticky footers |
+| 12 | Count-up numbers | ✅ | `src/components/charts/CountUp.tsx` |
+| 13 | Press states (`active:scale-0.97`) | ✅ | `fv/press.ts` `pressable()` util, adopted in PaymentSheet/OrderSheet/TxnRow |
+| 14 | Txn swipe actions | ✅ | `TxnRow` `swipeActions` prop (Categorize/Delete) |
+| 15 | Pull-to-refresh | ✅ | `PullToRefresh` wraps dashboard |
+| 16 | Bottom sheets everywhere | ✅ | sheets as the primary dialog pattern; BillDialog/BudgetDialog converted from centered Dialog |
+| 17 | Ticker flash | ✅ | `TickerStrip` 300ms green/red flash on 5s price refresh, reduced-motion safe |
+| 18 | Toasts with real Undo | ✅ | toast undo actions wired to mutations |
+| 19 | 1px/1.5px borders | ✅ | hairline border tokens |
+| 20 | Mint shimmer skeletons | ✅ | `@utility fv-shimmer` (1.8s sweep, brand-tinted), `ChartSkeleton` |
+| 21–25 | New fv kit: `Pill`, `Accordion`, `Carousel`, `Tabs`, `Popover` | ✅ | exported from `fv/index.ts` barrel |
+| 26–30 | 3-up stat bands / sticky footers / snap rails on insights / ticker / sheets (cross-cutting polish listed above) | ✅ / ⏳ | code present; visual spacing/rhythm needs the live pass |
+
+**Visual-quality note:** all items above are ✅ for code presence + static correctness
+(build/tsc/eslint/unit all green). Whether the polish *looks* right at 390px /
+tablet / 1440px, light + dark — spacing rhythm, serif texture, shimmer feel,
+ticker flash timing — can only be judged in a browser. Marked ⏳ for the
+coordinator's live pass.
+
+## QA bugfixes folded into the polish pass (code-verified ✅)
+- **Keypad rapid-input stale closure** (`src/lib/amount-keys.ts`) — 6 unit tests pass
+- **"Create account" CTA dead end in payment sheet** — flow now lands on a working sheet
+- **Portfolio 12s load-timeout failsafe + `ready` decoupling** (`src/routes/portfolio.tsx:124,166`) — timeout shows ErrorState + Retry instead of an infinite spinner
+- **Holdings order math extracted to pure `src/lib/finance/order-math.ts`** — 10 unit tests pass, incl. the exact QA scenario `BUY INFY × 2 @ 152200 paise` (order-math.test.ts:5)
+- **MarketRow nested-button a11y fix** — no interactive element inside another button
+- **BillDialog/BudgetDialog converted from centered Dialog to BottomSheet**
+
+## NOT verifiable without a browser (⏳ PENDING for the coordinator's live pass)
+- Visual 390px / tablet / 1440px QA (light + dark): hero type scale, mint-on-paper contrast, stat-band density, sheet behavior, ticker flash, shimmer skeletons
+- axe automated accessibility run (installed, needs authenticated page harness)
+- Lighthouse (no tooling in this environment)
+- Authenticated E2E of the QA fixes (keypad rapid input, portfolio timeout path, undo toasts, swipe actions)
+- RLS live probes + Razorpay live test-mode flow (still need DB owner / test keys — pre-existing)

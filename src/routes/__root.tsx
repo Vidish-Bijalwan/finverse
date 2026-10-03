@@ -120,6 +120,10 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
         rel: "stylesheet",
         href: "https://fonts.googleapis.com/css2?family=Roboto:wght@400;500;700;900&display=swap",
       },
+      {
+        rel: "stylesheet",
+        href: "https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400..700&family=Space+Grotesk:wght@400;500;600;700&display=swap",
+      },
       { rel: "icon", href: "/favicon.svg", type: "image/svg+xml" },
     ],
   }),
@@ -169,7 +173,7 @@ function SplashScreen() {
     >
       <div className="flex flex-col items-center gap-4">
         <div className="grid size-14 place-items-center rounded-xl bg-primary-dark shadow-logo">
-          <ChartNoAxesCombined className="size-8 text-primary-foreground" strokeWidth={2.5} />
+          <ChartNoAxesCombined className="size-8 text-background" strokeWidth={2.5} />
         </div>
         <span className="text-2xl font-black text-primary-dark">
           Fin<span className="text-primary">Verse</span>

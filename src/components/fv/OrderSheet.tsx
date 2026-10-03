@@ -3,6 +3,7 @@ import { Minus, Plus } from "lucide-react";
 import { Sheet, SheetContent } from "@/components/ui/sheet";
 import { cn } from "@/lib/utils";
 import { NumberDisplay } from "./NumberDisplay";
+import { pressable } from "./press";
 
 export interface FvOrder {
   type: "market" | "limit";
@@ -24,6 +25,9 @@ const toPaise = (rupeesText: string): number => {
  * Bottom-sheet order ticket: Market/Limit segmented control, qty/amount
  * toggle input, live estimated-cost readout. Confirm stays disabled until
  * the order is valid.
+ *
+ * The summary footer (estimated cost + confirm CTA) is sticky — always
+ * visible even when the ticket content scrolls.
  */
 export function OrderSheet({
   open,
@@ -73,6 +77,7 @@ export function OrderSheet({
           aria-pressed={value === o.value}
           onClick={() => onChange(o.value)}
           className={cn(
+            pressable,
             "flex-1 rounded-full px-4 py-2 text-sm font-bold transition-colors",
             value === o.value
               ? "bg-card text-foreground shadow-card"
@@ -89,109 +94,122 @@ export function OrderSheet({
     <Sheet open={open} onOpenChange={onOpenChange}>
       <SheetContent
         side="bottom"
-        className="mx-auto w-full max-w-lg rounded-t-3xl border-t px-6 pt-3 pb-8"
+        className="mx-auto flex max-h-[92dvh] w-full max-w-lg flex-col gap-0 rounded-t-3xl border-t px-0 pt-3 pb-0"
         aria-label={`Place ${side} order for ${symbol}`}
       >
-        <span aria-hidden className="mx-auto mb-4 block h-1.5 w-12 rounded-full bg-muted" />
+        <span
+          aria-hidden
+          className="mx-auto mb-2 block h-1.5 w-12 shrink-0 rounded-full bg-muted"
+        />
 
-        <div className="flex items-baseline justify-between gap-2">
-          <h2 className="text-base font-bold text-foreground">
-            <span className={cn("mr-2 capitalize", side === "buy" ? "text-gain" : "text-loss")}>
-              {side}
+        <div className="min-h-0 flex-1 overflow-y-auto px-6">
+          <div className="flex items-baseline justify-between gap-2">
+            <h2 className="text-base font-bold text-foreground">
+              <span className={cn("mr-2 capitalize", side === "buy" ? "text-gain" : "text-loss")}>
+                {side}
+              </span>
+              {symbol}
+            </h2>
+            <span className="text-sm text-muted-foreground">
+              LTP <NumberDisplay paise={ltpPaise} className="font-bold text-foreground" />
             </span>
-            {symbol}
-          </h2>
-          <span className="text-sm text-muted-foreground">
-            LTP <NumberDisplay paise={ltpPaise} className="font-bold text-foreground" />
-          </span>
+          </div>
+          <p className="truncate text-xs text-muted-foreground">{name}</p>
+
+          <div className="mt-4 flex flex-col gap-4">
+            {segmented(
+              [
+                { value: "market", label: "Market" },
+                { value: "limit", label: "Limit" },
+              ],
+              type,
+              setType,
+              "Order type",
+            )}
+
+            {type === "limit" && (
+              <label className="flex flex-col gap-1.5">
+                <span className="text-xs font-semibold text-muted-foreground uppercase">
+                  Limit price (₹)
+                </span>
+                <input
+                  type="text"
+                  inputMode="decimal"
+                  value={limitText}
+                  onChange={(e) => setLimitText(e.target.value.replace(/[^0-9.]/g, ""))}
+                  placeholder="0.00"
+                  className="h-12 rounded-[14px] border border-input bg-card px-4 text-lg font-bold text-foreground tabular-nums"
+                />
+              </label>
+            )}
+
+            {segmented(
+              [
+                { value: "qty", label: "Quantity" },
+                { value: "amount", label: "Amount" },
+              ],
+              mode,
+              setMode,
+              "Entry mode",
+            )}
+
+            {mode === "qty" ? (
+              <div className="flex items-center justify-center gap-4">
+                <button
+                  type="button"
+                  aria-label="Decrease quantity"
+                  onClick={() =>
+                    setQtyText(String(Math.max(1, (Number.parseInt(qtyText) || 1) - 1)))
+                  }
+                  className={cn(
+                    pressable,
+                    "grid size-11 place-items-center rounded-full bg-muted text-foreground",
+                  )}
+                >
+                  <Minus className="size-5" aria-hidden />
+                </button>
+                <input
+                  type="text"
+                  inputMode="numeric"
+                  aria-label="Quantity"
+                  value={qtyText}
+                  onChange={(e) => setQtyText(e.target.value.replace(/[^0-9]/g, ""))}
+                  className="h-14 w-32 rounded-[14px] border border-input bg-card text-center text-2xl font-bold text-foreground tabular-nums"
+                />
+                <button
+                  type="button"
+                  aria-label="Increase quantity"
+                  onClick={() => setQtyText(String((Number.parseInt(qtyText) || 0) + 1))}
+                  className={cn(
+                    pressable,
+                    "grid size-11 place-items-center rounded-full bg-muted text-foreground",
+                  )}
+                >
+                  <Plus className="size-5" aria-hidden />
+                </button>
+              </div>
+            ) : (
+              <label className="flex flex-col gap-1.5">
+                <span className="text-xs font-semibold text-muted-foreground uppercase">
+                  Amount (₹)
+                </span>
+                <input
+                  type="text"
+                  inputMode="decimal"
+                  value={amountText}
+                  onChange={(e) => setAmountText(e.target.value.replace(/[^0-9.]/g, ""))}
+                  placeholder="0.00"
+                  className="h-14 rounded-[14px] border border-input bg-card px-4 text-2xl font-bold text-foreground tabular-nums"
+                />
+              </label>
+            )}
+          </div>
+          {/* Spacer so content never hides under the sticky footer. */}
+          <div className="h-4" aria-hidden />
         </div>
-        <p className="truncate text-xs text-muted-foreground">{name}</p>
 
-        <div className="mt-4 flex flex-col gap-4">
-          {segmented(
-            [
-              { value: "market", label: "Market" },
-              { value: "limit", label: "Limit" },
-            ],
-            type,
-            setType,
-            "Order type",
-          )}
-
-          {type === "limit" && (
-            <label className="flex flex-col gap-1.5">
-              <span className="text-xs font-semibold text-muted-foreground uppercase">
-                Limit price (₹)
-              </span>
-              <input
-                type="text"
-                inputMode="decimal"
-                value={limitText}
-                onChange={(e) => setLimitText(e.target.value.replace(/[^0-9.]/g, ""))}
-                placeholder="0.00"
-                className="h-12 rounded-2xl border border-input bg-card px-4 text-lg font-bold text-foreground tabular-nums"
-              />
-            </label>
-          )}
-
-          {segmented(
-            [
-              { value: "qty", label: "Quantity" },
-              { value: "amount", label: "Amount" },
-            ],
-            mode,
-            setMode,
-            "Entry mode",
-          )}
-
-          {mode === "qty" ? (
-            <div className="flex items-center justify-center gap-4">
-              <button
-                type="button"
-                aria-label="Decrease quantity"
-                onClick={() => setQtyText(String(Math.max(1, (Number.parseInt(qtyText) || 1) - 1)))}
-                className="grid size-11 place-items-center rounded-full bg-muted text-foreground transition-transform active:scale-95"
-              >
-                <Minus className="size-5" aria-hidden />
-              </button>
-              <input
-                type="text"
-                inputMode="numeric"
-                aria-label="Quantity"
-                value={qtyText}
-                onChange={(e) => setQtyText(e.target.value.replace(/[^0-9]/g, ""))}
-                className="h-14 w-32 rounded-2xl border border-input bg-card text-center text-2xl font-bold text-foreground tabular-nums"
-              />
-              <button
-                type="button"
-                aria-label="Increase quantity"
-                onClick={() => setQtyText(String((Number.parseInt(qtyText) || 0) + 1))}
-                className="grid size-11 place-items-center rounded-full bg-muted text-foreground transition-transform active:scale-95"
-              >
-                <Plus className="size-5" aria-hidden />
-              </button>
-            </div>
-          ) : (
-            <label className="flex flex-col gap-1.5">
-              <span className="text-xs font-semibold text-muted-foreground uppercase">
-                Amount (₹)
-              </span>
-              <input
-                type="text"
-                inputMode="decimal"
-                value={amountText}
-                onChange={(e) => setAmountText(e.target.value.replace(/[^0-9.]/g, ""))}
-                placeholder="0.00"
-                className="h-14 rounded-2xl border border-input bg-card px-4 text-2xl font-bold text-foreground tabular-nums"
-              />
-            </label>
-          )}
-
-          <div
-            className="flex items-center justify-between rounded-2xl bg-muted/60 px-4 py-3"
-            role="status"
-            aria-live="polite"
-          >
+        <div className="shrink-0 border-t border-border bg-background px-6 pt-3 pb-8">
+          <div className="flex items-center justify-between" role="status" aria-live="polite">
             <span className="text-sm text-muted-foreground">
               Estimated cost · {qtyFromMode} qty
             </span>
@@ -203,7 +221,8 @@ export function OrderSheet({
             disabled={!valid}
             onClick={() => onConfirm({ type, mode, qty: qtyFromMode, pricePaise })}
             className={cn(
-              "h-13 w-full rounded-full py-3.5 text-base font-bold text-white transition-colors",
+              pressable,
+              "mt-3 h-13 w-full rounded-full py-3.5 text-base font-bold text-white transition-colors",
               valid
                 ? side === "buy"
                   ? "bg-gain hover:opacity-90"

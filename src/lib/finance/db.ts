@@ -1054,7 +1054,7 @@ export async function defaultAccountId(): Promise<string | undefined> {
  * credit the destination account. Always consistent — edits/deletes flow
  * through automatically because the balance is derived, not stored.
  */
-function balanceForAccount(account: Account, transactions: Transaction[]): number {
+export function balanceForAccount(account: Account, transactions: Transaction[]): number {
   let balance = account.openingBalancePaise;
   for (const t of transactions) {
     if (t.type === "transfer") {

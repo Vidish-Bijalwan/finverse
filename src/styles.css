@@ -1,3 +1,9 @@
+@import url("https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&display=swap");
+/* Editorial serif for major headings. Combined with Space Grotesk for money
+   numerals + sans body, serif+sans+mono-numerals is the editorial signature.
+   NOTE: preconnect <link> tags still need adding to the document head in
+   src/routes/__root.tsx (out of scope for this worker). */
+@import url("https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400..700&display=swap");
 @import "tailwindcss" source(none);
 @source "../src";
 @import "tw-animate-css";
@@ -20,6 +26,13 @@
 
 @theme inline {
   --font-sans: "Roboto", "Segoe UI", Arial, sans-serif;
+  /* Display grotesque: money numerals + hero numbers ONLY (numerals need
+     its tabular clarity). Loaded via Google Fonts @import above (display=swap).
+     NOTE: preconnect <link> tags still need adding to the document head in
+     src/routes/__root.tsx (out of scope). */
+  --font-display: "Space Grotesk", "Roboto", "Segoe UI", Arial, sans-serif;
+  /* Editorial serif: major HEADINGS (h1–h4). Kills the AI look. */
+  --font-display-serif: "Fraunces", Georgia, "Times New Roman", serif;
   --spacing-dashboard: 78rem;
   --radius-sm: calc(var(--radius) - 4px);
   --radius-md: calc(var(--radius) - 2px);
@@ -76,6 +89,10 @@
   --color-focus: var(--focus);
   --color-gain: var(--gain);
   --color-loss: var(--loss);
+  /* Section-coded accents: payments blue, investments green, insights amber. */
+  --color-section-payments: var(--section-payments);
+  --color-section-invest: var(--section-invest);
+  --color-section-insights: var(--section-insights);
   --color-keypad: var(--keypad);
   --color-keypad-foreground: var(--keypad-foreground);
   --color-faint: var(--faint);
@@ -88,116 +105,149 @@
 
 :root {
   --radius: 0.5rem;
-  --background: oklch(1 0 0);
-  --foreground: oklch(0.205 0 0);
+  /* Warm paper + true ink. */
+  --background: oklch(0.985 0.004 100);
+  --foreground: oklch(0.2 0.015 260);
   --card: oklch(1 0 0);
-  --card-foreground: oklch(0.205 0 0);
+  --card-foreground: oklch(0.2 0.015 260);
   --popover: oklch(1 0 0);
-  --popover-foreground: oklch(0.205 0 0);
-  --primary: oklch(0.72 0.14 220);
-  --primary-hover: oklch(0.64 0.14 221);
-  --primary-dark: oklch(0.32 0.13 256);
-  --primary-foreground: oklch(1 0 0);
-  --secondary: oklch(0.97 0.015 232);
-  --secondary-foreground: oklch(0.32 0.13 256);
-  --muted: oklch(0.965 0.006 245);
-  --muted-foreground: oklch(0.46 0.015 255);
-  --accent: oklch(0.72 0.14 220);
-  --accent-foreground: oklch(1 0 0);
-  --destructive: oklch(0.64 0.2 35);
+  --popover-foreground: oklch(0.2 0.015 260);
+  /*
+   * Signature accent: vivid mint. Light mode uses a deepened mint-teal so
+   * text-primary stays readable on paper (~3.5:1, bold/large use); dark mode
+   * gets the full electric #00E5A0 on deep ink. Mint is reserved for primary
+   * CTAs, active tabs, key numbers and top-edge accents — everything else
+   * is neutral.
+   */
+  --primary: oklch(0.62 0.135 163);
+  --primary-hover: oklch(0.55 0.13 163);
+  --primary-dark: oklch(0.165 0.02 270);
+  --primary-foreground: oklch(0.165 0.02 270);
+  --secondary: oklch(0.965 0.008 250);
+  --secondary-foreground: oklch(0.2 0.015 260);
+  --muted: oklch(0.955 0.005 250);
+  --muted-foreground: oklch(0.47 0.015 255);
+  --accent: oklch(0.945 0.008 250);
+  --accent-foreground: oklch(0.2 0.015 260);
+  --destructive: oklch(0.63 0.2 25);
   --destructive-foreground: oklch(1 0 0);
-  --border: oklch(0.9 0.006 250);
-  --input: oklch(0.9 0.006 250);
-  --ring: oklch(0.72 0.14 220);
-  --tint: oklch(0.96 0.03 226);
-  --surface-soft: oklch(0.985 0.006 235);
-  --success: oklch(0.67 0.19 143);
-  --success-soft: oklch(0.96 0.04 145);
-  --warning: oklch(0.76 0.16 68);
-  --warning-soft: oklch(0.965 0.045 82);
-  --danger: oklch(0.62 0.2 32);
-  --danger-soft: oklch(0.96 0.04 28);
-  --info: oklch(0.64 0.15 244);
-  --info-soft: oklch(0.95 0.035 248);
-  --focus: oklch(0.72 0.14 220);
-  --gain: oklch(0.67 0.19 143);
-  --loss: oklch(0.62 0.2 32);
-  --keypad: oklch(0.955 0.006 245);
-  --keypad-foreground: oklch(0.205 0 0);
+  --border: oklch(0.885 0.008 250);
+  --input: oklch(0.885 0.008 250);
+  --ring: oklch(0.62 0.135 163);
+  --tint: oklch(0.93 0.055 168);
+  --surface-soft: oklch(0.975 0.005 240);
+  /* High-saturation money colors — no pastels. */
+  --success: oklch(0.65 0.19 150);
+  --success-soft: oklch(0.94 0.06 155);
+  --warning: oklch(0.78 0.16 78);
+  --warning-soft: oklch(0.96 0.05 85);
+  --danger: oklch(0.63 0.2 25);
+  --danger-soft: oklch(0.955 0.045 25);
+  --info: oklch(0.55 0.2 263);
+  --info-soft: oklch(0.95 0.04 260);
+  --focus: oklch(0.62 0.135 163);
+  --gain: oklch(0.62 0.18 150);
+  --loss: oklch(0.62 0.2 25);
+  --keypad: oklch(0.95 0.006 245);
+  --keypad-foreground: oklch(0.2 0.015 260);
   --faint: oklch(0.62 0 0);
   --header-shadow: 0 1px 4px oklch(0.2 0 0 / 0.06);
   --tile-shadow: 0 2px 6px oklch(0.2 0 0 / 0.05);
   --card-shadow: 0 4px 12px oklch(0.2 0 0 / 0.06);
   --modal-shadow: 0 10px 28px oklch(0.2 0 0 / 0.14);
-  --logo-shadow: 0 5px 12px oklch(0.32 0.13 256 / 0.2);
-  --chart-1: oklch(0.646 0.222 41.116);
-  --chart-2: oklch(0.6 0.118 184.704);
-  --chart-3: oklch(0.398 0.07 227.392);
-  --chart-4: oklch(0.828 0.189 84.429);
-  --chart-5: oklch(0.769 0.188 70.08);
-  --sidebar: oklch(0.984 0.003 247.858);
-  --sidebar-foreground: oklch(0.129 0.042 264.695);
-  --sidebar-primary: oklch(0.208 0.042 265.755);
-  --sidebar-primary-foreground: oklch(0.984 0.003 247.858);
-  --sidebar-accent: oklch(0.968 0.007 247.896);
-  --sidebar-accent-foreground: oklch(0.208 0.042 265.755);
-  --sidebar-border: oklch(0.929 0.013 255.508);
-  --sidebar-ring: oklch(0.704 0.04 256.788);
+  --logo-shadow: 0 5px 12px oklch(0.62 0.135 163 / 0.25);
+  /* Section-coded accents: payments blue, investments green, insights amber. */
+  --section-payments: oklch(0.58 0.2 262);
+  --section-invest: oklch(0.65 0.19 150);
+  --section-insights: oklch(0.78 0.16 78);
+  /* Chart categorical palette: 5 saturated, mutually distinguishable hues. */
+  --chart-1: oklch(0.7 0.17 163);
+  --chart-2: oklch(0.6 0.2 262);
+  --chart-3: oklch(0.78 0.16 78);
+  --chart-4: oklch(0.63 0.21 350);
+  --chart-5: oklch(0.58 0.21 293);
+  --sidebar: oklch(0.975 0.005 240);
+  --sidebar-foreground: oklch(0.2 0.015 260);
+  --sidebar-primary: oklch(0.62 0.135 163);
+  --sidebar-primary-foreground: oklch(0.165 0.02 270);
+  --sidebar-accent: oklch(0.945 0.008 250);
+  --sidebar-accent-foreground: oklch(0.2 0.015 260);
+  --sidebar-border: oklch(0.885 0.008 250);
+  --sidebar-ring: oklch(0.62 0.135 163);
 }
 
 .dark {
-  --background: oklch(0.129 0.042 264.695);
-  --foreground: oklch(0.984 0.003 247.858);
-  --card: oklch(0.208 0.042 265.755);
-  --card-foreground: oklch(0.984 0.003 247.858);
-  --popover: oklch(0.208 0.042 265.755);
-  --popover-foreground: oklch(0.984 0.003 247.858);
-  --primary: oklch(0.929 0.013 255.508);
-  --primary-hover: oklch(0.84 0.02 256);
-  /* Intentional dark token: the light theme's deep-navy brand color is
-     unreadable on dark surfaces, so it becomes a luminous blue here. */
-  --primary-dark: oklch(0.8 0.11 250);
-  --primary-foreground: oklch(0.208 0.042 265.755);
-  --secondary: oklch(0.279 0.041 260.031);
-  --secondary-foreground: oklch(0.984 0.003 247.858);
-  --muted: oklch(0.279 0.041 260.031);
-  --muted-foreground: oklch(0.704 0.04 256.788);
-  --accent: oklch(0.279 0.041 260.031);
-  --accent-foreground: oklch(0.984 0.003 247.858);
-  --destructive: oklch(0.704 0.191 22.216);
-  --destructive-foreground: oklch(0.984 0.003 247.858);
+  /* Deep-charcoal dark mode, lifted slightly from pure ink so layered
+     surfaces read as distinct steps: bg (L 0.185) → elevated card (L 0.245)
+     → border (10% white hairline). Hue stays ~270 through all three — no
+     gray soup, true separation. Signature mint goes full electric here;
+     money colors stay high-saturation. */
+  --background: oklch(0.185 0.02 270);
+  --foreground: oklch(0.95 0.008 250);
+  --card: oklch(0.245 0.032 267);
+  --card-foreground: oklch(0.95 0.008 250);
+  --popover: oklch(0.245 0.032 267);
+  --popover-foreground: oklch(0.95 0.008 250);
+  --primary: oklch(0.815 0.177 162.6);
+  --primary-hover: oklch(0.74 0.16 163);
+  /* Intentional dark token: deep ink is unreadable on dark surfaces, so the
+     brand-dark slot becomes a luminous icy blue here. */
+  --primary-dark: oklch(0.82 0.1 210);
+  --primary-foreground: oklch(0.185 0.02 270);
+  --secondary: oklch(0.28 0.032 265);
+  --secondary-foreground: oklch(0.95 0.008 250);
+  --muted: oklch(0.26 0.03 265);
+  /* Secondary text muted one step (was 0.70) — still 7:1+ on the card. */
+  --muted-foreground: oklch(0.68 0.028 255);
+  --accent: oklch(0.27 0.032 265);
+  --accent-foreground: oklch(0.95 0.008 250);
+  --destructive: oklch(0.68 0.21 25);
+  --destructive-foreground: oklch(0.95 0.008 250);
+  /* Hairline 1px borders, deliberately low-contrast on dark. */
   --border: oklch(1 0 0 / 10%);
-  --input: oklch(1 0 0 / 15%);
-  --ring: oklch(0.551 0.027 264.364);
-  --tint: oklch(0.24 0.05 258);
-  --surface-soft: oklch(0.165 0.03 262);
-  --success: oklch(0.72 0.17 150);
-  --success-soft: oklch(0.22 0.06 150);
-  --warning: oklch(0.83 0.14 72);
-  --warning-soft: oklch(0.25 0.055 78);
-  --danger: oklch(0.7 0.19 26);
-  --danger-soft: oklch(0.24 0.065 28);
-  --info: oklch(0.76 0.13 246);
-  --info-soft: oklch(0.22 0.05 252);
-  --focus: oklch(0.8 0.11 250);
-  --gain: oklch(0.72 0.17 150);
-  --loss: oklch(0.7 0.19 26);
-  --keypad: oklch(0.245 0.04 260);
-  --keypad-foreground: oklch(0.984 0.003 247.858);
-  --faint: oklch(0.6 0 0);
-  --chart-1: oklch(0.488 0.243 264.376);
-  --chart-2: oklch(0.696 0.17 162.48);
-  --chart-3: oklch(0.769 0.188 70.08);
-  --chart-4: oklch(0.627 0.265 303.9);
-  --chart-5: oklch(0.645 0.246 16.439);
-  --sidebar: oklch(0.208 0.042 265.755);
-  --sidebar-foreground: oklch(0.984 0.003 247.858);
-  --sidebar-primary: oklch(0.488 0.243 264.376);
-  --sidebar-primary-foreground: oklch(0.984 0.003 247.858);
-  --sidebar-accent: oklch(0.279 0.041 260.031);
-  --sidebar-accent-foreground: oklch(0.984 0.003 247.858);
+  --input: oklch(1 0 0 / 14%);
+  --ring: oklch(0.815 0.177 162.6);
+  --tint: oklch(0.26 0.06 168);
+  --surface-soft: oklch(0.21 0.026 265);
+  --success: oklch(0.73 0.21 148);
+  --success-soft: oklch(0.27 0.075 152);
+  --warning: oklch(0.82 0.16 78);
+  --warning-soft: oklch(0.3 0.06 80);
+  --danger: oklch(0.68 0.21 25);
+  --danger-soft: oklch(0.3 0.075 26);
+  --info: oklch(0.7 0.18 258);
+  --info-soft: oklch(0.28 0.06 260);
+  --focus: oklch(0.815 0.177 162.6);
+  --gain: oklch(0.73 0.21 148);
+  --loss: oklch(0.68 0.21 25);
+  --keypad: oklch(0.27 0.03 262);
+  --keypad-foreground: oklch(0.95 0.008 250);
+  --faint: oklch(0.58 0 0);
+  /* Softer, smaller-feeling shadows: dark surfaces already carry depth from
+     the layered tokens, so shadows stay low-opacity. */
+  --header-shadow: 0 1px 4px oklch(0 0 0 / 0.35);
+  --tile-shadow: 0 2px 6px oklch(0 0 0 / 0.3);
+  --card-shadow: 0 4px 12px oklch(0 0 0 / 0.3);
+  --modal-shadow: 0 10px 28px oklch(0 0 0 / 0.45);
+  --logo-shadow: 0 5px 12px oklch(0.815 0.177 162.6 / 0.25);
+  /* Section-coded accents: payments blue, investments green, insights amber. */
+  --section-payments: oklch(0.68 0.19 260);
+  --section-invest: oklch(0.73 0.21 148);
+  --section-insights: oklch(0.82 0.16 78);
+  /* Chart categorical palette: same 5 hues, lifted for dark surfaces. */
+  --chart-1: oklch(0.815 0.177 162.6);
+  --chart-2: oklch(0.7 0.18 260);
+  --chart-3: oklch(0.82 0.16 78);
+  --chart-4: oklch(0.7 0.2 350);
+  --chart-5: oklch(0.68 0.2 293);
+  --sidebar: oklch(0.21 0.026 265);
+  --sidebar-foreground: oklch(0.95 0.008 250);
+  --sidebar-primary: oklch(0.815 0.177 162.6);
+  --sidebar-primary-foreground: oklch(0.165 0.02 270);
+  --sidebar-accent: oklch(0.27 0.032 265);
+  --sidebar-accent-foreground: oklch(0.95 0.008 250);
   --sidebar-border: oklch(1 0 0 / 10%);
-  --sidebar-ring: oklch(0.551 0.027 264.364);
+  --sidebar-ring: oklch(0.815 0.177 162.6);
 }
 
 @layer base {
@@ -209,8 +259,25 @@
     background-color: var(--color-background);
     color: var(--color-foreground);
     font-family: var(--font-sans);
+    /* 14px/1.6 on mobile, 15px on desktop. */
+    font-size: 0.875rem;
+    line-height: 1.6;
     letter-spacing: 0;
     margin: 0;
+  }
+
+  @media (min-width: 768px) {
+    body {
+      font-size: 0.9375rem;
+    }
+  }
+
+  /* Editorial serif for major headings (h1–h4). Money numerals and hero
+     numbers stay in Space Grotesk — use .fv-money / .fv-hero or
+     <NumberDisplay> for those. */
+  h1, h2, h3, h4 {
+    font-family: var(--font-display-serif);
+    letter-spacing: -0.015em;
   }
 
   button, a { cursor: pointer; }
@@ -224,6 +291,135 @@
 }
 
 @utility max-w-dashboard { max-width: var(--spacing-dashboard); }
+
+/* Eyebrow label: 11px, uppercase, 0.12em tracking, muted. */
+@utility fv-eyebrow {
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  color: var(--color-muted-foreground);
+}
+
+/* Hero number: 40px+, tight tracking, display grotesque (Space Grotesk —
+   numerals, not serif; the grotesque's tabular clarity is the point). */
+@utility fv-hero {
+  font-family: var(--font-display);
+  font-size: 2.5rem;
+  font-weight: 700;
+  line-height: 1.05;
+  letter-spacing: -0.02em;
+}
+
+/* Canonical money text: display grotesque + tabular numerals, so every ₹
+   aligns in columns. Prefer <NumberDisplay> which applies this. */
+@utility fv-money {
+  font-family: var(--font-display);
+  font-variant-numeric: tabular-nums;
+}
+
+/* Static card: 1px border. */
+@utility fv-card-static {
+  border-width: 1px;
+  border-style: solid;
+  border-color: var(--color-border);
+}
+
+/* Interactive card: 1.5px border; border shifts to the signature accent on
+   hover/press. */
+@utility fv-card-interactive {
+  border-width: 1.5px;
+  border-style: solid;
+  border-color: var(--color-border);
+  transition: border-color 160ms ease-out;
+  &:hover {
+    border-color: var(--color-primary);
+  }
+  &:active {
+    border-color: var(--color-primary);
+  }
+}
+
+/* 3px colored top-edge accent for stat cards (signature mint). */
+@utility fv-top-accent {
+  border-top: 3px solid var(--color-primary);
+}
+
+/* Skeleton shimmer tinted with the brand accent. Geometry stays the caller's
+   (rounded-md passthrough) — only the fill animates. */
+@utility fv-shimmer {
+  background-color: var(--color-muted);
+  background-image: linear-gradient(
+    100deg,
+    transparent 25%,
+    color-mix(in oklch, var(--color-primary) 30%, transparent) 50%,
+    transparent 75%
+  );
+  background-size: 220% 100%;
+  background-repeat: no-repeat;
+  animation: fv-shimmer-sweep 1.8s linear infinite;
+}
+
+@keyframes fv-shimmer-sweep {
+  from {
+    background-position: 130% 0;
+  }
+  to {
+    background-position: -90% 0;
+  }
+}
+
+/*
+ * Animated mesh gradient — login + onboarding ONLY (brand hero treatment).
+ * Deep-ink base with drifting mint/blue/amber glows. The -soft variant keeps
+ * a transparent base with low-opacity glows so light-mode content text stays
+ * readable. Animation is disabled for prefers-reduced-motion (see hook usage
+ * in the routes + the global reduce rule below).
+ */
+.fv-mesh {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  pointer-events: none;
+}
+
+.fv-mesh-dark {
+  background:
+    radial-gradient(42rem 30rem at 12% -8%, color-mix(in oklch, var(--color-primary) 38%, transparent), transparent 62%),
+    radial-gradient(36rem 28rem at 88% 12%, oklch(0.6 0.19 262 / 0.42), transparent 64%),
+    radial-gradient(44rem 34rem at 50% 112%, oklch(0.78 0.15 78 / 0.28), transparent 62%),
+    oklch(0.185 0.02 270);
+  background-size: 130% 130%, 130% 130%, 130% 130%, auto;
+}
+
+.fv-mesh-soft {
+  background:
+    radial-gradient(30rem 22rem at 8% 0%, color-mix(in oklch, var(--color-primary) 20%, transparent), transparent 65%),
+    radial-gradient(28rem 22rem at 95% 8%, oklch(0.6 0.19 262 / 0.16), transparent 65%),
+    radial-gradient(34rem 26rem at 50% 108%, oklch(0.78 0.15 78 / 0.14), transparent 65%);
+}
+
+.fv-mesh-animated {
+  animation: fv-mesh-drift 22s ease-in-out infinite alternate;
+}
+
+@keyframes fv-mesh-drift {
+  from {
+    background-position: 0% 0%, 100% 20%, 50% 100%, 0 0;
+  }
+  50% {
+    background-position: 40% 30%, 60% 60%, 30% 70%, 0 0;
+  }
+  to {
+    background-position: 100% 60%, 10% 90%, 70% 30%, 0 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .fv-mesh-animated {
+    animation: none;
+  }
+}
 
 @utility page-transition-enter {
   animation: page-enter 220ms ease-out;

@@ -1,13 +1,6 @@
 import { useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
+import { BottomSheet } from "@/components/shell/BottomSheet";
 import { Label } from "@/components/ui/label";
 import type { Budget } from "@/lib/finance/types";
 import { categoryById } from "@/lib/finance/categories";
@@ -60,50 +53,55 @@ export function BudgetDialog({
   const categoryLabel = categoryById(existing?.categoryId ?? categoryId)?.label ?? "category";
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-md">
-        <DialogHeader>
-          <DialogTitle>{existing ? "Edit budget" : "Set a budget"}</DialogTitle>
-          <DialogDescription>
-            {existing
-              ? `Monthly limit for ${categoryLabel} · ${monthLabel(month)}.`
-              : `Cap spending for a category in ${monthLabel(month)}. Spending over the limit is flagged on the card.`}
-          </DialogDescription>
-        </DialogHeader>
-        <div className="space-y-4">
-          <div className="space-y-1.5">
-            <Label htmlFor="budget-category">Category</Label>
-            <CategorySelect
-              id="budget-category"
-              value={categoryId}
-              onChange={setCategoryId}
-              disabled={Boolean(existing)}
-            />
-            {existing && (
-              <p className="text-xs text-muted-foreground">
-                The category of an existing budget cannot be changed.
-              </p>
-            )}
-          </div>
-          <AmountField
-            id="budget-amount"
-            label="Monthly limit"
-            value={amount}
-            onChange={setAmount}
-            error={error}
-            placeholder="10,000.00"
-            autoFocus
+    <BottomSheet
+      open={open}
+      onClose={() => onOpenChange(false)}
+      title={existing ? "Edit budget" : "Set a budget"}
+      showCloseButton
+    >
+      <p className="text-sm text-muted-foreground">
+        {existing
+          ? `Monthly limit for ${categoryLabel} · ${monthLabel(month)}.`
+          : `Cap spending for a category in ${monthLabel(month)}. Spending over the limit is flagged on the card.`}
+      </p>
+      <div className="mt-4 space-y-4">
+        <div className="space-y-1.5">
+          <Label htmlFor="budget-category">Category</Label>
+          <CategorySelect
+            id="budget-category"
+            value={categoryId}
+            onChange={setCategoryId}
+            disabled={Boolean(existing)}
           />
+          {existing && (
+            <p className="text-xs text-muted-foreground">
+              The category of an existing budget cannot be changed.
+            </p>
+          )}
         </div>
-        <DialogFooter>
-          <Button variant="outline" onClick={() => onOpenChange(false)} disabled={saving}>
-            Cancel
-          </Button>
-          <Button onClick={handleSave} disabled={saving}>
-            {saving ? "Saving…" : existing ? "Save changes" : "Set budget"}
-          </Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
+        <AmountField
+          id="budget-amount"
+          label="Monthly limit"
+          value={amount}
+          onChange={setAmount}
+          error={error}
+          placeholder="10,000.00"
+          autoFocus
+        />
+      </div>
+      <div className="mt-6 flex gap-3">
+        <Button
+          variant="outline"
+          className="flex-1"
+          onClick={() => onOpenChange(false)}
+          disabled={saving}
+        >
+          Cancel
+        </Button>
+        <Button className="flex-1" onClick={handleSave} disabled={saving}>
+          {saving ? "Saving…" : existing ? "Save changes" : "Set budget"}
+        </Button>
+      </div>
+    </BottomSheet>
   );
 }

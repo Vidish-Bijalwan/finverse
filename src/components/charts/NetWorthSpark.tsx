@@ -9,6 +9,7 @@ import {
 } from "recharts";
 import { ChartSkeleton, MoneyTooltip } from "./shared";
 import { axisTick } from "./money";
+import { memo } from "react";
 import { usePrefersReducedMotion } from "@/hooks/use-prefers-reduced-motion";
 
 export interface NetWorthPoint {
@@ -27,7 +28,7 @@ interface NetWorthSparkProps {
 }
 
 /** Cumulative net-worth sparkline (area) for the last six months. */
-export function NetWorthSpark({ data, ready, loading }: NetWorthSparkProps) {
+function NetWorthSparkInner({ data, ready, loading }: NetWorthSparkProps) {
   const reducedMotion = usePrefersReducedMotion();
   if (loading || !ready) return <ChartSkeleton className="h-48" />;
   if (data.length === 0) {
@@ -82,3 +83,6 @@ export function NetWorthSpark({ data, ready, loading }: NetWorthSparkProps) {
     </div>
   );
 }
+
+/** Memoized: parents re-render on unrelated state (sheet open, refresh) with stable data refs. */
+export const NetWorthSpark = memo(NetWorthSparkInner);

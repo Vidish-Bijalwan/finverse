@@ -30,13 +30,8 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
+import { BottomSheet } from "@/components/shell/BottomSheet";
+import { pressable } from "@/components/fv";
 import { Label } from "@/components/ui/label";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Switch } from "@/components/ui/switch";
@@ -466,7 +461,12 @@ function SettingsPage() {
                   </p>
                 </div>
               </div>
-              <Button variant="outline" size="sm" onClick={() => void handleExportCSV()}>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => void handleExportCSV()}
+                className={pressable}
+              >
                 Export CSV
               </Button>
             </div>
@@ -483,7 +483,12 @@ function SettingsPage() {
                   </p>
                 </div>
               </div>
-              <Button variant="outline" size="sm" onClick={() => void handleBackup()}>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => void handleBackup()}
+                className={pressable}
+              >
                 Download
               </Button>
             </div>
@@ -502,7 +507,12 @@ function SettingsPage() {
                     </p>
                   </div>
                 </div>
-                <Button variant="outline" size="sm" onClick={() => fileRef.current?.click()}>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => fileRef.current?.click()}
+                  className={pressable}
+                >
                   Choose file
                 </Button>
               </div>
@@ -807,7 +817,7 @@ function AppLockSection() {
               <Button
                 variant="outline"
                 size="sm"
-                className="mt-2"
+                className={`mt-2 ${pressable}`}
                 onClick={() => void lock.refetch()}
               >
                 Try again
@@ -827,7 +837,12 @@ function AppLockSection() {
                 </p>
               </div>
             </div>
-            <Button variant="outline" size="sm" onClick={() => openDialog("set")}>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => openDialog("set")}
+              className={pressable}
+            >
               Set passcode
             </Button>
           </div>
@@ -848,7 +863,12 @@ function AppLockSection() {
                   </p>
                 </div>
               </div>
-              <Button variant="outline" size="sm" onClick={() => openDialog("change")}>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => openDialog("change")}
+                className={pressable}
+              >
                 Change
               </Button>
             </div>
@@ -912,6 +932,7 @@ function AppLockSection() {
               <Button
                 variant="outline"
                 size="sm"
+                className={pressable}
                 onClick={() => {
                   window.dispatchEvent(new CustomEvent("finverse:lock-now"));
                   toast.info("FinVerse locked.");
@@ -922,7 +943,7 @@ function AppLockSection() {
               <Button
                 variant="ghost"
                 size="sm"
-                className="text-danger hover:text-danger"
+                className={`text-danger hover:text-danger ${pressable}`}
                 onClick={() => setShowDisableConfirm(true)}
               >
                 Disable app lock
@@ -932,18 +953,15 @@ function AppLockSection() {
         )}
       </SectionCard>
 
-      {/* PIN set / change dialog — the PIN buffer lives only in this dialog's
+      {/* PIN set / change sheet — the PIN buffer lives only in this sheet's
           state and is wiped on close; it is never persisted or logged. */}
-      <Dialog open={mode !== null} onOpenChange={(o) => !o && closeDialog()}>
-        <DialogContent className="sm:max-w-sm">
-          <DialogHeader>
-            <DialogTitle>{dialogTitle}</DialogTitle>
-            <DialogDescription>
-              {mode === "change" && step === "current"
-                ? "Verify your current passcode first."
-                : "Your 6-digit passcode. It never leaves this device."}
-            </DialogDescription>
-          </DialogHeader>
+      <BottomSheet open={mode !== null} onClose={closeDialog} title={dialogTitle} showCloseButton>
+        <div className="px-1 pb-2">
+          <p className="pb-3 text-sm text-muted-foreground">
+            {mode === "change" && step === "current"
+              ? "Verify your current passcode first."
+              : "Your 6-digit passcode. It never leaves this device."}
+          </p>
           <div className="py-2">
             <PinPad
               key={`${mode}-${step}`}
@@ -953,8 +971,8 @@ function AppLockSection() {
               disabled={pinBusy}
             />
           </div>
-        </DialogContent>
-      </Dialog>
+        </div>
+      </BottomSheet>
 
       {/* Disable confirm */}
       <AlertDialog open={showDisableConfirm} onOpenChange={setShowDisableConfirm}>

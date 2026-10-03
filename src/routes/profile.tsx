@@ -10,6 +10,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
+import { pressable } from "@/components/fv";
 
 export const Route = createFileRoute("/profile")({
   head: () => ({
@@ -159,7 +160,7 @@ function ProfilePage() {
           onClick={() => fileRef.current?.click()}
           aria-label="Change profile photo"
           disabled={uploading}
-          className="group relative shrink-0 rounded-full focus-visible:outline-2 focus-visible:outline-primary"
+          className={`group relative shrink-0 rounded-full focus-visible:outline-2 focus-visible:outline-primary ${pressable}`}
         >
           <Avatar className="size-24">
             {avatarUrl && <AvatarImage src={avatarUrl} alt={fullName || "Profile photo"} />}
@@ -183,7 +184,7 @@ function ProfilePage() {
             type="button"
             onClick={() => fileRef.current?.click()}
             disabled={uploading}
-            className="mt-2 text-sm font-semibold text-primary hover:underline disabled:opacity-50"
+            className={`mt-2 text-sm font-semibold text-primary hover:underline disabled:opacity-50 ${pressable}`}
           >
             {uploading ? "Uploading…" : "Change photo"}
           </button>
@@ -244,13 +245,17 @@ function ProfilePage() {
         </p>
       </div>
 
-      <Button className="mt-6 w-full" onClick={handleSave} disabled={saving || uploading}>
+      <Button
+        className={`mt-6 w-full ${pressable}`}
+        onClick={handleSave}
+        disabled={saving || uploading}
+      >
         {saving ? "Saving…" : "Save changes"}
       </Button>
 
       <Button
         variant="outline"
-        className="mt-3 w-full text-destructive hover:text-destructive"
+        className={`mt-3 w-full text-destructive hover:text-destructive ${pressable}`}
         onClick={handleLogout}
       >
         <LogOut className="size-4" /> Log out

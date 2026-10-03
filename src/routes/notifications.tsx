@@ -16,6 +16,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { cn } from "@/lib/utils";
 import { useNotifications, type AppNotification } from "@/lib/notify";
+import { pressable } from "@/components/fv";
 
 export const Route = createFileRoute("/notifications")({
   head: () => ({
@@ -102,7 +103,7 @@ function NotificationsPage() {
           <Button
             variant="outline"
             size="sm"
-            className="mt-1 shrink-0 gap-1.5"
+            className={`mt-1 shrink-0 gap-1.5 ${pressable}`}
             onClick={markAllRead}
             disabled={unread === 0}
           >
@@ -123,7 +124,7 @@ function NotificationsPage() {
                   When a bill is due soon, a budget is nearly used up, a goal hits a milestone, or
                   spending looks unusual, it will show up here.
                 </p>
-                <Button variant="outline" size="sm" className="mt-4" asChild>
+                <Button variant="outline" size="sm" className={`mt-4 ${pressable}`} asChild>
                   <Link to="/insights">See AI insights</Link>
                 </Button>
               </CardContent>

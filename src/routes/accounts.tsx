@@ -12,6 +12,7 @@ import { formatINR, formatINRShort } from "@/lib/finance/format";
 import { useAccountSummaries, useDeleteAccount, useSetDefaultAccount } from "@/lib/finance/hooks";
 import type { Account, AccountType } from "@/lib/finance/types";
 import { cn } from "@/lib/utils";
+import { pressable } from "@/components/fv";
 
 export const Route = createFileRoute("/accounts")({
   head: () => ({
@@ -51,7 +52,7 @@ function AccountsPage() {
         <button
           type="button"
           onClick={() => setAccountDialog({ editing: null })}
-          className="flex items-center gap-1.5 rounded-full bg-primary px-4 py-2 text-sm font-bold text-primary-foreground transition-opacity hover:opacity-90"
+          className={`flex items-center gap-1.5 rounded-full bg-primary px-4 py-2 text-sm font-bold text-primary-foreground transition-opacity hover:opacity-90 ${pressable}`}
         >
           <Plus className="h-4 w-4" /> Add
         </button>
@@ -85,11 +86,11 @@ function AccountsPage() {
         type="button"
         onClick={() => setTransferDialog({})}
         disabled={list.length < 2}
-        className={cn(
+        className={`${cn(
           "mt-3 flex w-full items-center justify-center gap-2 rounded-2xl border-2 border-dashed",
           "border-muted-foreground/30 py-3.5 text-sm font-bold text-muted-foreground transition-colors",
           "hover:border-primary hover:text-primary disabled:cursor-not-allowed disabled:opacity-50",
-        )}
+        )} ${pressable}`}
       >
         <ArrowRightLeft className="h-5 w-5" /> Transfer between accounts
       </button>
@@ -161,7 +162,7 @@ function AccountsPage() {
                     type="button"
                     onClick={() => setTransferDialog({ fromAccountId: account.id })}
                     disabled={list.length < 2}
-                    className="flex flex-1 items-center justify-center gap-1.5 rounded-xl py-2 text-xs font-bold text-primary transition-colors hover:bg-primary/10 disabled:opacity-40"
+                    className={`flex flex-1 items-center justify-center gap-1.5 rounded-xl py-2 text-xs font-bold text-primary transition-colors hover:bg-primary/10 disabled:opacity-40 ${pressable}`}
                   >
                     <ArrowRightLeft className="h-4 w-4" /> Transfer
                   </button>
@@ -176,7 +177,7 @@ function AccountsPage() {
                         })
                       }
                       disabled={setDefault.isPending}
-                      className="flex flex-1 items-center justify-center gap-1.5 rounded-xl py-2 text-xs font-bold text-muted-foreground transition-colors hover:bg-muted hover:text-foreground disabled:opacity-50"
+                      className={`flex flex-1 items-center justify-center gap-1.5 rounded-xl py-2 text-xs font-bold text-muted-foreground transition-colors hover:bg-muted hover:text-foreground disabled:opacity-50 ${pressable}`}
                     >
                       <Star className="h-4 w-4" /> Set default
                     </button>
@@ -185,7 +186,7 @@ function AccountsPage() {
                     type="button"
                     onClick={() => setAccountDialog({ editing: account })}
                     aria-label={`Edit ${account.name}`}
-                    className="rounded-xl p-2 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+                    className={`rounded-xl p-2 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground ${pressable}`}
                   >
                     <Pencil className="h-4 w-4" />
                   </button>
@@ -193,7 +194,7 @@ function AccountsPage() {
                     type="button"
                     onClick={() => setDeleting(account)}
                     aria-label={`Delete ${account.name}`}
-                    className="rounded-xl p-2 text-muted-foreground transition-colors hover:bg-destructive/10 hover:text-destructive"
+                    className={`rounded-xl p-2 text-muted-foreground transition-colors hover:bg-destructive/10 hover:text-destructive ${pressable}`}
                   >
                     <Trash2 className="h-4 w-4" />
                   </button>
@@ -216,7 +217,7 @@ function AccountsPage() {
             <button
               type="button"
               onClick={() => setAccountDialog({ editing: null })}
-              className="rounded-full bg-primary px-5 py-2.5 text-sm font-bold text-primary-foreground transition-opacity hover:opacity-90"
+              className={`rounded-full bg-primary px-5 py-2.5 text-sm font-bold text-primary-foreground transition-opacity hover:opacity-90 ${pressable}`}
             >
               Add account
             </button>

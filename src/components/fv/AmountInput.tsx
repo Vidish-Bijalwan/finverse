@@ -1,6 +1,7 @@
 import { Delete } from "lucide-react";
-import { useState, type ReactNode } from "react";
+import { useRef, useState, type ReactNode } from "react";
 import { cn } from "@/lib/utils";
+import { applyBackspace, applyKey } from "@/lib/amount-keys";
 import { usePrefersReducedMotion } from "@/hooks/use-prefers-reduced-motion";
 
 const KEYS: (string | "back")[] = ["1", "2", "3", "4", "5", "6", "7", "8", "9", "00", "0", "back"];
@@ -80,15 +81,21 @@ export function AmountInput({
 }) {
   const maxDigits = 10;
   const [digits, setDigits] = useState("");
+  // Mirror of digits for event handlers. Keypad taps can arrive faster than
+  // React re-renders; reading the ref (instead of the render-scoped `digits`
+  // closure) guarantees every tap builds on the latest value — previously
+  // rapid 5,0,0 taps dropped the zeros and registered only ₹5.
+  const digitsRef = useRef("");
+
+  const commit = (next: string) => {
+    digitsRef.current = next;
+    setDigits(next);
+    onChange?.(next === "" ? 0 : parseInt(next, 10));
+  };
 
   const paise = digits === "" ? 0 : parseInt(digits, 10);
   const overMax = maxPaise != null && paise > maxPaise;
   const valid = paise > 0 && !overMax;
-
-  const update = (next: string) => {
-    setDigits(next);
-    onChange?.(next === "" ? 0 : parseInt(next, 10));
-  };
 
   return (
     <div className={cn("flex flex-col gap-5", className)}>
@@ -114,12 +121,8 @@ export function AmountInput({
       </div>
 
       <NumericKeypad
-        onKey={(d) => {
-          if (digits.length >= maxDigits) return;
-          if (digits === "" && (d === "0" || d === "00")) return; // no leading zeros
-          update(digits + d);
-        }}
-        onBackspace={() => update(digits.slice(0, -1))}
+        onKey={(d) => commit(applyKey(digitsRef.current, d, maxDigits))}
+        onBackspace={() => commit(applyBackspace(digitsRef.current))}
       />
 
       <button

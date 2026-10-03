@@ -52,7 +52,12 @@ export function ChartCard({
   const reducedMotion = usePrefersReducedMotion();
 
   return (
-    <section className={cn("rounded-2xl border border-border bg-card p-5 shadow-card", className)}>
+    <section
+      className={cn(
+        "rounded-[14px] border border-border bg-card p-4 shadow-card sm:p-5",
+        className,
+      )}
+    >
       <div className="mb-3 flex items-center justify-between gap-3">
         {title && <h2 className="text-base font-bold text-primary-dark">{title}</h2>}
         {action}

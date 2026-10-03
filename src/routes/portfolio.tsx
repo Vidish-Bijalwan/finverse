@@ -1,5 +1,5 @@
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
-import { useEffect, useMemo, useState } from "react";
+import { lazy, Suspense, useCallback, useEffect, useMemo, useState } from "react";
 import { Pencil, Plus, RefreshCw, Trash2 } from "lucide-react";
 
 import {
@@ -14,14 +14,8 @@ import {
 } from "@/components/ui/alert-dialog";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
 import { Skeleton } from "@/components/ui/skeleton";
+import { BottomSheet } from "@/components/shell/BottomSheet";
 import {
   Table,
   TableBody,
@@ -38,17 +32,26 @@ import { getLTP, refreshLTP } from "@/lib/market/history";
 import { PageShell } from "@/components/markets/PageShell";
 import { HoldingDialog } from "@/components/markets/HoldingDialog";
 import {
-  DonutAllocation,
   EmptyState,
   ErrorState,
   HoldingRow,
   NumberDisplay,
+  PullToRefresh,
   SearchDropdown,
   StatBand,
   TestModeBanner,
   TickerStrip,
+  pressable,
   type StatBandStat,
 } from "@/components/fv";
+import { ChartSkeleton } from "@/components/charts/shared";
+
+// Recharts is heavy: keep it out of the portfolio route chunk and stream it
+// in client-side after mount (donut sits below the fold). SSR-safe: the
+// chartsReady gate means the lazy component never renders on the server.
+const DonutAllocation = lazy(() =>
+  import("@/components/fv/DonutAllocation").then((m) => ({ default: m.DonutAllocation })),
+);
 import type { Holding } from "@/lib/finance/types";
 
 export const Route = createFileRoute("/portfolio")({
@@ -111,16 +114,39 @@ function PortfolioPage() {
   // LTPs are jittered demo prices (Math.random) — resolved client-side only so
   // SSR and hydration render identically.
   const [prices, setPrices] = useState<Record<string, number> | null>(null);
+  // Donut chart mounts client-side only (SSR-safe for the lazy recharts chunk).
+  const [chartsReady, setChartsReady] = useState(false);
+  useEffect(() => {
+    setChartsReady(true);
+  }, []);
+
+  // Failsafe: skeletons must never spin forever. If holdings are still
+  // pending after 12s, show the error state; Retry restarts the timer.
+  const [loadTimedOut, setLoadTimedOut] = useState(false);
+  const [retryNonce, setRetryNonce] = useState(0);
+  useEffect(() => {
+    if (!isPending) return;
+    const t = window.setTimeout(() => setLoadTimedOut(true), 12_000);
+    return () => window.clearTimeout(t);
+  }, [isPending, retryNonce]);
+
+  function retryLoad() {
+    setLoadTimedOut(false);
+    setRetryNonce((n) => n + 1);
+    void refetch();
+  }
 
   useEffect(() => {
     setPrices(Object.fromEntries((holdings ?? []).map((h) => [h.symbol, getLTP(h.symbol)])));
   }, [holdings, priceTick]);
 
   const rows = useMemo(() => {
-    if (!prices) return [];
+    // Tolerate null prices (first paint, SSR): fall back to the stock's
+    // listed price so the list never depends on the jittered-LTP effect.
+    const priceOf = (symbol: string) => prices?.[symbol] ?? getStock(symbol)?.pricePaise ?? 0;
     return (holdings ?? []).map((h) => {
       const stock = getStock(h.symbol);
-      const ltp = prices[h.symbol] ?? stock?.pricePaise ?? 0;
+      const ltp = priceOf(h.symbol);
       const invested = Math.round(h.qty * h.avgPricePaise);
       const value = Math.round(h.qty * ltp);
       const pnl = value - invested;
@@ -137,7 +163,7 @@ function PortfolioPage() {
     });
   }, [holdings, prices]);
 
-  const ready = !isPending && prices !== null;
+  const ready = !isPending;
 
   const totals = useMemo(() => {
     const invested = rows.reduce((a, r) => a + r.invested, 0);
@@ -196,7 +222,7 @@ function PortfolioPage() {
   const stats: StatBandStat[] = [
     {
       label: "Current value",
-      value: <NumberDisplay paise={totals.value} className="text-lg font-bold" />,
+      value: <NumberDisplay paise={totals.value} animate className="text-lg font-bold" />,
     },
     {
       label: "Invested",
@@ -215,6 +241,12 @@ function PortfolioPage() {
     setPriceTick((t) => t + 1);
   }
 
+  const refreshPortfolio = useCallback(async () => {
+    (holdings ?? []).forEach((h) => refreshLTP(h.symbol));
+    setPriceTick((t) => t + 1);
+    await refetch();
+  }, [holdings, refetch]);
+
   function openInvest() {
     setInvestQuery("");
     setInvestOpen(true);
@@ -226,243 +258,258 @@ function PortfolioPage() {
   }
 
   return (
-    <PageShell
-      title="Portfolio"
-      subtitle="Your equity holdings, valued at demo last-traded prices. Prices jitter slightly on refresh to simulate a live market feed."
-      active="Portfolio"
-      actions={
-        <>
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={handleRefresh}
-            disabled={!ready || rows.length === 0}
-          >
-            <RefreshCw className="size-4" /> Refresh prices
-          </Button>
-          <Button size="sm" onClick={openInvest}>
-            <Plus className="size-4" /> Invest
-          </Button>
-        </>
-      }
-    >
-      <TickerStrip className="mb-5" />
-      <TestModeBanner className="mb-5" />
-
-      {isError ? (
-        <ErrorState
-          title="Couldn't load your portfolio"
-          body="Your holdings couldn't be fetched. Check your connection and try again."
-          onRetry={() => refetch()}
-        />
-      ) : !ready ? (
-        <div className="grid gap-5">
-          <Skeleton className="h-24 rounded-2xl" />
-          <div className="grid gap-5 lg:grid-cols-[1fr_1.3fr]">
-            <Skeleton className="h-80 rounded-2xl" />
-            <Skeleton className="h-80 rounded-2xl" />
-          </div>
-        </div>
-      ) : rows.length === 0 ? (
-        <EmptyState
-          title="No holdings yet"
-          body="Invest in a stock to start building your portfolio — every order is simulated and posts to your shared ledger, so your money view always stays in sync."
-          actionLabel="Invest in a stock"
-          onAction={openInvest}
-        />
-      ) : (
-        <div className="grid gap-5">
-          <StatBand stats={stats} />
-
-          <div className="grid gap-5 lg:grid-cols-[1fr_1.3fr]">
-            <DonutAllocation
-              items={rows.map((r) => ({ label: r.holding.symbol, paise: r.value }))}
-            />
-
-            <section
-              aria-label={`Holdings (${rows.length})`}
-              className="rounded-2xl border border-border bg-card p-3 shadow-card sm:p-4"
+    <PullToRefresh onRefresh={refreshPortfolio} className="min-h-screen">
+      <PageShell
+        title="Portfolio"
+        subtitle="Your equity holdings, valued at demo last-traded prices. Prices jitter slightly on refresh to simulate a live market feed."
+        active="Portfolio"
+        actions={
+          <>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={handleRefresh}
+              disabled={!ready || rows.length === 0}
+              className={pressable}
             >
-              <h2 className="px-2 pt-1 text-base font-bold text-primary-dark">
-                Holdings ({rows.length})
-              </h2>
-              <ul className="mt-1 grid gap-1">
-                {rows.map((r) => (
-                  <li key={r.holding.id} className="flex items-center gap-1">
-                    <HoldingRow
-                      className="min-w-0 flex-1"
-                      symbol={r.holding.symbol}
-                      name={r.name}
-                      qty={r.holding.qty}
-                      avgPaise={Math.round(r.holding.avgPricePaise)}
-                      ltpPaise={r.ltp}
-                      onClick={() =>
-                        navigate({
-                          to: "/stocks/$symbol",
-                          params: { symbol: r.holding.symbol },
-                        })
-                      }
-                    />
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      aria-label={`Edit ${r.holding.symbol}`}
-                      onClick={() => {
-                        setEditing(r.holding);
-                        setDialogOpen(true);
-                      }}
-                    >
-                      <Pencil className="size-4" />
-                    </Button>
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      aria-label={`Remove ${r.holding.symbol}`}
-                      onClick={() => setDeleting(r.holding)}
-                    >
-                      <Trash2 className="size-4 text-destructive" />
-                    </Button>
-                  </li>
-                ))}
-              </ul>
+              <RefreshCw className="size-4" /> Refresh prices
+            </Button>
+            <Button size="sm" onClick={openInvest} className={pressable}>
+              <Plus className="size-4" /> Invest
+            </Button>
+          </>
+        }
+      >
+        <TickerStrip className="mb-5" />
+        <TestModeBanner className="mb-5" />
+
+        {isError || loadTimedOut ? (
+          <ErrorState
+            title="Couldn't load your portfolio"
+            body={
+              loadTimedOut && !isError
+                ? "Loading is taking too long — your connection may be stuck. Try again."
+                : "Your holdings couldn't be fetched. Check your connection and try again."
+            }
+            onRetry={retryLoad}
+          />
+        ) : !ready ? (
+          <div className="grid gap-5">
+            <Skeleton className="h-24 rounded-2xl" />
+            <div className="grid gap-5 lg:grid-cols-[1fr_1.3fr]">
+              <Skeleton className="h-80 rounded-2xl" />
+              <Skeleton className="h-80 rounded-2xl" />
+            </div>
+          </div>
+        ) : rows.length === 0 ? (
+          <EmptyState
+            title="No holdings yet"
+            body="Invest in a stock to start building your portfolio — every order is simulated and posts to your shared ledger, so your money view always stays in sync."
+            actionLabel="Invest in a stock"
+            onAction={openInvest}
+          />
+        ) : (
+          <div className="grid gap-5">
+            <StatBand stats={stats} />
+
+            <div className="grid gap-5 lg:grid-cols-[1fr_1.3fr]">
+              {chartsReady && (
+                <Suspense fallback={<ChartSkeleton className="h-72" />}>
+                  <DonutAllocation
+                    items={rows.map((r) => ({ label: r.holding.symbol, paise: r.value }))}
+                  />
+                </Suspense>
+              )}
+
+              <section
+                aria-label={`Holdings (${rows.length})`}
+                className="rounded-[14px] border border-border bg-card p-4 shadow-card sm:p-5"
+              >
+                <h2 className="px-2 pt-1 text-base font-bold text-primary-dark">
+                  Holdings ({rows.length})
+                </h2>
+                <ul className="mt-1 grid gap-1">
+                  {rows.map((r) => (
+                    <li key={r.holding.id} className="flex items-center gap-1">
+                      <HoldingRow
+                        className="min-w-0 flex-1"
+                        symbol={r.holding.symbol}
+                        name={r.name}
+                        qty={r.holding.qty}
+                        avgPaise={Math.round(r.holding.avgPricePaise)}
+                        ltpPaise={r.ltp}
+                        onClick={() =>
+                          navigate({
+                            to: "/stocks/$symbol",
+                            params: { symbol: r.holding.symbol },
+                          })
+                        }
+                      />
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        aria-label={`Edit ${r.holding.symbol}`}
+                        onClick={() => {
+                          setEditing(r.holding);
+                          setDialogOpen(true);
+                        }}
+                        className={pressable}
+                      >
+                        <Pencil className="size-4" />
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        aria-label={`Remove ${r.holding.symbol}`}
+                        onClick={() => setDeleting(r.holding)}
+                        className={pressable}
+                      >
+                        <Trash2 className="size-4 text-destructive" />
+                      </Button>
+                    </li>
+                  ))}
+                </ul>
+              </section>
+            </div>
+
+            {/* Dividends */}
+            <section className="rounded-[14px] border border-border bg-card p-4 shadow-card sm:p-5">
+              <h2 className="mb-1 text-base font-bold text-primary-dark">Dividends</h2>
+              <p className="mb-4 text-sm text-muted-foreground">
+                Expected annual dividends at current prices. Tap a yield to adjust it per holding —
+                FinVerse remembers your overrides.
+              </p>
+              <div className="mb-4 grid gap-4 sm:grid-cols-2">
+                <Card className="shadow-card">
+                  <CardContent className="pt-5">
+                    <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                      Expected annual dividends
+                    </p>
+                    <p className="mt-1.5 text-2xl font-black text-primary-dark tabular-nums">
+                      {formatINR(dividendTotals.annual)}
+                    </p>
+                  </CardContent>
+                </Card>
+                <Card className="shadow-card">
+                  <CardContent className="pt-5">
+                    <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                      Portfolio dividend yield
+                    </p>
+                    <p className="mt-1.5 text-2xl font-black text-primary-dark tabular-nums">
+                      {dividendTotals.avgYieldPct.toFixed(2)}%
+                    </p>
+                  </CardContent>
+                </Card>
+              </div>
+              <div className="overflow-x-auto">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Stock</TableHead>
+                      <TableHead className="text-right">Yield %</TableHead>
+                      <TableHead className="text-right">Est. annual dividend</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {dividendRows.map((r) => (
+                      <TableRow key={r.holding.id}>
+                        <TableCell>
+                          <Link
+                            to="/stocks/$symbol"
+                            params={{ symbol: r.holding.symbol }}
+                            className="font-bold text-primary hover:underline"
+                          >
+                            {r.holding.symbol}
+                          </Link>
+                          <div className="text-xs text-muted-foreground">{r.name}</div>
+                        </TableCell>
+                        <TableCell className="text-right">
+                          <label
+                            className="sr-only"
+                            htmlFor={`div-yield-${r.holding.id}`}
+                          >{`Dividend yield for ${r.holding.symbol}`}</label>
+                          <input
+                            id={`div-yield-${r.holding.id}`}
+                            type="number"
+                            min={0}
+                            max={100}
+                            step={0.1}
+                            value={r.yieldPct}
+                            onChange={(e) => setDividendYield(r.holding.id, Number(e.target.value))}
+                            className="w-20 rounded-md border border-input bg-background px-2 py-1 text-right text-sm tabular-nums text-foreground focus:border-ring focus:outline-none"
+                          />
+                        </TableCell>
+                        <TableCell className="text-right font-semibold tabular-nums">
+                          {formatINR(r.annualPaise)}
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </div>
             </section>
           </div>
+        )}
 
-          {/* Dividends */}
-          <section className="rounded-2xl border border-border bg-card p-5 shadow-card sm:p-6">
-            <h2 className="mb-1 text-base font-bold text-primary-dark">Dividends</h2>
-            <p className="mb-4 text-sm text-muted-foreground">
-              Expected annual dividends at current prices. Tap a yield to adjust it per holding —
-              FinVerse remembers your overrides.
-            </p>
-            <div className="mb-4 grid gap-4 sm:grid-cols-2">
-              <Card className="shadow-card">
-                <CardContent className="pt-5">
-                  <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-                    Expected annual dividends
-                  </p>
-                  <p className="mt-1.5 text-2xl font-black text-primary-dark tabular-nums">
-                    {formatINR(dividendTotals.annual)}
-                  </p>
-                </CardContent>
-              </Card>
-              <Card className="shadow-card">
-                <CardContent className="pt-5">
-                  <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-                    Portfolio dividend yield
-                  </p>
-                  <p className="mt-1.5 text-2xl font-black text-primary-dark tabular-nums">
-                    {dividendTotals.avgYieldPct.toFixed(2)}%
-                  </p>
-                </CardContent>
-              </Card>
-            </div>
-            <div className="overflow-x-auto">
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Stock</TableHead>
-                    <TableHead className="text-right">Yield %</TableHead>
-                    <TableHead className="text-right">Est. annual dividend</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {dividendRows.map((r) => (
-                    <TableRow key={r.holding.id}>
-                      <TableCell>
-                        <Link
-                          to="/stocks/$symbol"
-                          params={{ symbol: r.holding.symbol }}
-                          className="font-bold text-primary hover:underline"
-                        >
-                          {r.holding.symbol}
-                        </Link>
-                        <div className="text-xs text-muted-foreground">{r.name}</div>
-                      </TableCell>
-                      <TableCell className="text-right">
-                        <label
-                          className="sr-only"
-                          htmlFor={`div-yield-${r.holding.id}`}
-                        >{`Dividend yield for ${r.holding.symbol}`}</label>
-                        <input
-                          id={`div-yield-${r.holding.id}`}
-                          type="number"
-                          min={0}
-                          max={100}
-                          step={0.1}
-                          value={r.yieldPct}
-                          onChange={(e) => setDividendYield(r.holding.id, Number(e.target.value))}
-                          className="w-20 rounded-md border border-input bg-background px-2 py-1 text-right text-sm tabular-nums text-foreground focus:border-ring focus:outline-none"
-                        />
-                      </TableCell>
-                      <TableCell className="text-right font-semibold tabular-nums">
-                        {formatINR(r.annualPaise)}
-                      </TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-            </div>
-          </section>
-        </div>
-      )}
-
-      {/* Invest: stock search -> stock detail */}
-      <Dialog open={investOpen} onOpenChange={setInvestOpen}>
-        <DialogContent className="sm:max-w-md">
-          <DialogHeader>
-            <DialogTitle>Invest</DialogTitle>
-            <DialogDescription>
+        {/* Invest: stock search -> stock detail (bottom sheet on all viewports) */}
+        <BottomSheet
+          open={investOpen}
+          onClose={() => setInvestOpen(false)}
+          title="Invest"
+          showCloseButton
+        >
+          <div className="px-1 pb-2">
+            <p className="pb-3 text-sm text-muted-foreground">
               Pick a stock to open its detail page and place a simulated order.
-            </DialogDescription>
-          </DialogHeader>
-          <SearchDropdown
-            groups={investGroups}
-            value={investQuery}
-            onChange={setInvestQuery}
-            onSelect={(item) => goToStock(item.id)}
-            placeholder="Search stocks by name, symbol, sector…"
-          />
-          <p className="text-xs text-muted-foreground">
-            Prices shown are simulated demo prices — not live market data.
-          </p>
-        </DialogContent>
-      </Dialog>
+            </p>
+            <SearchDropdown
+              groups={investGroups}
+              value={investQuery}
+              onChange={setInvestQuery}
+              onSelect={(item) => goToStock(item.id)}
+              placeholder="Search stocks by name, symbol, sector…"
+            />
+            <p className="pt-3 text-xs text-muted-foreground">
+              Prices shown are simulated demo prices — not live market data.
+            </p>
+          </div>
+        </BottomSheet>
 
-      <HoldingDialog
-        open={dialogOpen}
-        onOpenChange={setDialogOpen}
-        {...(editing ? { holding: editing } : {})}
-      />
+        <HoldingDialog
+          open={dialogOpen}
+          onOpenChange={setDialogOpen}
+          {...(editing ? { holding: editing } : {})}
+        />
 
-      <AlertDialog open={!!deleting} onOpenChange={(o) => !o && setDeleting(undefined)}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>Remove {deleting?.symbol}?</AlertDialogTitle>
-            <AlertDialogDescription>
-              This deletes the holding from your portfolio. It cannot be undone.
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel>Cancel</AlertDialogCancel>
-            <AlertDialogAction
-              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
-              onClick={() =>
-                deleting &&
-                deleteHolding.mutate(deleting.id, {
-                  onSuccess: () => {
-                    toast.success(`${deleting.symbol} removed from portfolio`);
-                    setDeleting(undefined);
-                  },
-                  onError: () => toast.error("Couldn't remove — try again."),
-                })
-              }
-            >
-              Remove
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
-    </PageShell>
+        <AlertDialog open={!!deleting} onOpenChange={(o) => !o && setDeleting(undefined)}>
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle>Remove {deleting?.symbol}?</AlertDialogTitle>
+              <AlertDialogDescription>
+                This deletes the holding from your portfolio. It cannot be undone.
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel>Cancel</AlertDialogCancel>
+              <AlertDialogAction
+                className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                onClick={() =>
+                  deleting &&
+                  deleteHolding.mutate(deleting.id, {
+                    onSuccess: () => {
+                      toast.success(`${deleting.symbol} removed from portfolio`);
+                      setDeleting(undefined);
+                    },
+                    onError: () => toast.error("Couldn't remove — try again."),
+                  })
+                }
+              >
+                Remove
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
+      </PageShell>
+    </PullToRefresh>
   );
 }

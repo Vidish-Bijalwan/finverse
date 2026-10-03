@@ -12,6 +12,7 @@ import type {
 } from "./types";
 import {
   addFundsToGoal,
+  balanceForAccount,
   defaultAccountId,
   deleteAccount,
   deleteCustomCategory,
@@ -20,7 +21,6 @@ import {
   deleteRecurringRule,
   deleteTransaction,
   ensureRecurringPosted,
-  fetchAccountSummaries,
   fetchAccounts,
   fetchAllTags,
   fetchBills,
@@ -281,9 +281,30 @@ export function useAccounts() {
 
 /** Accounts with live balances (derived from transactions). */
 export function useAccountSummaries(): ReturnType<typeof useQuery<AccountSummary[]>> {
+  const qc = useQueryClient();
   return useQuery({
     queryKey: QK.accountSummaries,
-    queryFn: () => fetchAccountSummaries(),
+    queryFn: async () => {
+      // Share the canonical unfiltered-transactions query instead of firing a
+      // second full-table fetch: pages that mount useTransactions() alongside
+      // this hook (dashboard, portfolio) now issue ONE transactions request —
+      // React Query dedupes the in-flight fetchQuery with the mounted query.
+      // Key shape is unchanged (["finverse", "transactions", "all"]).
+      const [accounts, transactions] = await Promise.all([
+        fetchAccounts(),
+        qc.fetchQuery({
+          queryKey: [...QK.transactions, "all"],
+          queryFn: async () => {
+            await ensureRecurringPosted();
+            return fetchTransactions();
+          },
+        }),
+      ]);
+      return accounts.map((account) => ({
+        account,
+        balancePaise: balanceForAccount(account, transactions),
+      }));
+    },
   });
 }
 

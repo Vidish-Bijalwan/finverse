@@ -5,13 +5,7 @@ import { Bell, BellRing, Clock3, Eye, Plus, RefreshCw, Trash2, X } from "lucide-
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
+import { BottomSheet } from "@/components/shell/BottomSheet";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
@@ -22,7 +16,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
-import { EmptyState, ErrorState, MarketRow } from "@/components/fv";
+import { EmptyState, ErrorState, MarketRow, pressable } from "@/components/fv";
 import { PageShell } from "@/components/markets/PageShell";
 import { formatINR } from "@/lib/finance/format";
 import { STOCKS, getStock } from "@/lib/market/data";
@@ -162,7 +156,13 @@ function WatchlistPage() {
       subtitle="Track stocks you care about. All prices are simulated — not live market data. Set above/below price alerts and FinVerse flags them for you."
       active="Watchlist"
       actions={
-        <Button variant="outline" size="sm" onClick={handleRefresh} disabled={!ready}>
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={handleRefresh}
+          disabled={!ready}
+          className={pressable}
+        >
           <RefreshCw className={cn("size-4", !reducedMotion && "transition-transform")} />
           Refresh prices
         </Button>
@@ -293,23 +293,18 @@ function WatchlistPage() {
         </ul>
       )}
 
-      {/* Price-alert dialog */}
-      <Dialog
+      {/* Price-alert sheet (bottom sheet on all viewports) */}
+      <BottomSheet
         open={alertDialogSymbol !== null}
-        onOpenChange={(open) => {
-          if (!open) setAlertDialogSymbol(null);
-        }}
+        onClose={() => setAlertDialogSymbol(null)}
+        title={`Price alerts${alertDialogSymbol ? ` · ${alertDialogSymbol}` : ""}`}
+        showCloseButton
       >
-        <DialogContent className="sm:max-w-md">
-          <DialogHeader>
-            <DialogTitle>
-              Price alerts{alertDialogSymbol ? ` · ${alertDialogSymbol}` : ""}
-            </DialogTitle>
-            <DialogDescription>
-              FinVerse flags an alert the next time prices refresh and the condition is met.
-              Simulated prices — not live market data.
-            </DialogDescription>
-          </DialogHeader>
+        <div className="px-1 pb-2">
+          <p className="pb-4 text-sm leading-6 text-muted-foreground">
+            FinVerse flags an alert the next time prices refresh and the condition is met. Simulated
+            prices — not live market data.
+          </p>
 
           {dialogEntry && dialogForm && (
             <div>
@@ -341,6 +336,7 @@ function WatchlistPage() {
                           variant="ghost"
                           size="icon"
                           aria-label={`Delete alert ${a.kind} ${formatINR(a.pricePaise)}`}
+                          className={pressable}
                           onClick={() =>
                             removeAlert.mutateRemoveAlert(dialogEntry.symbol, a.id, {
                               onError: () => toast.error("Couldn't delete the alert."),
@@ -396,14 +392,18 @@ function WatchlistPage() {
                     className="w-32"
                   />
                 </div>
-                <Button size="sm" onClick={() => handleAddAlert(dialogEntry.symbol)}>
+                <Button
+                  size="sm"
+                  onClick={() => handleAddAlert(dialogEntry.symbol)}
+                  className={pressable}
+                >
                   <Plus className="size-4" aria-hidden /> Set alert
                 </Button>
               </div>
             </div>
           )}
-        </DialogContent>
-      </Dialog>
+        </div>
+      </BottomSheet>
 
       <Card className="mt-5 shadow-card">
         <CardContent className="py-4 text-xs leading-5 text-muted-foreground">
