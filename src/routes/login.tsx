@@ -255,11 +255,10 @@ function LoginPage() {
 
           {/* Immersive visual panel — decorative illustration of the product. */}
           <div
-            className="relative hidden min-h-[560px] overflow-hidden lg:block"
+            className="relative hidden min-h-[560px] overflow-hidden bg-[oklch(0.14_0.025_270)] lg:block"
             aria-hidden="true"
           >
             <AmbientOrbs />
-            <div className="absolute inset-0 bg-[oklch(0.13_0.02_270/0.45)]" />
 
             <div className="relative z-10 h-full">
               {/* Net worth card */}
@@ -284,7 +283,7 @@ function LoginPage() {
 
               {/* UPI payment card */}
               <div
-                className="fv-float-soft absolute right-10 top-[40%] w-60 rounded-2xl border border-white/10 bg-white/[0.07] p-4 shadow-[0_20px_60px_-15px_rgba(0,0,0,0.6)] backdrop-blur-md"
+                className="fv-float-soft absolute right-10 top-[40%] w-64 rounded-2xl border border-white/10 bg-white/[0.07] p-4 shadow-[0_20px_60px_-15px_rgba(0,0,0,0.6)] backdrop-blur-md"
                 style={{ animationDelay: "1.6s" }}
               >
                 <div className="flex items-center gap-3">
