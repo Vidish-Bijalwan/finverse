@@ -204,7 +204,7 @@ Set in Vercel (and `.env.example` documents them): `VITE_SUPABASE_URL`, `VITE_SU
 ## 8. UI/UX fintech overhaul (PR #62, merged 2026-10-03)
 
 Full second-pass visual + product redesign per a 28-section overhaul brief
-("remove AI-dashboard look"): **95 files** changed.
+("remove AI-dashboard look"): **103 files** changed.
 
 - **Payments hub** — GPay/Paytm-style: UPI send/request, bank transfer, payment
   links, Razorpay test-mode rail
