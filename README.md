@@ -3,8 +3,8 @@
 **Live demo:** https://finverse-nu.vercel.app/
 
 FinVerse AI is a personal-finance intelligence web app: track spending, manage bills and
-budgets, set savings goals, get explainable AI insights, and analyse investments —
-with a fast, Paytm-inspired mobile-first experience built for India.
+budgets, set savings goals, send UPI-style payments, get explainable AI insights, and
+analyse investments — with a fast, mobile-first experience built for India.
 
 This is **Module 1 (personal expense tracking)** of a 3-module college major project.
 
@@ -18,12 +18,14 @@ This is **Module 1 (personal expense tracking)** of a 3-module college major pro
   swipe-to-delete on mobile, undo-friendly confirms
 - **Smart entry** — natural-language input ("lunch 250 at office"), voice-input fallback,
   mock receipt extraction
+- **Payments** — UPI-style send/request, bank transfer, account-to-account transfers,
+  payment links; balances **block** (never warn) on insufficient funds
 - **Bills** — recurring bills with due dates; "mark paid" creates the matching expense
 - **Budgets** — per-category monthly limits with 80% / 100% progress states
 - **Goals** — savings goals with progress tracking and monthly-pace guidance
 
 ### AI (explainable, no API keys needed)
-- **Insights** — 6+ insight cards computed from your real data, each with evidence
+- **Insights** — insight cards computed from your real data, each with evidence
   ("Why this?") and a confidence level — never a bare unexplained score
 - **AI Chat** — ask "how much did I spend on food this month?" or "what's my savings rate?"
   and get answers computed from your stored data
@@ -32,17 +34,19 @@ This is **Module 1 (personal expense tracking)** of a 3-module college major pro
 
 ### Investments
 - **Portfolio** — holdings with quantity, average price, LTP, value, P&L, allocation donut
-- **Screener** — 41-stock table with sector, P/E, dividend-yield and market-cap filters
+- **Screener** — stock table with sector, P/E, dividend-yield and market-cap filters
 - **Stock detail** — price history chart, 52-week range, fundamentals, rule-based AI analysis
 - **Readiness score** — 0–100 investment-readiness score with explained factor cards
   (emergency-fund coverage, savings rate, budget discipline, fixed-cost ratio)
   plus a "Can I invest ₹X this month?" calculator
 
 ### Experience
-- Paytm-inspired design language: bottom tab bar on mobile, bottom sheets, ₹ formatting
+- Mobile-first fintech design: bottom tab bar on mobile, bottom sheets, ₹ formatting
   (Indian numbering), quick actions, count-up numbers
-- Loading skeletons, empty states with working CTAs, error states, toast notifications
+- Loading skeletons, empty states with working CTAs, **error states with retry**
+  (never fake empty screens), toast notifications
 - Touch gestures, reduced-motion support, responsive desktop / tablet / mobile layouts
+- Security headers in production: CSP, `X-Frame-Options: DENY`, nosniff, strict referrer policy
 
 ---
 
@@ -56,9 +60,38 @@ This is **Module 1 (personal expense tracking)** of a 3-module college major pro
 | Data fetching | TanStack Query |
 | Charts | Recharts |
 | Icons | Lucide |
-| Persistence | Versioned `localStorage` store (`finverse:v1`), amounts in integer paise |
+| Persistence | **Supabase** (Postgres + Auth + Storage); amounts in integer paise |
 | Runtime | Bun |
 | Deployment | Vercel (auto-deploys from `main`) |
+
+## Auth & onboarding
+
+- **Email/password + Google OAuth** via Supabase Auth (`src/lib/auth.tsx` exposes
+  `signUp`, `signIn`, `signInWithGoogle`, `signOut`).
+- Routes: `/login`, `/auth/callback` (PKCE code exchange, hardened against
+  expired/used links), `/forgot-password`, `/auth/reset-password`, `/onboarding`, `/profile`.
+- **Onboarding wizard**: display name → monthly income + payday → budget split
+  (must sum to 100%) → ≥1 goal; completes by setting `profiles.onboarding_completed`.
+- **Route guards** (root route): no session → `/login`; session without completed
+  onboarding → `/onboarding`. App chrome is hidden on auth/onboarding routes.
+- **Profile**: avatar upload (Supabase Storage `avatars` bucket), display name, bio,
+  phone, logout. **App lock**: PBKDF2-SHA256 PIN (weak PINs rejected), auto-lock
+  timeouts, 5-attempt lockout, optional WebAuthn convenience unlock.
+
+## Database
+
+Supabase Postgres, migrations in [`supabase/migrations/`](supabase/migrations/):
+
+| Migration | Contents |
+|---|---|
+| `0001_init.sql` | 11 core tables, RLS owner policies, `set_updated_at()` triggers, `avatars` Storage bucket |
+| `0002_revamp.sql` | Payments + app-lock schema (payment links, payment requests) |
+| `0003_payment_requests.sql` | Payment requests + transaction refunds |
+| `0004_robustness_constraints.sql` | CHECK constraints (positive amounts, `due_day` 1–31, `qty > 0`, saved ≤ target, positive budget limits) |
+
+> ⚠️ **0003 and 0004 have not been applied to the live database yet.** Run them in
+> the Supabase Dashboard → SQL Editor (in order). 0004 validates existing rows —
+> clean any violating rows first (e.g. zero-amount transactions).
 
 ## Design system
 
@@ -79,12 +112,11 @@ primitives live in the `fv` kit: [`src/components/fv/`](src/components/fv/).
 - **Borders**: hairline 1px/1.5px discipline; no heavy dividers.
 
 ### Typography
-- **Fraunces** (serif, `--font-display-serif`) for major headings — editorial voice.
-- **Space Grotesk** (`--font-display`) for all money: `.fv-money` enforces
-  `font-variant-numeric: tabular-nums` so ₹ figures align in columns; `.fv-hero`
-  renders hero numbers at 40px+ with tight tracking.
+- **One typeface: Space Grotesk** (`--font-sans`), body through headings — no serif.
+- `.fv-money` enforces `font-variant-numeric: tabular-nums` so ₹ figures align in
+  columns; `.fv-hero` renders hero numbers at 40px+ with tight tracking.
 - **11px uppercase eyebrows** (`.fv-eyebrow`: 11px/600/uppercase/0.12em tracking)
-  for section labels; **Roboto** for body text.
+  for section labels.
 - Fonts load via Google Fonts `display=swap` with `preconnect` in `__root.tsx`.
 
 ### Components (`src/components/fv/`)
@@ -104,12 +136,18 @@ flash, reduced-motion respected throughout.
 
 ```
 ┌─ Presentation ─────────────────────────────┐
-│ routes/*  (11 routes: /, expenses, bills,   │
-│  budgets, goals, insights, chat, portfolio, │
-│  screener, stocks/$symbol, readiness, more) │
+│ routes/*  (25 page routes: /, accounts,    │
+│  auth/callback, auth/reset-password,       │
+│  bills, budgets, chat, expenses,           │
+│  forgot-password, goals, insights, login,  │
+│  markets, more, notifications, onboarding, │
+│  payments, portfolio, profile, readiness,  │
+│  screener, settings, stocks/$symbol,       │
+│  tools, watchlist; + api/razorpay-webhook) │
 │ components/* (ui, money, ai, markets, shell)│
 ├─ Application ──────────────────────────────┤
 │ lib/finance/hooks.ts  (React Query hooks)  │
+│ lib/finance/orders.ts (order placement)     │
 │ lib/ai/engine.ts      (insight engine)     │
 │ lib/ai/adapter.ts     (LLMAdapter stub)    │
 ├─ Domain ───────────────────────────────────┤
@@ -117,22 +155,24 @@ flash, reduced-motion respected throughout.
 │   Budget, Goal, Holding — paise ints)      │
 │ lib/finance/categories.ts                  │
 ├─ Infrastructure ───────────────────────────┤
-│ lib/finance/store.ts  (localStorage CRUD,  │
-│   seed data, versioned migrations)         │
+│ lib/finance/db.ts     (Supabase queries,   │
+│   snake_case↔camelCase mappers, RLS,       │
+│   React Query wiring; no localStorage)     │
 └────────────────────────────────────────────┘
 ```
 
-**Data flow:** UI → React Query hooks → `store.ts` (CRUD over `localStorage`) →
-components re-render. The AI engine is a pure function over the store snapshot:
-every insight carries its evidence and confidence, and the chat answers are
-computed from the same data — no black boxes.
+**Data flow:** UI → React Query hooks → `db.ts` (Supabase queries, per-user scoped;
+RLS enforces it server-side) → components re-render. The AI engine is a pure
+function over the loaded snapshot: every insight carries its evidence and
+confidence, and the chat answers are computed from the same data — no black boxes.
 
 **Money handling:** all amounts are stored and computed as integer paise to avoid
 float errors; formatting (`formatINR`) applies the Indian digit grouping (lakh/crore).
+Amount parsing is strict (rejects `1e5`, `0x10`, negatives).
 
-**AI design:** deterministic, explainable rules today (works offline, zero cost, no
-keys). The `LLMAdapter` interface mirrors the engine's input/output contract so a
-real model can replace or augment rules later.
+**AI design:** deterministic, explainable rules today (zero cost, no keys). The
+`LLMAdapter` interface mirrors the engine's input/output contract so a real model
+can replace or augment rules later.
 
 ---
 
@@ -148,8 +188,9 @@ src/
     markets/         # Portfolio, screener, stock detail
     shell/           # App header, bottom tabs, navigation
   lib/
-    finance/         # types, store, hooks, categories, format
+    finance/         # types, db (Supabase), hooks, orders, categories, format
     ai/              # engine (insights), adapter (LLM stub)
+    auth.tsx         # Supabase auth provider
 public/              # favicon.svg, robots.txt
 PROGRESS_REPORT.md   # Full build log: what shipped, what remains, system design
 ```
@@ -168,17 +209,19 @@ bun run lint       # eslint
 bun run build      # production build (vite + nitro)
 ```
 
-No environment variables or API keys are required — the app seeds realistic demo
-data on first launch. Your data stays in your browser's `localStorage`.
+Set in `.env` (see [`.env.example`](.env.example)): `VITE_SUPABASE_URL`,
+`VITE_SUPABASE_ANON_KEY`. Google OAuth additionally needs a Google Cloud OAuth
+client configured in Supabase Dashboard → Authentication → Providers, with
+redirect URL `<site-url>/auth/callback`.
 
 ## Testing
 
 ```sh
-bun run test:unit     # vitest — unit tests (67 passing, incl. PIN crypto,
-                      # webhook HMAC vectors, order math, keypad reducer)
+bun run test:unit     # vitest — unit tests (306 passing: order math, PIN policy,
+                      # amount parsing, webhook HMAC vectors, keypad reducer…)
 bun run test:e2e      # playwright — browser E2E (chromium + Pixel 7 mobile)
-bun x tsc --noEmit    # typecheck (53 pre-existing errors in untouched legacy
-                      # files; zero in revamp/polish/fv code)
+bun x tsc --noEmit    # typecheck (51 pre-existing errors in untouched legacy
+                      # files; zero in touched code)
 bun x eslint          # lint — 0 errors
 bun run build         # production build (vite + nitro)
 ```
@@ -217,6 +260,7 @@ Optional PIN lock (settings → App lock):
 
 - PIN is derived with **PBKDF2-SHA256, 100,000 iterations** (WebCrypto) — only
   salt + hash are stored, never the PIN.
+- Weak PINs rejected (`000000`, `123456`, repeated digits, sequential runs).
 - **Auto-lock timeouts**: 30s / 1m / 2m / 5m / 10m of background inactivity
   (in-memory last-active tracking in `__root.tsx`).
 - **5 wrong attempts → 30s lockout.**
@@ -232,21 +276,31 @@ Pushes to `main` auto-deploy to production on Vercel:
 
 - **Production:** https://finverse-nu.vercel.app/
 - **Repo:** https://github.com/Vidish-Bijalwan/finverse
+- Security headers ship via `vercel.json` (CSP, `X-Frame-Options: DENY`,
+  `X-Content-Type-Options: nosniff`, `Referrer-Policy`).
 
 ---
 
 ## Status & roadmap
 
-All 14 tracked issues (#2–#15) are closed; 12 PRs merged. See
-[PROGRESS_REPORT.md](./PROGRESS_REPORT.md) for the full build log, system design,
-verification evidence, and what's next.
+FinVerse has graduated from a localStorage demo to a real authenticated product:
+Supabase Auth + Postgres + Storage are live in production, all data is per-user
+with RLS, and a deep security/robustness audit (2026-10-04) left no unresolved
+code-side findings. See [PROGRESS_REPORT.md](./PROGRESS_REPORT.md) for the full
+build log, system design, verification evidence, and owner actions still pending.
+
+**Pending owner actions:**
+- Run migrations `0003` + `0004` in the Supabase SQL Editor (payment requests /
+  refunds need 0003)
+- Supabase Dashboard → Authentication → Rate Limits (signup rate limiting)
+- Decide on "Confirm email" (kills account enumeration, adds signup friction)
+- Enable breached-password check + min length 8 in Auth → Password Protection
 
 **Planned next steps (Modules 2–3 and hardening):**
-- Real backend + auth (currently localStorage-only, single device)
 - Plug a real LLM into `LLMAdapter` (Ollama / OpenRouter) for open-ended chat
-- Live market-data feed (currently realistic seed data)
+- Live market-data feed (currently simulated with disclosures)
 - PWA / offline install, push reminders for bills
-- Export / import (CSV), multi-currency
+- Multi-currency, live end-to-end Razorpay test keys
 
 ---
 
