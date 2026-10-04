@@ -4,7 +4,7 @@
 **Repo:** https://github.com/Vidish-Bijalwan/finverse
 **Live site:** https://finverse-nu.vercel.app/
 **Stack:** TanStack Start · React 19 · TypeScript · Tailwind CSS 4 · shadcn/ui · TanStack Query · Recharts · Bun
-**Report date:** 2026-10-03
+**Report date:** 2026-10-04
 
 ---
 
@@ -137,10 +137,10 @@ fully deterministic — which is what makes every AI output explainable.
 ## 4. What remains / known limitations
 
 **Remaining work (Modules 2–3 and hardening):**
-1. Real backend + auth — data is localStorage-only (single browser, no sync)
+1. ~~Real backend + auth~~ — **done 2026-10-03** (Supabase Postgres + Auth + Storage live in production; RLS per-user)
 2. Real LLM integration via `LLMAdapter` (Ollama / OpenRouter) for open-ended chat
-3. Live market-data feed — prices/fundamentals are realistic seed data (some avg buy
-   prices are intentionally jittered/unrealistic)
+3. Live market-data feed — prices/fundamentals are simulated with disclosures
+   (some avg buy prices are intentionally jittered/unrealistic)
 4. PWA support, bill-due push reminders
 5. CSV export / import, multi-currency
 6. 390px mobile interaction test (bottom tabs verified in markup, not yet
@@ -149,8 +149,8 @@ fully deterministic — which is what makes every AI output explainable.
    (`exactOptionalPropertyTypes`, index-signature access) — runtime-safe, but worth
    cleaning before submission
 
-**Out of scope by design:** no real payments, no bank linking, no personal data
-leaves the device.
+**Out of scope by design:** no bank linking; personal data lives in Supabase
+(EU/Mumbai region) under RLS — never in third-party analytics.
 
 ---
 
@@ -198,3 +198,93 @@ Set in Vercel (and `.env.example` documents them): `VITE_SUPABASE_URL`, `VITE_SU
 
 ### Verification
 `bun run lint` 0 errors · `bun x tsc --noEmit` clean on all touched files (remaining errors are pre-existing strict-mode issues in untouched files, byte-identical to main) · `bun run build` green. End-to-end auth flow (signup → onboarding → login) needs a live check once env vars + SQL migration are in place.
+
+---
+
+## 8. UI/UX fintech overhaul (PR #62, merged 2026-10-03)
+
+Full second-pass visual + product redesign per a 28-section overhaul brief
+("remove AI-dashboard look"): **103 files** changed.
+
+- **Payments hub** — GPay/Paytm-style: UPI send/request, bank transfer, payment
+  links, Razorpay test-mode rail
+- **Markets + portfolio** — Groww-style hierarchy: indices/watchlist groups,
+  stock detail pages with charts and fundamentals, investment summary, compact
+  cash-flow analytics
+- **Dashboard** — net-worth hero with privacy toggle, Groww-style section
+  hierarchy
+- **Experience** — mobile bottom navigation, activity detail sheets,
+  reduced-motion-aware microinteractions
+
+Deploy prerequisite: `supabase/migrations/0003_payment_requests.sql`
+(payment_requests / refunds tables).
+
+## 9. Auth, logo and Settings fixes (PR #63, merged 2026-10-03)
+
+Three production issues Vidish reported:
+
+1. **Logo mark invisible in light mode** — the header icon used
+   `text-primary-foreground` (near-black on a near-black mark). New dedicated
+   `--logo-mark-fg` token: white in light mode, dark ink in dark mode.
+2. **Hardened Google PKCE callback** — checks for an existing session before
+   exchanging the OAuth code, rechecks after a failed exchange, strips the
+   one-time `?code=` from history, and replaces raw "PKCE code verifier not
+   found" copy with friendly expired/used-link messaging.
+3. **Settings entry** added to the avatar/account menu (desktop + mobile).
+
+## 10. Immersive login (PRs #64/#65, merged 2026-10-03)
+
+Redesigned login/signup per Vidish's direction (animated "light color bulbs"):
+
+- **Animated background** — five large blurred light orbs (mint, electric blue,
+  violet, warm amber, teal) drifting on independent paths over deep ink, with a
+  vignette. Fully static under `prefers-reduced-motion`.
+- **Desktop split card** — auth form on the left; floating glass widgets on the
+  right (net-worth + sparkline, UPI payment confirmation, monthly SIP).
+  PR #65 added a deep-ink panel base so orbs glow through instead of washing
+  out, and widened the UPI card so nothing truncates.
+- Mobile stays a single-column form with ambient orbs.
+
+## 11. Deep audit + robustness pass (PR #66, merged 2026-10-04)
+
+A deep audit of production (`main@50753aa1`, 2026-10-04) probed auth, RLS, CRUD,
+headers and calculators across the whole app. Result: **P0: 0, P1: 1, P2: 7,
+P3: 10**. RLS isolation held on all 9 tested tables; auth lifecycle, refresh
+rotation and logout revocation were sound; SIP math independently verified.
+
+PR #66 fixed every code-side finding (43 files, **306/306 unit tests**):
+
+- **Forgot-password flow** — `/forgot-password` (email → reset link) +
+  `/auth/reset-password` (recovery-session check, min-8 password, friendly
+  expired-link copy); "Forgot password?" link on the login form
+- **Error states** — expenses/budgets/goals/bills render `ErrorState` with retry
+  on query failure (no more fake empty states); insights no longer goes blank;
+  notifications distinguishes loading / error / empty
+- **Balance blocking** — UPI, bank transfer, account-to-account and stock BUY
+  disable proceed with an inline "Insufficient balance" error; mutations throw
+  as defense-in-depth (new pure `canAfford()` + tests)
+- **Security headers** — `vercel.json`: CSP, `X-Frame-Options: DENY`, nosniff,
+  strict referrer policy (verified live on production)
+- **Password policy** — min 8 + 15-entry common-password blocklist, wired into
+  signup and reset; light client-side signup throttle (3/10 min) as
+  defense-in-depth
+- **P3 batch** — strict amount parsing (rejects `1e5`, `0x10`), weak-PIN
+  rejection, expense date clamped to today, Indian mobile validation
+  (`[6-9]\d{9}`) on profile + UPI, backup-restore validation, double-submit
+  guards on all 14 money-mutation buttons, new idempotent migration
+  `0004_robustness_constraints.sql` (CHECK constraints)
+
+**Remaining owner actions (Supabase dashboard — not fixable in code):**
+
+1. Run migrations **0003 + 0004** in the SQL Editor (payment requests/refunds
+   need 0003; 0004 validates existing rows — clean violating rows first)
+2. Authentication → **Rate Limits** — the P1: 20 scripted signups completed in
+   ~17s with no throttling
+3. Decide on **"Confirm email"** — enabling it kills the signup account-
+   enumeration oracle, at the cost of added signup friction
+4. Auth → Password Protection — enable **HaveIBeenPwned check** + minimum
+   length 8
+5. Delete the 23 audit-generated QA Auth accounts (`audit-probe-1..20`,
+   `audit-deep1/2`, `weakpw2` — all `@finverse.app`) plus earlier QA accounts
+
+Full audit report: `~/workspace/finverse-audit/deep-audit-report.md`
