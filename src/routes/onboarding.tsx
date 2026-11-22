@@ -267,7 +267,9 @@ function OnboardingWizard({ userId }: { userId: string }) {
 
       toast.success("Welcome to FinVerse — you're all set.");
       // Full reload so the auth layer re-reads the completed profile.
-      window.location.href = "/";
+      // BASE_URL is "/finverse/" on GitHub Pages ("/" in dev) — a bare "/" would
+      // leave the app for the domain root.
+      window.location.href = import.meta.env.BASE_URL;
     } catch (e) {
       fail("Couldn't finish setup.", e);
       setSaving(false);

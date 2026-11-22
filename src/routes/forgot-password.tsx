@@ -50,7 +50,9 @@ function ForgotPasswordPage() {
     try {
       const supabase = getSupabase();
       const { error } = await supabase.auth.resetPasswordForEmail(email.trim(), {
-        redirectTo: window.location.origin + "/auth/reset-password",
+        // BASE_URL is "/finverse/" on GitHub Pages ("/" in dev) — the reset link
+        // must land inside the app's subpath or it 404s.
+        redirectTo: window.location.origin + import.meta.env.BASE_URL + "auth/reset-password",
       });
       if (error) throw new Error(friendlyError(error.message));
       setSent(true);

@@ -16,6 +16,12 @@ dist-ssr
 .nitro
 *.local
 
+# Env files — never commit (the Pages build needs a local .env with the
+# Supabase publishable key; the values ship in the client bundle, but the
+# file itself must stay out of git).
+.env
+.env.*
+
 # TanStack router codegen — regenerated on every build; never commit
 src/routeTree.gen.ts
 

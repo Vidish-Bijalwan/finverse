@@ -996,71 +996,76 @@ function RazorpayTab() {
     );
   }
 
-  if (statusQuery.isError) {
-    return (
-      <ErrorState
-        title="Couldn't check Razorpay status"
-        body="We couldn't reach the server to check whether Razorpay test mode is configured."
-        onRetry={() => statusQuery.refetch()}
-      />
-    );
-  }
-
-  if (!configured) {
+  // A status-query error and "not configured" are the same honest state: the rail
+  // is unavailable. The difference is WHY — on a static host (GitHub Pages) there
+  // is no server at all, so the status RPC 404s and the query errors; with a
+  // server running, an error-free `configured: false` means the keys aren't set.
+  // Either way the tab says so plainly instead of showing a permanent error screen.
+  if (statusQuery.isError || !configured) {
+    const noServer = statusQuery.isError;
     return (
       <div className="flex flex-col gap-4 rounded-[14px] border border-border bg-card p-4 shadow-card sm:p-6">
         <div className="grid size-14 place-items-center rounded-full bg-tint">
           <CreditCard className="size-6 text-primary" aria-hidden />
         </div>
-        <h2 className="text-lg font-bold text-foreground">Razorpay test keys not configured</h2>
+        <h2 className="text-lg font-bold text-foreground">
+          {noServer
+            ? "Razorpay test mode isn't available on this deployment"
+            : "Razorpay test keys not configured"}
+        </h2>
         <p className="text-sm leading-6 text-muted-foreground">
-          Nothing here is a real payment — and nothing here fakes one either. Until the test-mode
-          keys are set, this rail stays honestly unavailable.
+          {noServer
+            ? "Razorpay test mode needs a server and isn't available on this deployment — it needs server-only keys and a webhook, and this deployment has no server. The simulated payments above work without it."
+            : "Nothing here is a real payment — and nothing here fakes one either. Until the test-mode keys are set, this rail stays honestly unavailable."}
         </p>
-        <div className="overflow-hidden rounded-[14px] border border-border">
-          <button
-            type="button"
-            aria-expanded={setupOpen}
-            onClick={() => setSetupOpen((o) => !o)}
-            className={cn(
-              pressable,
-              "flex w-full items-center justify-between px-4 py-3 text-left",
-            )}
-          >
-            <span className="text-sm font-bold text-foreground">Setup instructions</span>
-            <ChevronDown
+        {/* Setup instructions only make sense when a server exists. On a static
+            deployment there is nothing to configure and no webhook URL to show. */}
+        {!noServer && (
+          <div className="overflow-hidden rounded-[14px] border border-border">
+            <button
+              type="button"
+              aria-expanded={setupOpen}
+              onClick={() => setSetupOpen((o) => !o)}
               className={cn(
-                "size-4 text-muted-foreground transition-transform duration-200",
-                setupOpen && "rotate-180",
+                pressable,
+                "flex w-full items-center justify-between px-4 py-3 text-left",
               )}
-              aria-hidden
-            />
-          </button>
-          {setupOpen && (
-            <div className="flex flex-col gap-3 border-t border-border px-4 py-4">
-              <p className="text-sm leading-6 text-muted-foreground">
-                Razorpay test mode needs server-only keys. Add{" "}
-                <code className="rounded bg-muted px-1.5 py-0.5 font-mono text-xs">
-                  RAZORPAY_KEY_ID
-                </code>{" "}
-                and{" "}
-                <code className="rounded bg-muted px-1.5 py-0.5 font-mono text-xs">
-                  RAZORPAY_KEY_SECRET
-                </code>{" "}
-                (test-mode keys only) to the server environment, plus{" "}
-                <code className="rounded bg-muted px-1.5 py-0.5 font-mono text-xs">
-                  SUPABASE_SERVICE_ROLE_KEY
-                </code>{" "}
-                for the webhook. Then register the webhook URL in the Razorpay dashboard (test
-                mode):
-              </p>
-              <code className="block truncate rounded-xl bg-muted px-3 py-2 font-mono text-xs text-foreground">
-                {typeof window !== "undefined" ? window.location.origin : ""}
-                /api/razorpay-webhook
-              </code>
-            </div>
-          )}
-        </div>
+            >
+              <span className="text-sm font-bold text-foreground">Setup instructions</span>
+              <ChevronDown
+                className={cn(
+                  "size-4 text-muted-foreground transition-transform duration-200",
+                  setupOpen && "rotate-180",
+                )}
+                aria-hidden
+              />
+            </button>
+            {setupOpen && (
+              <div className="flex flex-col gap-3 border-t border-border px-4 py-4">
+                <p className="text-sm leading-6 text-muted-foreground">
+                  Razorpay test mode needs server-only keys. Add{" "}
+                  <code className="rounded bg-muted px-1.5 py-0.5 font-mono text-xs">
+                    RAZORPAY_KEY_ID
+                  </code>{" "}
+                  and{" "}
+                  <code className="rounded bg-muted px-1.5 py-0.5 font-mono text-xs">
+                    RAZORPAY_KEY_SECRET
+                  </code>{" "}
+                  (test-mode keys only) to the server environment, plus{" "}
+                  <code className="rounded bg-muted px-1.5 py-0.5 font-mono text-xs">
+                    SUPABASE_SERVICE_ROLE_KEY
+                  </code>{" "}
+                  for the webhook. Then register the webhook URL in the Razorpay dashboard (test
+                  mode):
+                </p>
+                <code className="block truncate rounded-xl bg-muted px-3 py-2 font-mono text-xs text-foreground">
+                  {typeof window !== "undefined" ? window.location.origin : ""}
+                  /api/razorpay-webhook
+                </code>
+              </div>
+            )}
+          </div>
+        )}
       </div>
     );
   }

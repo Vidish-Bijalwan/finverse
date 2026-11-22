@@ -8,6 +8,10 @@ export const getRouter = () => {
   const router = createRouter({
     routeTree,
     context: { queryClient },
+    // GitHub Pages project site lives at /finverse/ — all in-app routes are relative
+    // to this base. Matches vite.base, so dev (served at /finverse/) and the Pages
+    // build agree; the router strips the prefix on input and prepends it on output.
+    basepath: "/finverse",
     scrollRestoration: true,
     defaultPreloadStaleTime: 0,
   });

@@ -190,7 +190,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const supabase = getSupabase();
     const { error } = await supabase.auth.signInWithOAuth({
       provider: "google",
-      options: { redirectTo: window.location.origin + "/auth/callback" },
+      // BASE_URL is "/finverse/" on GitHub Pages ("/" in dev) — the callback must
+      // land inside the app's subpath or Supabase redirects to a 404.
+      options: { redirectTo: window.location.origin + import.meta.env.BASE_URL + "auth/callback" },
     });
     if (error) throw new Error(error.message || "Google sign in failed. Please try again.");
   }, []);

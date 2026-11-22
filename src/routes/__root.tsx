@@ -84,12 +84,12 @@ function ErrorComponent({ error, reset }: { error: unknown; reset: () => void })
           >
             Try again
           </button>
-          <a
-            href="/"
+          <Link
+            to="/"
             className="inline-flex items-center justify-center rounded-md border border-input bg-background px-4 py-2 text-sm font-medium text-foreground transition-colors hover:bg-accent"
           >
             Go home
-          </a>
+          </Link>
         </div>
       </div>
     </div>
@@ -108,6 +108,15 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
       { property: "og:title", content: "FinVerse AI" },
       { name: "twitter:card", content: "summary_large_image" },
       { name: "twitter:site", content: "@finverse" },
+      // GitHub Pages cannot set response headers, so the CSP + referrer policy from
+      // vercel.json travel as meta tags instead (verbatim policy). X-Frame-Options
+      // has no meta equivalent and is lost on Pages — accepted risk, see MIGRATION.md.
+      {
+        httpEquiv: "Content-Security-Policy",
+        content:
+          "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; connect-src 'self' https://txktgmzgpvymmostpmol.supabase.co https://accounts.google.com https://o4511336518320128.ingest.us.sentry.io; font-src 'self' https://fonts.gstatic.com; img-src 'self' data: https:; frame-src https://accounts.google.com",
+      },
+      { name: "referrer", content: "strict-origin-when-cross-origin" },
     ],
     links: [
       {
@@ -120,7 +129,9 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
         rel: "stylesheet",
         href: "https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&display=swap",
       },
-      { rel: "icon", href: "/favicon.svg", type: "image/svg+xml" },
+      // BASE_URL is "/finverse/" on GitHub Pages ("/" in dev) — Vite does not
+      // rewrite literal href strings, so the subpath must be added by hand.
+      { rel: "icon", href: import.meta.env.BASE_URL + "favicon.svg", type: "image/svg+xml" },
     ],
   }),
   shellComponent: RootShell,
