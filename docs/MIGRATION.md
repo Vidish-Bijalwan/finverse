@@ -62,9 +62,9 @@ none landed in any of the new directories.
 | Old phase                                                                                                                                                               | Old implementation                                                    | New location / status                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                           |
 | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | Phase 0 — Deterministic core (SMA/EMA/RSI/MACD, CAGR/XIRR, Markowitz + Sharpe)                                                                                          | NestJS services + `apps/web/lib/`                                     | **Done in M1:** ported to `src/lib/calc/indicators.ts`, `src/lib/calc/portfolio-math.ts`, `src/lib/calc/optimization.ts` (pure functions, 37 new vitest tests; full suite 343/343 green). Original preserved in `reference/nestjs-backend/src/` and `reference/web-math/`. **Live market data done in M2 (see §7):** Yahoo quotes + history via the `market-data` Supabase Edge Function, wired behind the `getQuote`/`genHistory` seams with the simulated feed as fallback.                                                                                                                                   |
-| Phase 1 — LLM foundation (OpenRouter provider, 7 typed tools, tool loop, rate limit + cache)                                                                            | NestJS `ai` module (`ai.provider.ts`, `ai.tools.ts`, `ai.service.ts`) | Planned `OpenRouterAdapter` on `src/lib/ai/llm.ts` + a server function.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                         |
-| Phase 2 — RAG (pgvector/Neon, embeddings, Yahoo news, Smart Screener, `searchKnowledge` tool)                                                                           | NestJS + Neon pgvector                                                | Planned Supabase pgvector migration.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            |
-| Phase 3 — Guardrails (verification engine re-checking numeric claims against deterministic evidence, money exact to paise)                                              | NestJS verification engine                                            | Planned pure-TypeScript port.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                   |
+| Phase 1 — LLM foundation (OpenRouter provider, 7 typed tools, tool loop, rate limit + cache)                                                                            | NestJS `ai` module (`ai.provider.ts`, `ai.tools.ts`, `ai.service.ts`) | **Done in M3 (see §8):** `ai-chat` Supabase Edge Function — OpenRouter provider (primary `qwen/qwen-2.5-72b-instruct`), 8 typed tools (the old 7 + a `searchKnowledge` stub until M4), tool loop ≤4 rounds, DB-backed rate limit (10/min/user) + 60s cache. Client: `EdgeFunctionAdapter` in `src/lib/ai/remote.ts` behind the existing `LLMAdapter` interface; chat prefers the function and falls back to the local regex engine. |
+| Phase 2 — RAG (pgvector/Neon, embeddings, Yahoo news, Smart Screener, `searchKnowledge` tool)                                                                           | NestJS + Neon pgvector                                                | Planned Supabase pgvector migration (0006). The `searchKnowledge` tool exists as an `available: false` stub in M3 (see §8) until this lands.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            |
+| Phase 3 — Guardrails (verification engine re-checking numeric claims against deterministic evidence, money exact to paise)                                              | NestJS verification engine                                            | **Done in M3 (see §8):** full verification-engine port in `supabase/functions/_shared/ai-guardrail.ts` (money exact to the paise, %/ratios ±0.1, one correction retry then a template answer built only from verified numbers), the 40-case corrupted-output suite ported to `src/lib/ai/guardrail.test.ts`, and the `guardrail_checks` log table in migration 0005. |
 | Phase 4 — Readiness (deterministic 0–100 score: emergency fund 25, debt-to-income 20, monthly surplus 25, concentration 15, volatility 15; bands 0–39 / 40–69 / 70–100) | NestJS `readiness` module + `GET /api/readiness`                      | **Done in M5:** merged 7-factor model in `src/lib/calc/readiness.ts` + `src/routes/readiness.tsx` (pure scorer + 28 new vitest tests). Merged weights (decided 22 Nov, see §6): emergency 20, savings rate 20, debt-to-income 15, budget discipline 10, fixed-cost ratio 10, concentration 15, volatility 10; existing 4 bands kept. Missing factor = unavailable, never zero; score rescales over available factors. Debt-to-income is unmeasured — this repo records no loans or outstanding debt. Volatility uses live price history where available, simulated otherwise (M2, see §7; disclosed in the UI). |
 
 ---
@@ -239,4 +239,184 @@ TCS.NS ₹2,376.20 (+33.50, +1.43%), ^NSEI 25,800.60 (+286.30, +1.122%)
 
 **Section-numbering note:** this is §7 on `main`. The M6 static
 conversion (branch `feat/pages-static`) also added a §7 to this file;
-when that branch merges, one of the two §7s must be renumbered to §8.
+M3 took §8 on main, so when that branch merges, the M6 §7 must be
+renumbered to §9.
+
+---
+
+## 8. M3 — Real OpenRouter LLM + guardrails (Supabase Edge Function)
+
+**Date:** 23 November 2026. **Status: code complete, function NOT yet
+deployed and the OpenRouter key does NOT exist yet** — the key is still
+outstanding from Sarthak, and deployment is an owner action (see
+below). Until both land, chat keeps answering from the local regex
+engine; the remote path is invisible.
+
+**Function URL (once deployed):**
+`https://txktgmzgpvymmostpmol.supabase.co/functions/v1/ai-chat`
+
+### What was built
+
+- **Edge Function** `supabase/functions/ai-chat/index.ts` (Deno, zero
+  dependencies — plain fetch only, like M2): holds the OpenRouter key
+  as an env secret and runs the tool loop + guardrails server-side.
+  The key never reaches the browser. `POST { "message": string }`
+  (1–2000 chars) → `{ answer, claims, refused, refusalReason, model,
+  toolsUsed, disclaimer, verification }`. Errors are honest JSON
+  (`{ error, code }`, never a stack trace): 400 bad message, 401 no
+  JWT, 429 rate-limited, 502 OpenRouter unreachable, 503 key not
+  configured (`AI_NOT_CONFIGURED` — the client renders guidance, not
+  an error screen), 500 internal. CORS allowlist: same as
+  market-data (Pages origin, Vercel origin, localhost:8080/5173).
+- **8 tools** (`supabase/functions/_shared/ai-tools.ts`, the old
+  Phase 1 seven + `searchKnowledge`): `getPortfolioSummary`,
+  `getBudgetStatus`, `getTransactions`, `getStockQuote`,
+  `getStockFundamentals`, `getCategorySpending`, `getGoalProgress`,
+  `searchKnowledge`. Typed hand-rolled arg validation (no Zod — a
+  bare `zod` import won't resolve in Deno and `npm:zod` won't
+  resolve in vitest; the constraints and error strings match the
+  Zod originals). The model reasons, the code calculates: tools
+  return facts in rupees (paise/100) and never LLM-generated
+  numbers. Tool loop: max 4 rounds, then a final structured answer
+  or an honest failure. Simulated-brokerage rows (tag
+  `simulated-brokerage`, or transfer + `investments` category) are
+  excluded from spend/income math. Month/period boundaries use UTC
+  dates (5:30h IST skew at month edges accepted, matching the old
+  backend).
+- **Guardrails** (`supabase/functions/_shared/ai-guardrail.ts`): full
+  port of the Phase 3 verification engine — every numeric claim in
+  the answer is re-checked against the tool evidence of THIS
+  request by field name; money exact to the paise, %/ratios ±0.1.
+  One retry with a correction prompt naming the failed claims and
+  their correct values; if it still fails, the user gets a template
+  answer built only from verified numbers
+  (`supabase/functions/_shared/ai-templates.ts` — the template is
+  pinned by test to pass the guardrail itself). Refusals (a
+  prediction, a buy/sell question, missing data) skip verification.
+  Every check is logged to `guardrail_checks`, fail-open: a logging
+  failure is a warning, never a failed answer.
+- **Data access** (`supabase/functions/_shared/postgrest.ts`): raw
+  PostgREST via fetch — no supabase-js in the function, so esbuild
+  can bundle-verify it without resolving remote imports. Every
+  query carries the caller's JWT, so RLS enforces ownership. Live
+  prices come from the `market-data` function (M2) over HTTP.
+- **Migration 0005** (`supabase/migrations/0005_guardrail_checks.sql`,
+  idempotent, 0003 style): `guardrail_checks` (append-only log:
+  request/user/feature/attempt/claim/tool/check-type/expected/
+  actual/verdict) + `ai_rate_limits` (one row per request, counted
+  per user per minute window). RLS + "owner all" policy on both.
+  **Manual-application queue:** 0003 and 0004 are still unapplied on
+  the live database; 0005 joins the same queue. The function works
+  without it (fail-open) but the check log stays empty and the
+  limiter falls back to per-instance state until 0005 lands. M4
+  takes migration 0006 (pgvector).
+- **Client** (`src/lib/ai/remote.ts` + `src/routes/chat.tsx` +
+  `src/components/ai/ChatMessage.tsx`): `EdgeFunctionAdapter`
+  implements the existing `LLMAdapter` interface (the rule engine
+  stays the fallback); the chat route prefers the function and
+  falls back to the regex engine on any failure, with an honest
+  degraded-state line under the header ("AI isn't set up yet —",
+  "AI is busy —", "AI is unreachable — answering from your data").
+  Verified answers carry a "Verified against your data" caption;
+  template answers say they were built from verified numbers
+  because the AI answer couldn't be checked. The function URL is
+  derived from `VITE_SUPABASE_URL` (no new env var); the client
+  passes the user's access token, fetched from the Supabase session.
+
+### `verify_jwt = true` — and why it differs from market-data
+
+`supabase/config.toml` gains `[functions.ai-chat]` with
+`verify_jwt = true`. market-data is public (Yahoo quotes, no user
+data, no secrets) so it needs no JWT; ai-chat reads USER data
+(transactions, budgets, goals, holdings), so the Supabase gateway
+must verify the JWT before the function runs. Inside, the same JWT
+builds the PostgREST client — RLS applies to every query. The
+service-role key is never used for user-data reads. (The user id is
+decoded from the JWT `sub` claim only to key the rate limit and the
+cache; the gateway and PostgREST both verify the signature.)
+
+### Rate limit + cache — DB-backed, with honest limits
+
+The old backend's in-memory 10/min limiter breaks on serverless
+(per-instance state: with N isolates, a user could make N× the
+limit). M3 therefore implements the limit in the database: one row
+per request in `ai_rate_limits`, counted per user per 60-second
+window (10/min), with opportunistic cleanup of rows older than an
+hour. The in-memory limiter survives only as a backstop when the
+table is unavailable (migration 0005 not applied) — documented as
+best-effort in `_shared/ai-limits.ts`, never as a guarantee. The
+60s identical-query cache is per-instance by the same token (a miss
+just costs one more model call). Neither is silently shipped as if
+it were global.
+
+### Deviations from the old backend (deliberate, recorded)
+
+- **No `getReadinessScore` tool yet:** the readiness score is
+  computed client-side by `src/lib/calc/readiness.ts` (M5) and the
+  Edge Function cannot import it. It joins when the scorer moves to
+  a shared location.
+- **No P/E / market-cap / 52-week fields in `getStockFundamentals`:**
+  those came from Yahoo's quoteSummary endpoint, which needs a
+  crumb session. Everything here is computed from the v8 chart
+  history the `market-data` function already serves (price +
+  technicals + 3-month range), and the tool description says exactly
+  that — the model must not state any P/E.
+- **No metrics-fallback in the function:** the old backend fell back
+  to raw snapshot metrics when the model was unavailable. Here the
+  client-side regex engine IS the fallback (the function returns a
+  structured error and the chat degrades to local answers).
+- **`getPortfolioSummary` values every holding** (live price when
+  available, else avg buy price flagged `priced: false`) and totals
+  include all holdings, with a top-level `priced` flag + note — a
+  deviation from the old exclusion semantics, because avgPrice is a
+  real number, not an absence.
+- **Model defaults:** primary `qwen/qwen-2.5-72b-instruct`, reasoning
+  `deepseek/deepseek-r1-0528` (reserved, unused in the chat path),
+  timeout 30s/call, maxTokens 2048, temperature 0.2 — the same
+  defaults as the old backend.
+
+### Verification
+
+- Tests: **495/495** (404 baseline + 91 new: 45 guardrail incl. the
+  full corrupted-output suite, 26 tools incl. a fixed close series
+  for the indicators, 20 answer-contract/template/client/limit
+  tests). `bun run build` green (Nitro). tsc 45 total (baseline,
+  zero in touched files). ESLint clean on touched files (one
+  pre-existing react-refresh warning in `chat.tsx`).
+- The Edge Function bundles cleanly with esbuild (88,779 bytes,
+  zero dependencies resolved remotely). No `deno` on this VM — no
+  Deno test run was possible; the function's pure logic is covered
+  by vitest via the `_shared` modules.
+- **NOT verified:** the live OpenRouter call (no API key exists
+  yet), the deployed function itself (needs the owner deploy
+  below), and the browser wiring against the deployed function
+  (needs the deploy + a live Pages/Vercel URL). The tool loop,
+  guardrail, templates, and parsers ARE verified by unit tests;
+  only the hosted hop and the model itself are not.
+
+### Owner deploy steps
+
+1. Install the Supabase CLI and log in (`supabase login`), then link
+   the project (`supabase link --project-ref txktgmzgpvymmostpmol`).
+   Needs a Supabase access token — owner action. (Same step as M2;
+   skip if already linked.)
+2. From the repo root: `supabase functions deploy ai-chat`
+   (the `verify_jwt = true` setting in `supabase/config.toml` is
+   picked up automatically).
+3. Set the OpenRouter key (once Sarthak provides it):
+   `supabase secrets set OPENROUTER_API_KEY=...` — the key is an env
+   secret on the function, never in the repo. Until it is set, the
+   function answers 503 `AI_NOT_CONFIGURED` and chat keeps using the
+   local engine.
+4. Run `supabase/migrations/0005_guardrail_checks.sql` in the SQL
+   Editor (same manual queue as 0003/0004). Without it, guardrail
+   logging and the DB-backed rate limit stay inactive.
+5. Smoke-test the deployed function with a signed-in user's JWT
+   (the gateway rejects calls without one):
+   `curl -X POST "https://txktgmzgpvymmostpmol.supabase.co/functions/v1/ai-chat" -H "apikey: <anon key>" -H "Authorization: Bearer <user JWT>" -H "Content-Type: application/json" -d '{"message": "How much did I spend this month?"}'`
+   — expect HTTP 200 with a JSON answer. A 503 means the key is not
+   set yet; a 401 means the JWT is missing/expired.
+6. Reload the app and ask a money question in chat: a remote answer
+   shows the "Verified against your data" caption. If the degraded
+   line appears instead, check the browser network tab for the
+   `/functions/v1/ai-chat` call.
