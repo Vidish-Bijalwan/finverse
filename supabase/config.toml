@@ -1,0 +1,9 @@
+# Supabase CLI config — minimal: only the Edge Function settings live here.
+# Migrations are still applied by hand in the SQL Editor (see README);
+# nothing in this file changes that. Sections not listed use CLI defaults.
+
+[functions.market-data]
+# Market data is public (Yahoo quotes, no user data, no secrets held here),
+# so the function does not require a JWT — see the header comment in
+# supabase/functions/market-data/index.ts for the full reasoning.
+verify_jwt = false
