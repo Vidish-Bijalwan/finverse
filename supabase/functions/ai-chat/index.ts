@@ -25,7 +25,11 @@
  * runs a tool loop (max 4 rounds) over 8 typed tools that read the
  * user's own Supabase data (via PostgREST with the caller's JWT, so
  * RLS enforces ownership) and live Yahoo prices (via the `market-data`
- * Edge Function). The final answer is structured JSON (answer + claims
+ * Edge Function). The `searchKnowledge` tool retrieves from the RAG
+ * store (`rag_documents`, migration 0006) through the shared
+ * `_shared/rag.ts` search, in-process — it does not call the `rag`
+ * function over HTTP, so the chat loop has no extra network hop (see
+ * docs/MIGRATION.md §9 for the reasoning). The final answer is structured JSON (answer + claims
  * + refusal flag); every claim is verified by the deterministic
  * guardrail (`_shared/ai-guardrail.ts`) against the tool results of
  * THIS request — money exact to the paise, percentages within ±0.1. A
@@ -102,6 +106,12 @@ import {
 } from "../_shared/ai-tools.ts";
 import { parseChatRequest, parseStructuredJson, type AiAnswer } from "../_shared/ai-validation.ts";
 import { createPostgrestClient, type PostgrestClient } from "../_shared/postgrest.ts";
+import {
+  EMBEDDING_MODEL,
+  OpenRouterEmbeddingsClient,
+  searchDocuments,
+  type RetrievedContext,
+} from "../_shared/rag.ts";
 
 // ---------------------------------------------------------------------------
 // Config
@@ -111,6 +121,7 @@ interface AiChatConfig {
   apiKey: string | undefined;
   baseUrl: string;
   primaryModel: string;
+  embeddingModel: string;
   timeoutMs: number;
   maxToolRounds: number;
   rateLimitPerMinute: number;
@@ -146,6 +157,10 @@ function resolveConfig(get: (key: string) => string | undefined): AiChatConfig {
     apiKey: apiKey ? apiKey : undefined,
     baseUrl: textEnv(get("LLM_BASE_URL"), DEFAULT_BASE_URL),
     primaryModel: textEnv(get("LLM_MODEL_PRIMARY"), DEFAULT_PRIMARY_MODEL),
+    embeddingModel: textEnv(
+      get("LLM_EMBEDDING_MODEL"),
+      EMBEDDING_MODEL,
+    ),
     timeoutMs: intEnv(get("LLM_TIMEOUT_MS"), DEFAULT_TIMEOUT_MS),
     maxToolRounds: intEnv(get("LLM_MAX_TOOL_ROUNDS"), DEFAULT_MAX_TOOL_ROUNDS),
     rateLimitPerMinute: intEnv(get("LLM_RATE_LIMIT_PER_MINUTE"), DEFAULT_RATE_LIMIT_PER_MINUTE),
@@ -313,6 +328,7 @@ function createToolDataAccess(
   userId: string,
   supabaseUrl: string,
   anonKey: string,
+  embedder: OpenRouterEmbeddingsClient | null,
 ): ToolDataAccess {
   async function listTransactions(filter: {
     type?: "expense" | "income" | "transfer";
@@ -451,7 +467,36 @@ function createToolDataAccess(
     return bars.length > 0 ? bars : null;
   }
 
-  return { listTransactions, listBudgets, listGoals, listHoldings, getQuote, getHistory };
+  async function searchKnowledge(
+    query: string,
+    symbol: string | null,
+    topK: number,
+  ): Promise<RetrievedContext> {
+    // In-process shared search (see the header note): the embedder is
+    // null only when the key is missing, in which case the handler
+    // already 503'd — the null path exists for robustness.
+    if (!embedder) {
+      return searchDocuments(null, query, { ownerId: userId, topK, symbol });
+    }
+    return searchDocuments(
+      {
+        embedOne: (text) => embedder.embedOne(text),
+        rpc: <T>(fn: string, args: Record<string, unknown>) => sb.rpc<T>(fn, args),
+      },
+      query,
+      { ownerId: userId, topK, symbol },
+    );
+  }
+
+  return {
+    listTransactions,
+    listBudgets,
+    listGoals,
+    listHoldings,
+    getQuote,
+    getHistory,
+    searchKnowledge,
+  };
 }
 
 // ---------------------------------------------------------------------------
@@ -841,7 +886,19 @@ Deno.serve(async (req: Request): Promise<Response> => {
     );
   }
 
-  const data = createToolDataAccess(sb, userId, config.supabaseUrl, config.supabaseAnonKey);
+  const embedder = new OpenRouterEmbeddingsClient(
+    config.apiKey,
+    config.baseUrl,
+    config.embeddingModel,
+    config.timeoutMs,
+  );
+  const data = createToolDataAccess(
+    sb,
+    userId,
+    config.supabaseUrl,
+    config.supabaseAnonKey,
+    embedder,
+  );
   const client = new OpenRouterClient(config.apiKey, config.baseUrl);
   try {
     const response = await chatWithModel(sb, data, client, userId, parsed.message, config);

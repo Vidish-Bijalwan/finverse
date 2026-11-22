@@ -1,5 +1,6 @@
 import { macd, rsi, sma } from "./ai-indicators";
 import type { ToolDefinition } from "./ai-provider";
+import { MAX_CHUNK_CONTENT_CHARS, type RetrievedChunk, type RetrievedContext } from "./rag";
 import {
   parseGetBudgetStatusArgs,
   parseGetCategorySpendingArgs,
@@ -29,9 +30,14 @@ import { toYahooSymbol } from "./yahoo";
  *   computed client-side by `src/lib/calc/readiness.ts` (M5) and the
  *   Edge Function cannot import it. It joins when the scorer moves to
  *   a shared location (follow-up in docs/MIGRATION.md §8).
- * - `searchKnowledge` is a stub returning `available: false` until the
- *   RAG layer lands (M4). The model is told so and must say so, not
- *   answer from memory.
+ * - `searchKnowledge` retrieves from the RAG store (M4) via the
+ *   shared `_shared/rag.ts` search — the `ai-chat` function calls it
+ *   in-process, not over HTTP to the `rag` function (see
+ *   docs/MIGRATION.md §9 for why). It searches the indexed guides
+ *   (SIP, EMI, PPF, ELSS, emergency fund, readiness, index vs
+ *   active, diversification) and, when any exist, indexed news and
+ *   company profiles. News ingestion is a follow-up (MIGRATION §9),
+ *   so no news is indexed yet — the tool description says so.
  * - `getStockFundamentals` has no P/E / market-cap / 52-week fields:
  *   those came from Yahoo's quoteSummary endpoint, which needs a crumb
  *   session. Everything here is computed from the v8 chart history the
@@ -164,7 +170,7 @@ export const AI_TOOL_DEFINITIONS: ToolDefinition[] = [
     function: {
       name: "searchKnowledge",
       description:
-        "Search the indexed knowledge for relevant context: recent news about a stock, company profile text, and the user\u2019s own transaction history. Use it when the question is about news, a stock\u2019s recent events, or past spending. Returns the matching chunks with their source title and date — cite those in the answer. An empty result means no relevant context was found: say so instead of answering from memory.",
+        "Search the indexed knowledge guides for background on a financial concept: what a SIP, EMI, PPF, ELSS, emergency fund, or index fund is, how the readiness score works, what diversification means, and similar explainers. It also searches indexed news and company profiles when any exist (none are indexed yet). Use it for \u201Cwhat is\u2026\u201D and \u201Chow does \u2026 work\u201D questions and for market context — NOT for the user\u2019s own numbers (use the data tools for those). Returns the matching chunks with their source title — cite those in the answer. An empty result means no relevant context was found: say so instead of answering from memory.",
       parameters: {
         type: "object",
         properties: {
@@ -249,6 +255,18 @@ export interface ToolDataAccess {
   getQuote(yahooSymbol: string): Promise<ToolQuote | null>;
   /** Daily closes via the `market-data` Edge Function; null when unavailable. */
   getHistory(yahooSymbol: string, range: string): Promise<ToolHistoryBar[] | null>;
+  /**
+   * Vector search over the RAG store via the shared `_shared/rag.ts`
+   * search (in-process — the ai-chat function does not call the `rag`
+   * function over HTTP). Never throws: `available: false` means the
+   * embeddings layer is down or unconfigured; zero chunks means
+   * nothing relevant passed the similarity floor.
+   */
+  searchKnowledge(
+    query: string,
+    symbol: string | null,
+    topK: number,
+  ): Promise<RetrievedContext>;
 }
 
 // ---------------------------------------------------------------------------
@@ -368,7 +386,7 @@ export async function executeTool(
     case "getGoalProgress":
       return goalProgress(data);
     case "searchKnowledge":
-      return searchKnowledge(args);
+      return searchKnowledge(data, args);
     default:
       throw new Error(`Unknown tool: ${name}`);
   }
@@ -673,13 +691,40 @@ async function goalProgress(data: ToolDataAccess) {
   };
 }
 
-function searchKnowledge(args: unknown) {
-  // Validated (so a malformed call still fails loudly) but the RAG
-  // layer does not exist yet — M4 wires the real retrieval.
-  requireParsed<SearchKnowledgeArgs>(parseSearchKnowledgeArgs(args));
+/** How many chunks the chat loop asks for (the rag function defaults to 5). */
+const SEARCH_KNOWLEDGE_TOP_K = 3;
+
+function mapRetrievedChunk(chunk: RetrievedChunk) {
   return {
-    available: false,
-    reason: "Knowledge search is not set up yet — it arrives with the RAG layer (M4).",
-    chunks: [],
+    sourceType: chunk.sourceType,
+    title: chunk.title,
+    symbol: chunk.symbol,
+    // The store keeps a full timestamp; the model cites a date.
+    publishedAt: chunk.publishedAt ? chunk.publishedAt.slice(0, 10) : null,
+    url: chunk.url,
+    similarity: round2(chunk.similarity),
+    content:
+      chunk.content.length > MAX_CHUNK_CONTENT_CHARS
+        ? `${chunk.content.slice(0, MAX_CHUNK_CONTENT_CHARS)}…`
+        : chunk.content,
+  };
+}
+
+async function searchKnowledge(data: ToolDataAccess, args: unknown) {
+  const parsed = requireParsed<SearchKnowledgeArgs>(parseSearchKnowledgeArgs(args));
+  // Stored news/profile rows carry Yahoo symbols (RELIANCE.NS), so the
+  // model's symbol is normalised the same way as the quote tools. An
+  // unmappable symbol passes through upper-cased — the search then
+  // finds nothing rather than failing the whole tool call.
+  const symbol = parsed.symbol
+    ? (toYahooSymbol(parsed.symbol) ?? parsed.symbol.toUpperCase())
+    : null;
+  const result = await data.searchKnowledge(parsed.query, symbol, SEARCH_KNOWLEDGE_TOP_K);
+  if (!result.available) {
+    return { available: false, reason: result.reason, chunks: [] };
+  }
+  return {
+    available: true,
+    chunks: result.chunks.map(mapRetrievedChunk),
   };
 }
