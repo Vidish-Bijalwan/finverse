@@ -7,3 +7,10 @@
 # so the function does not require a JWT — see the header comment in
 # supabase/functions/market-data/index.ts for the full reasoning.
 verify_jwt = false
+
+[functions.ai-chat]
+# AI chat reads USER data (transactions, budgets, goals, holdings) via
+# PostgREST with the caller's JWT, so the gateway must verify the JWT
+# before the function runs — the opposite of market-data. See the header
+# comment in supabase/functions/ai-chat/index.ts for the full reasoning.
+verify_jwt = true
