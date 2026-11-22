@@ -11,7 +11,8 @@ its open PR #4 (Phase 3 guardrails) is superseded by this move.
 This document records the **M0 preservation step**: what was carried over
 from the old repo, what was deliberately left behind, and where each old
 phase maps to in this repo. M0 is additive only — docs, a static sample
-UI, reference snapshots, and one Pages workflow. No live app code was
+UI, reference snapshots, and a Pages deployment of the sample UI (via
+the `gh-pages` branch — see §5). No live app code was
 changed in M0.
 
 ---
@@ -28,7 +29,7 @@ at `~/workspace/finverse-ai`; no branch was checked out in this repo.
 | Sample UI — cream/forest-green/gold static prototype, 21 pages                                                                                                                       | `Vivek_frontend/` (45 files)            | Old commit `1f22aff`. Verbatim: `index.html`, `app/*.html`, `assets/css/main.css`, `assets/js/*.js`, `README.md`. The old `.github/` dir was NOT copied (see §5).                                                                               |
 | Reference NestJS backend — `src/`, `prisma/`, `package.json` (109 files)                                                                                                             | `reference/nestjs-backend/`             | Branch `vivek/phase-4-readiness`, head `ff1ed11`.                                                                                                                                                                                               |
 | Reference web math libs + tests — `indicators.ts`, `market.ts`, `optimization.ts`, `portfolio.ts`, `readiness.ts` and 4 test files (9 files, flat)                                   | `reference/web-math/`                   | Branch `vivek/phase-4-readiness`, head `ff1ed11` (old `apps/web/lib/` and `apps/web/test/`).                                                                                                                                                    |
-| GitHub Pages workflow for the sample UI                                                                                                                                              | `.github/workflows/pages-sample-ui.yml` | Adapted from the old workflow `pages-vivek-frontend.yml` at old commit `1f22aff` (see §5).                                                                                                                                                      |
+| GitHub Pages deployment of the sample UI | `gh-pages` branch (orphan, sample-UI files at root) | Pages serves the `gh-pages` branch (see §5). The Actions workflow (`.github/workflows/pages-sample-ui.yml`, adapted from the old `pages-vivek-frontend.yml` at `1f22aff`) is HELD, not committed: the migration token has no `workflow` scope, so GitHub rejected the push of any workflow file. The workflow file is saved outside the repo for later use once the scope is fixed. |
 
 No `node_modules`, `dist`, `.next`, or `.env` files were copied — verified
 none landed in any of the new directories.
@@ -94,16 +95,20 @@ shorthand in new docs and discussions changes, once agreed.
   GitHub Pages is the target host.** Vercel (`finverse-nu.vercel.app`)
   is the current host only; it is not the final state. The disconnect
   itself is a dashboard action for the repo owner.
-- **Pages hosts the static `Vivek_frontend/` sample UI now**, via
-  `.github/workflows/pages-sample-ui.yml`. The workflow uploads just that
-  folder (`actions/upload-pages-artifact` + `actions/deploy-pages`,
-  `pages: write` + `id-token: write`, concurrency group `pages`) and
-  triggers only on pushes to `main` touching `Vivek_frontend/**` or the
-  workflow file itself. **It does not build the TanStack app.** This
-  step-one workflow stays valid regardless of the static-conversion
-  outcome.
-- Pages must be enabled in the repo settings (source: GitHub Actions)
-  for the workflow to publish.
+- **Pages hosts the static `Vivek_frontend/` sample UI now**, served
+  from an orphan `gh-pages` branch (sample-UI files at the branch root).
+  **It does not build the TanStack app.** This step-one deployment stays
+  valid regardless of the static-conversion outcome.
+- **Why a branch, not a workflow:** the Actions workflow
+  (`.github/workflows/pages-sample-ui.yml`, adapted from the old
+  `pages-vivek-frontend.yml`) could not be pushed — GitHub rejected it
+  because the migration token has no `workflow` scope ("refusing to
+  allow a Personal Access Token to create or update workflow without
+  `workflow` scope"). The workflow file is saved outside the repo; it
+  can be committed later once a token with `workflow` scope (or the web
+  UI) is available, and Pages can then switch its source to GitHub
+  Actions.
+- Pages is enabled with source `gh-pages` branch, `/` (root).
 
 ---
 
@@ -133,4 +138,4 @@ one:
 Vercel is dropped as the host; the website goes on GitHub Pages. The
 honest status is in §5: the app is SSR and cannot run on Pages as-is,
 and the static conversion is being feasibility-checked separately. The
-sample-UI Pages workflow (§5) is step one and stays valid regardless.
+sample UI on Pages (§5) is step one and stays valid regardless.
