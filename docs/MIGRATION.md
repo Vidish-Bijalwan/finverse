@@ -62,9 +62,9 @@ none landed in any of the new directories.
 | Old phase                                                                                                                                                               | Old implementation                                                    | New location / status                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                               |
 | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | Phase 0 — Deterministic core (SMA/EMA/RSI/MACD, CAGR/XIRR, Markowitz + Sharpe)                                                                                          | NestJS services + `apps/web/lib/`                                     | **Done in M1:** ported to `src/lib/calc/indicators.ts`, `src/lib/calc/portfolio-math.ts`, `src/lib/calc/optimization.ts` (pure functions, 37 new vitest tests; full suite 343/343 green). Original preserved in `reference/nestjs-backend/src/` and `reference/web-math/`.                                                                                                                                                                                                                                                                                          |
-| Phase 1 — LLM foundation (OpenRouter provider, 7 typed tools, tool loop, rate limit + cache)                                                                            | NestJS `ai` module (`ai.provider.ts`, `ai.tools.ts`, `ai.service.ts`) | Planned `OpenRouterAdapter` on `src/lib/ai/llm.ts` + a server function.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                             |
-| Phase 2 — RAG (pgvector/Neon, embeddings, Yahoo news, Smart Screener, `searchKnowledge` tool)                                                                           | NestJS + Neon pgvector                                                | Planned Supabase pgvector migration.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                |
-| Phase 3 — Guardrails (verification engine re-checking numeric claims against deterministic evidence, money exact to paise)                                              | NestJS verification engine                                            | Planned pure-TypeScript port.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                       |
+| Phase 1 — LLM foundation (OpenRouter provider, 7 typed tools, tool loop, rate limit + cache)                                                                            | NestJS `ai` module (`ai.provider.ts`, `ai.tools.ts`, `ai.service.ts`) | Planned `OpenRouterAdapter` on `src/lib/ai/llm.ts` + a Supabase Edge Function (no TanStack server functions exist on static Pages — see §7).                                                                                                                                                                                                                                                                                                                                                                                                                        |
+| Phase 2 — RAG (pgvector/Neon, embeddings, Yahoo news, Smart Screener, `searchKnowledge` tool)                                                                           | NestJS + Neon pgvector                                                | Planned Supabase pgvector migration + Edge Function for embeddings/search.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          |
+| Phase 3 — Guardrails (verification engine re-checking numeric claims against deterministic evidence, money exact to paise)                                              | NestJS verification engine                                            | Planned pure-TypeScript port (runs inside the M3 Edge Function).                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    |
 | Phase 4 — Readiness (deterministic 0–100 score: emergency fund 25, debt-to-income 20, monthly surplus 25, concentration 15, volatility 15; bands 0–39 / 40–69 / 70–100) | NestJS `readiness` module + `GET /api/readiness`                      | **Done in M5:** merged 7-factor model in `src/lib/calc/readiness.ts` + `src/routes/readiness.tsx` (pure scorer + 28 new vitest tests). Merged weights (decided 22 Nov, see §6): emergency 20, savings rate 20, debt-to-income 15, budget discipline 10, fixed-cost ratio 10, concentration 15, volatility 10; existing 4 bands kept. Missing factor = unavailable, never zero; score rescales over available factors. Debt-to-income is unmeasured — this repo records no loans or outstanding debt. Volatility uses simulated price history (disclosed in the UI). |
 
 ---
@@ -87,18 +87,20 @@ shorthand in new docs and discussions changes, once agreed.
 
 ## 5. GitHub Pages — honest note
 
-- The **TanStack app is SSR** (Nitro server). It cannot run on GitHub
-  Pages, which serves static files only — not as-is. A static conversion
-  is being feasibility-checked as a separate workstream; until that
-  lands, there is no Pages build of the app.
+- The **TanStack app was SSR** (Nitro server) and could not run on GitHub
+  Pages as-is. The static conversion is done in **M6** (see §7) on branch
+  `feat/pages-static`: SPA mode + `nitro: false` + `/finverse/` subpath.
+  The branch merges to `main` only after the Pages deployment is verified
+  live; until then `main` keeps deploying to Vercel.
 - **Hosting decision (Vivek, 22 Nov 2026, 23:40 IST): ditch Vercel —
   GitHub Pages is the target host.** Vercel (`finverse-nu.vercel.app`)
   is the current host only; it is not the final state. The disconnect
   itself is a dashboard action for the repo owner.
 - **Pages hosts the static `Vivek_frontend/` sample UI now**, served
   from an orphan `gh-pages` branch (sample-UI files at the branch root).
-  **It does not build the TanStack app.** This step-one deployment stays
-  valid regardless of the static-conversion outcome.
+  **It does not build the TanStack app.** The sample UI is step one; at
+  the M6 cutover the static app build replaces it on `gh-pages` (the
+  sample UI source stays in `main` under `Vivek_frontend/`).
 - **Why a branch, not a workflow:** the Actions workflow
   (`.github/workflows/pages-sample-ui.yml`, adapted from the old
   `pages-vivek-frontend.yml`) could not be pushed — GitHub rejected it
@@ -107,8 +109,16 @@ shorthand in new docs and discussions changes, once agreed.
   `workflow` scope"). The workflow file is saved outside the repo; it
   can be committed later once a token with `workflow` scope (or the web
   UI) is available, and Pages can then switch its source to GitHub
-  Actions.
+  Actions. The same applies to the app workflow (`pages.yml`, §7).
 - Pages is enabled with source `gh-pages` branch, `/` (root).
+- **⚠️ Custom-domain blocker (22 Nov 2026, ~23:55 IST):** the repo's
+  Pages settings carry the custom domain `vidish.me` (Vidish's personal
+  site), and GitHub 301-redirects ALL Pages traffic there — so the site
+  404s. A project page can never live at `vidish.me/finverse`. Fix =
+  remove the custom domain in Settings → Pages (30-second owner action)
+  → the site goes live at `vidish-bijalwan.github.io/finverse/`. The
+  migration token cannot fix it (Pages API PUT → 403, no Pages write
+  permission).
 
 ---
 
@@ -139,3 +149,92 @@ Vercel is dropped as the host; the website goes on GitHub Pages. The
 honest status is in §5: the app is SSR and cannot run on Pages as-is,
 and the static conversion is being feasibility-checked separately. The
 sample UI on Pages (§5) is step one and stays valid regardless.
+
+---
+
+## 7. M6 — Static conversion for GitHub Pages (branch `feat/pages-static`)
+
+**Date:** 22–23 Nov 2026. **Feasibility verdict: FEASIBLE ✅** (proven by
+experiment — scratch build served from `/finverse/` with root, assets,
+and 404-fallback all 200; full report in the migration working notes).
+The conversion lives on branch `feat/pages-static`, NOT on `main`:
+`main` keeps deploying to Vercel until the Pages deployment is verified
+live, then the branch merges and Vercel is disconnected.
+
+### What changed
+
+- **Config (2 files):** `vite.config.ts` — SPA mode
+  (`tanstackStart.spa: { enabled: true, prerender: { outputPath:
+"/index" } }`), `nitro: false`, `vite: { base: "/finverse/" }`;
+  `src/router.tsx` — `basepath: "/finverse"`. The build emits
+  `dist/client/` (shipped) + `dist/server/` (prerender-internal only).
+- **Code (6 fixes):** Google sign-in + password-reset `redirectTo` URLs
+  now include `import.meta.env.BASE_URL` (auth-breaking if missed);
+  favicon href is base-aware; the root error page's raw `<a href="/">`
+  is a basepath-aware `<Link>`; onboarding's post-setup reload uses
+  `BASE_URL` instead of `"/"`.
+- **Razorpay tab rework:** the status-query error branch is collapsed
+  into the not-configured state — on a static host the status RPC 404s,
+  so the tab shows an honest "Razorpay test mode isn't available on
+  this deployment" message instead of a permanent error screen. Setup
+  instructions (incl. the webhook URL) only render when a server
+  exists. The tab is NOT hidden.
+- **Headers via meta tags** (`__root.tsx` head): the CSP from
+  `vercel.json` verbatim as `<meta http-equiv>` + referrer `<meta>`.
+- **Docs:** README (live demo URL, deployment section, Razorpay note,
+  stack table) + this file. `vercel.json` is KEPT — deleting it while
+  Vercel is still connected would change the live Vercel deployment's
+  headers; it goes at the Vercel disconnect.
+
+### What breaks on Pages
+
+| #   | What breaks                                                 | Severity                                                                                   |
+| --- | ----------------------------------------------------------- | ------------------------------------------------------------------------------------------ |
+| 1   | Razorpay test rail (payment links + webhook + confirmation) | Feature lost — needs a server; tab shows the honest state                                  |
+| 2   | `X-Frame-Options: DENY` (clickjacking protection)           | Security downgrade — no meta equivalent, unfixable on Pages (accepted risk)                |
+| 3   | `X-Content-Type-Options: nosniff`                           | Minor downgrade — low practical impact (correct MIME types, uploads from Supabase Storage) |
+| 4   | Deep links serve with HTTP 404 status (via `404.html`)      | Cosmetic — functionally fine                                                               |
+| 5   | No per-route SEO meta / link previews                       | Minor — all real content is behind login anyway                                            |
+
+**What does NOT break:** all 25 routes, Supabase Auth (email + Google
+PKCE), onboarding, expenses/bills/budgets/goals, UPI-style payments,
+portfolio/screener/stock detail, insights + chat, readiness, app lock
+(PIN/WebAuthn), avatar upload, all client-side data fetching, and the
+full test suite. `src/server.ts` / `src/start.ts` / Nitro are dead code
+on Pages but KEPT — dev mode (`bun run dev`) still uses them, and the
+Lovable preview is unaffected.
+
+### Deploy path
+
+The static build is deployed to the `gh-pages` branch (replacing the
+sample UI there at cutover). The Actions workflow (`pages.yml`) is
+HELD outside the repo — the migration token has no `workflow` scope,
+so it cannot be pushed; the owner can add it via the web UI later and
+switch Pages' source to GitHub Actions. Until then every app update
+needs a manual rebuild + `gh-pages` push.
+
+### Architecture consequence
+
+No TanStack server functions exist on static Pages, so all future
+server-side work — M2 live market data, M3 OpenRouter LLM +
+guardrails, M4 RAG — must be **Supabase Edge Functions** (Deno,
+hosted by Supabase, secrets held there). The Edge Functions need a
+Supabase access token to deploy (owner action) and the OpenRouter key
+as an Edge Function secret (owner action).
+
+### Owner actions for cutover
+
+1. **Remove the custom domain** `vidish.me` from Settings → Pages
+   (see §5 — without this NOTHING on Pages is reachable).
+2. Supabase Dashboard → Authentication → URL Configuration: Site URL
+   → `https://vidish-bijalwan.github.io/finverse`, Redirect URLs +=
+   `https://vidish-bijalwan.github.io/finverse/**` (wildcard required —
+   the PKCE flow appends `sb_flow_id`).
+3. Razorpay Dashboard (test mode): delete/disable the webhook
+   (`https://finverse-nu.vercel.app/api/razorpay-webhook`).
+4. After Pages is verified live: Vercel Dashboard → disconnect/delete
+   the `finverse` project (or at least remove its GitHub integration),
+   and delete `vercel.json` from the repo.
+5. Optional: add `pages.yml` via the web UI + repo variables
+   `VITE_SUPABASE_URL` / `VITE_SUPABASE_ANON_KEY`, then switch Pages'
+   source to GitHub Actions for auto-deploys.

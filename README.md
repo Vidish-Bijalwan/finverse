@@ -1,6 +1,6 @@
 # FinVerse AI — Personal Finance Intelligence
 
-**Live demo:** https://finverse-nu.vercel.app/
+**Live demo:** https://vidish-bijalwan.github.io/finverse/
 
 FinVerse AI is a personal-finance intelligence web app: track spending, manage bills and
 budgets, set savings goals, send UPI-style payments, get explainable AI insights, and
@@ -46,7 +46,9 @@ This is **Module 1 (personal expense tracking)** of a 3-module college major pro
 - Loading skeletons, empty states with working CTAs, **error states with retry**
   (never fake empty screens), toast notifications
 - Touch gestures, reduced-motion support, responsive desktop / tablet / mobile layouts
-- Security headers in production: CSP, `X-Frame-Options: DENY`, nosniff, strict referrer policy
+- Security headers in production: CSP + referrer policy via `<meta>` tags (GitHub
+  Pages cannot set response headers, so `X-Frame-Options` and `nosniff` are lost —
+  see `docs/MIGRATION.md` §7)
 
 ---
 
@@ -54,7 +56,7 @@ This is **Module 1 (personal expense tracking)** of a 3-module college major pro
 
 | Layer | Choice |
 |---|---|
-| Framework | TanStack Start (React 19, SSR) + TanStack Router |
+| Framework | TanStack Start (React 19, static SPA) + TanStack Router |
 | Language | TypeScript (strict) |
 | Styling | Tailwind CSS 4, shadcn/ui + Radix primitives |
 | Data fetching | TanStack Query |
@@ -62,7 +64,7 @@ This is **Module 1 (personal expense tracking)** of a 3-module college major pro
 | Icons | Lucide |
 | Persistence | **Supabase** (Postgres + Auth + Storage); amounts in integer paise |
 | Runtime | Bun |
-| Deployment | Vercel (auto-deploys from `main`) |
+| Deployment | GitHub Pages (static build, served from the `gh-pages` branch) |
 
 ## Auth & onboarding
 
@@ -223,7 +225,7 @@ bun run test:e2e      # playwright — browser E2E (chromium + Pixel 7 mobile)
 bun x tsc --noEmit    # typecheck (51 pre-existing errors in untouched legacy
                       # files; zero in touched code)
 bun x eslint          # lint — 0 errors
-bun run build         # production build (vite + nitro)
+bun run build         # production build (vite, static SPA output in dist/client/)
 ```
 
 See [TEST_REPORT.md](./TEST_REPORT.md) for the full verification log (per-issue
@@ -231,11 +233,16 @@ status, bundle sizes, honest pending items) and
 [docs/IMPLEMENTATION_STATUS.md](./docs/IMPLEMENTATION_STATUS.md) for the
 feature-by-feature build state.
 
-## Razorpay test-mode setup (optional)
+## Razorpay test-mode setup (optional, server deployments only)
 
 Payments include a **Razorpay test-mode rail**. The app is designed to fail
 closed: without keys the Razorpay tab shows an honest "not configured" state and
 nothing else changes.
+
+> **Not available on GitHub Pages.** The rail needs server-only keys and a
+> webhook receiver, and the Pages deployment has no server — the tab shows an
+> honest "isn't available on this deployment" state there. The setup below
+> applies to `bun run dev` and any server deployment.
 
 1. In the Razorpay dashboard, generate **test-mode** keys (never live keys).
 2. Set server-only env vars (never `VITE_`-prefixed — the secret must stay off
@@ -245,7 +252,7 @@ nothing else changes.
    RAZORPAY_KEY_SECRET=<test key secret>
    ```
    In Vercel, add these to the server environment. Names are in
-   [`.env.example`](.env.example).
+   [`.env.example`](.env.example). (In dev, put them in a local `.env`.)
 3. Register the webhook in the Razorpay dashboard:
    `https://<your-app>/api/razorpay-webhook` for `payment.authorized`,
    `payment.captured`, `payment.failed`.
@@ -272,12 +279,23 @@ Optional PIN lock (settings → App lock):
 
 ## Deployment
 
-Pushes to `main` auto-deploy to production on Vercel:
+The app is a **static SPA** deployed on **GitHub Pages**:
 
-- **Production:** https://finverse-nu.vercel.app/
+- **Production:** https://vidish-bijalwan.github.io/finverse/
 - **Repo:** https://github.com/Vidish-Bijalwan/finverse
-- Security headers ship via `vercel.json` (CSP, `X-Frame-Options: DENY`,
-  `X-Content-Type-Options: nosniff`, `Referrer-Policy`).
+- Build: `bun run build` emits `dist/client/` (SPA mode, Nitro skipped). The
+  static output is deployed to the `gh-pages` branch; Pages serves it from the
+  `/finverse/` subpath, with `404.html` (a copy of `index.html`) as the
+  deep-link fallback.
+- Security headers ship as `<meta>` tags in `__root.tsx` (CSP verbatim from
+  `vercel.json`, referrer policy). `X-Frame-Options` and `nosniff` cannot be
+  set on Pages and are lost — accepted risk, see `docs/MIGRATION.md` §7.
+- The Razorpay test rail does not run on Pages (it needs a server); the
+  Vercel deployment (`finverse-nu.vercel.app`) is retired at cutover.
+
+See `docs/MIGRATION.md` §5–§7 for the full migration story and the owner
+dashboard actions for the cutover (Supabase redirect URLs, Razorpay webhook,
+Vercel disconnect).
 
 ---
 
