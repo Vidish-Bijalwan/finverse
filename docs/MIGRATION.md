@@ -59,13 +59,13 @@ none landed in any of the new directories.
 
 ## 3. Mapping: old Phase 0–4 → new locations
 
-| Old phase                                                                                                                                                               | Old implementation                                                    | New location / status                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                               |
-| ----------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Phase 0 — Deterministic core (SMA/EMA/RSI/MACD, CAGR/XIRR, Markowitz + Sharpe)                                                                                          | NestJS services + `apps/web/lib/`                                     | **Done in M1:** ported to `src/lib/calc/indicators.ts`, `src/lib/calc/portfolio-math.ts`, `src/lib/calc/optimization.ts` (pure functions, 37 new vitest tests; full suite 343/343 green). Original preserved in `reference/nestjs-backend/src/` and `reference/web-math/`.                                                                                                                                                                                                                                                                                          |
-| Phase 1 — LLM foundation (OpenRouter provider, 7 typed tools, tool loop, rate limit + cache)                                                                            | NestJS `ai` module (`ai.provider.ts`, `ai.tools.ts`, `ai.service.ts`) | Planned `OpenRouterAdapter` on `src/lib/ai/llm.ts` + a server function.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                             |
-| Phase 2 — RAG (pgvector/Neon, embeddings, Yahoo news, Smart Screener, `searchKnowledge` tool)                                                                           | NestJS + Neon pgvector                                                | Planned Supabase pgvector migration.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                |
-| Phase 3 — Guardrails (verification engine re-checking numeric claims against deterministic evidence, money exact to paise)                                              | NestJS verification engine                                            | Planned pure-TypeScript port.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                       |
-| Phase 4 — Readiness (deterministic 0–100 score: emergency fund 25, debt-to-income 20, monthly surplus 25, concentration 15, volatility 15; bands 0–39 / 40–69 / 70–100) | NestJS `readiness` module + `GET /api/readiness`                      | **Done in M5:** merged 7-factor model in `src/lib/calc/readiness.ts` + `src/routes/readiness.tsx` (pure scorer + 28 new vitest tests). Merged weights (decided 22 Nov, see §6): emergency 20, savings rate 20, debt-to-income 15, budget discipline 10, fixed-cost ratio 10, concentration 15, volatility 10; existing 4 bands kept. Missing factor = unavailable, never zero; score rescales over available factors. Debt-to-income is unmeasured — this repo records no loans or outstanding debt. Volatility uses simulated price history (disclosed in the UI). |
+| Old phase                                                                                                                                                               | Old implementation                                                    | New location / status                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                           |
+| ----------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Phase 0 — Deterministic core (SMA/EMA/RSI/MACD, CAGR/XIRR, Markowitz + Sharpe)                                                                                          | NestJS services + `apps/web/lib/`                                     | **Done in M1:** ported to `src/lib/calc/indicators.ts`, `src/lib/calc/portfolio-math.ts`, `src/lib/calc/optimization.ts` (pure functions, 37 new vitest tests; full suite 343/343 green). Original preserved in `reference/nestjs-backend/src/` and `reference/web-math/`. **Live market data done in M2 (see §7):** Yahoo quotes + history via the `market-data` Supabase Edge Function, wired behind the `getQuote`/`genHistory` seams with the simulated feed as fallback.                                                                                                                                   |
+| Phase 1 — LLM foundation (OpenRouter provider, 7 typed tools, tool loop, rate limit + cache)                                                                            | NestJS `ai` module (`ai.provider.ts`, `ai.tools.ts`, `ai.service.ts`) | Planned `OpenRouterAdapter` on `src/lib/ai/llm.ts` + a server function.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                         |
+| Phase 2 — RAG (pgvector/Neon, embeddings, Yahoo news, Smart Screener, `searchKnowledge` tool)                                                                           | NestJS + Neon pgvector                                                | Planned Supabase pgvector migration.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            |
+| Phase 3 — Guardrails (verification engine re-checking numeric claims against deterministic evidence, money exact to paise)                                              | NestJS verification engine                                            | Planned pure-TypeScript port.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                   |
+| Phase 4 — Readiness (deterministic 0–100 score: emergency fund 25, debt-to-income 20, monthly surplus 25, concentration 15, volatility 15; bands 0–39 / 40–69 / 70–100) | NestJS `readiness` module + `GET /api/readiness`                      | **Done in M5:** merged 7-factor model in `src/lib/calc/readiness.ts` + `src/routes/readiness.tsx` (pure scorer + 28 new vitest tests). Merged weights (decided 22 Nov, see §6): emergency 20, savings rate 20, debt-to-income 15, budget discipline 10, fixed-cost ratio 10, concentration 15, volatility 10; existing 4 bands kept. Missing factor = unavailable, never zero; score rescales over available factors. Debt-to-income is unmeasured — this repo records no loans or outstanding debt. Volatility uses live price history where available, simulated otherwise (M2, see §7; disclosed in the UI). |
 
 ---
 
@@ -139,3 +139,104 @@ Vercel is dropped as the host; the website goes on GitHub Pages. The
 honest status is in §5: the app is SSR and cannot run on Pages as-is,
 and the static conversion is being feasibility-checked separately. The
 sample UI on Pages (§5) is step one and stays valid regardless.
+
+---
+
+## 7. M2 — Live market data (Supabase Edge Function)
+
+**Date:** 23 November 2026. **Status: code complete, function NOT yet
+deployed** — deployment is an owner action (see below). Until the
+function is deployed, every surface keeps showing simulated data; the
+live layer fails soft and is invisible.
+
+### What was built
+
+- **Edge Function** `supabase/functions/market-data/index.ts` (Deno):
+  fetches Yahoo Finance's public v8 chart API server-side (query1, with
+  query2 fallback) and returns normalized JSON. `GET ?symbol=RELIANCE.NS`
+  (quote + 5-day history), `?symbol=…&range=1y&interval=1d` (history),
+  `?symbols=A,B,C` (batch quotes, max 20). Prices in rupees; the client
+  converts to paise. 60s in-memory cache (per-instance — best-effort,
+  not a guarantee). Errors are honest JSON (`{ error, code }`, never a
+  stack trace): 400 bad symbol/range, 404 no data, 502 Yahoo
+  unreachable. CORS allowlist: GitHub Pages origin, Vercel origin,
+  localhost:8080/5173.
+- **Shared parser** `supabase/functions/_shared/yahoo.ts`
+  (runtime-agnostic, imported by both the function and the vitest
+  suite): NSE symbol mapping (`RELIANCE` → `RELIANCE.NS`; indices
+  `NIFTY50`/`SENSEX`/`BANKNIFTY` → `^NSEI`/`^BSESN`/`^NSEBANK`) and the
+  Yahoo chart parser, ported from the old repo's `YahooFinanceProvider`
+  (finite checks, null-close rows skipped, bars sorted ascending).
+  `prevClose` is the second-to-last close — Yahoo's
+  `meta.chartPreviousClose` is the close _before the range_, and using
+  it would report the multi-day move as the day change (verified
+  against the real fixture: +1.9, matching Yahoo's own `fulldayChange`).
+- **`verify_jwt = false`** (`supabase/config.toml`, minimal — only the
+  `[functions.market-data]` section): market data is public, the
+  function holds no secrets and touches no user data, so requiring a
+  JWT would add a failure mode for zero security benefit (the anon key
+  is public by design). No other config was invented — migrations are
+  still applied by hand in the SQL Editor.
+- **Client** `src/lib/market/live.ts` + `src/lib/market/live-hooks.ts`:
+  the Edge Function URL is derived from the existing
+  `VITE_SUPABASE_URL` (no new env var); fetchers fail soft (null/empty
+  on any failure); `resolveQuote`/`resolveHistory` pick live data when
+  fetched and the simulated `getQuote`/`genHistory` otherwise, always
+  reporting the `source`. React Query hooks (`useLiveQuote`,
+  `useLiveQuotes`, `useLiveHistory`, `useLiveHistories`) with 60s
+  staleTime, retry 1, no refocus refetch. Batch fetching is chunked to
+  the function's 20-symbol cap client-side.
+- **Wired surfaces:** stock detail (live price + 5Y chart + LIVE pill),
+  markets/watchlist (live prices + change %, alerts evaluate on live
+  prices), portfolio (live valuation + live prev-close for today's
+  returns + live chart closes), screener (live LTP in results + search
+  suggestions), readiness volatility (live 3M history per holding; the
+  scorer is untouched — only its volatility input changed source, and
+  the route adjusts the disclosure line). Every wired surface discloses
+  live vs simulated in place (LIVE pill / subtitle / footer /
+  methodology line). **Not wired (follow-up):** the ambient strips and
+  snapshot cards (`MarketStrip`, `TickerStrip`, `MarketSnapshot`,
+  `WatchlistCard`) still show simulated data — they are display-only
+  and were out of the named scope.
+
+### Yahoo reachability from this VM — VERIFIED
+
+`query1` + `query2` both return HTTP 200 for `RELIANCE.NS` (raw fetch,
+browser UA, no key, no crumb). Live smoke test through the real API +
+the shared parser: RELIANCE.NS ₹1,377.50 (+1.90, +0.138%),
+TCS.NS ₹2,376.20 (+33.50, +1.43%), ^NSEI 25,800.60 (+286.30, +1.122%)
+— all 5-point series, last bar 2026-11-20. No `yahoo-finance2` needed.
+
+### Verification
+
+- Tests: 404/404 (371 baseline + 33 new in `src/lib/market/live.test.ts`
+  — parser fixture is the real Yahoo response, mapping, URL derivation,
+  mocked fetchers incl. chunking, resolvers). `bun run build` green
+  (Nitro). tsc 45 total (baseline, zero in touched files). ESLint clean
+  on touched files.
+- **NOT verified:** the deployed function itself (needs the owner
+  deploy below), the browser wiring against the live function (needs
+  the deploy + a live Pages/Vercel URL), and Google sign-in style
+  end-to-end flows. The Yahoo fetch + parse path IS verified live (see
+  above); only the Supabase hosting hop is not.
+
+### Owner deploy steps
+
+1. Install the Supabase CLI and log in (`supabase login`), then link
+   the project (`supabase link --project-ref txktgmzgpvymmostpmol`).
+   Needs a Supabase access token — owner action.
+2. From the repo root: `supabase functions deploy market-data`
+   (the `verify_jwt = false` setting in `supabase/config.toml` is
+   picked up automatically).
+3. Smoke-test the deployed function (no auth needed):
+   `curl "https://txktgmzgpvymmostpmol.supabase.co/functions/v1/market-data?symbol=RELIANCE.NS"`
+   — expect HTTP 200 with a JSON quote. A 404 here means the deploy
+   did not land.
+4. Reload the app: stock detail should show the green LIVE pill and
+   real prices; if it still shows SIMULATION, the function URL is
+   wrong or the deploy failed — check the browser network tab for the
+   `/functions/v1/market-data` call.
+
+**Section-numbering note:** this is §7 on `main`. The M6 static
+conversion (branch `feat/pages-static`) also added a §7 to this file;
+when that branch merges, one of the two §7s must be renumbered to §8.

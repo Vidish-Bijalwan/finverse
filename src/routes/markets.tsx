@@ -22,6 +22,7 @@ import { formatINR } from "@/lib/finance/format";
 import { STOCKS, getStock } from "@/lib/market/data";
 import { getLTP, refreshLTP } from "@/lib/market/history";
 import { getQuote } from "@/lib/market/quote";
+import { useLiveQuotes } from "@/lib/market/live-hooks";
 import {
   isAlertMet,
   useAddPriceAlert,
@@ -71,13 +72,27 @@ function WatchlistPage() {
     {},
   );
 
+  // Live quotes (Yahoo via the market-data Edge Function) when available —
+  // one batch request for the whole watchlist. Symbols that fail resolve
+  // to the simulated LTP below, so the page never depends on the feed.
+  const liveQuotesQuery = useLiveQuotes((entries ?? []).map((e) => e.symbol));
+  const liveQuotes = liveQuotesQuery.data;
+  const hasLivePrices = (liveQuotes?.size ?? 0) > 0;
+
   // Alert conditions are evaluated ONLY here — on mount and on explicit price
   // refresh — never tick-by-tick, so a jittered simulated price can't flicker
   // an alert between met/unmet on its own.
   useEffect(() => {
-    setPrices(Object.fromEntries((entries ?? []).map((e) => [e.symbol, getLTP(e.symbol)])));
+    setPrices(
+      Object.fromEntries(
+        (entries ?? []).map((e) => [
+          e.symbol,
+          liveQuotes?.get(e.symbol)?.pricePaise ?? getLTP(e.symbol),
+        ]),
+      ),
+    );
     setLastEvaluatedAt(Date.now());
-  }, [entries, tick]);
+  }, [entries, tick, liveQuotes]);
 
   const watched = useMemo(() => new Set((entries ?? []).map((e) => e.symbol)), [entries]);
 
@@ -108,7 +123,7 @@ function WatchlistPage() {
     try {
       (entries ?? []).forEach((e) => refreshLTP(e.symbol));
       setTick((t) => t + 1);
-      await refetch();
+      await Promise.all([refetch(), liveQuotesQuery.refetch()]);
     } finally {
       setIsRefreshing(false);
     }
@@ -168,7 +183,11 @@ function WatchlistPage() {
   return (
     <PageShell
       title="Markets"
-      subtitle="Track stocks you care about. All prices are simulated — not live market data. Set above/below price alerts and FinVerse flags them for you."
+      subtitle={
+        hasLivePrices
+          ? "Track stocks you care about. Live prices via Yahoo Finance (delayed ~15 min); symbols without live data show simulated prices. Set above/below price alerts and FinVerse flags them for you."
+          : "Track stocks you care about. All prices are simulated — not live market data. Set above/below price alerts and FinVerse flags them for you."
+      }
       active="Markets"
       actions={
         <Button
@@ -296,7 +315,9 @@ function WatchlistPage() {
             const ltp = prices?.[entry.symbol] ?? stock?.pricePaise ?? 0;
             // Same single quote source as the strip + snapshot: the row's %
             // is derived from the displayed LTP, so price and % agree.
-            const changePct = getQuote(entry.symbol)?.changePct ?? 0;
+            // Live % when a live quote resolved, simulated % otherwise.
+            const changePct =
+              liveQuotes?.get(entry.symbol)?.changePct ?? getQuote(entry.symbol)?.changePct ?? 0;
             return (
               <li key={entry.symbol}>
                 <MarketRow
@@ -433,8 +454,9 @@ function WatchlistPage() {
 
       <Card className="mt-5 shadow-card">
         <CardContent className="py-4 text-xs leading-5 text-muted-foreground">
-          Prices are simulated from the FinVerse demo market feed and jitter slightly on refresh —
-          for learning, not trading.
+          {hasLivePrices
+            ? "Live prices come from Yahoo Finance (delayed ~15 min); symbols without live data fall back to the FinVerse demo market feed and jitter slightly on refresh — for learning, not trading."
+            : "Prices are simulated from the FinVerse demo market feed and jitter slightly on refresh — for learning, not trading."}
         </CardContent>
       </Card>
     </PageShell>

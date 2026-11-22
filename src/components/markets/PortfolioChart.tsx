@@ -14,6 +14,8 @@ import { cn } from "@/lib/utils";
 import { formatINR } from "@/lib/finance/format";
 import { paiseAxisTick, paiseTicks } from "@/components/charts/money";
 import { genHistory } from "@/lib/market/history";
+import { useLiveHistories } from "@/lib/market/live-hooks";
+import type { LiveHistoryRange } from "@/lib/market/live";
 import { usePrefersReducedMotion } from "@/hooks/use-prefers-reduced-motion";
 import { Pill } from "@/components/fv/Pill";
 import {
@@ -32,6 +34,15 @@ export interface PortfolioPosition {
   /** Whole units held. */
   qty: number;
 }
+
+/** Yahoo range per chart range (1D needs 1M of history for its prev-close anchor). */
+const LIVE_RANGE: Record<PortfolioRange, LiveHistoryRange> = {
+  "1D": "1M",
+  "1W": "5D",
+  "1M": "1M",
+  "1Y": "1Y",
+  ALL: "3Y",
+};
 
 function tooltipContent(
   active: boolean | undefined,
@@ -65,11 +76,12 @@ function tooltipContent(
  *
  * Series semantics (labelled honestly below the chart): the value of the
  * *current* portfolio composition through each range — for daily ranges,
- * each holding's deterministic demo history multiplied by today's qty, but
+ * each holding's price history (live Yahoo closes when available,
+ * deterministic demo history otherwise) multiplied by today's qty, but
  * starting at each holding's first recorded purchase (no fabricated
  * pre-purchase history); for 1D, a deterministic intraday path from the
- * last demo close to the current simulated LTP. The final point is always
- * the live simulated value ("Now").
+ * last close to the current LTP. The final point is always the current
+ * value ("Now").
  *
  * Rendered client-side only (lazy route-level gate): LTPs are jittered demo
  * prices resolved in an effect, so they must never feed SSR HTML.
@@ -93,6 +105,14 @@ export function PortfolioChart({
   const reducedMotion = usePrefersReducedMotion();
   const gradId = useId();
 
+  // Live histories (Yahoo via the market-data Edge Function) when
+  // available — per-symbol fallback to the simulated feed below.
+  const liveHistories = useLiveHistories(
+    positions.map((p) => p.symbol),
+    LIVE_RANGE[range],
+  );
+  const hasLiveHistory = liveHistories.size > 0;
+
   const points = useMemo<SeriesPoint[]>(() => {
     if (!ltpBySymbol || positions.length === 0) return [];
     const qtyBySymbol: Record<string, number> = {};
@@ -108,21 +128,21 @@ export function PortfolioChart({
       const ltp = ltpBySymbol[p.symbol];
       if (ltp === undefined) continue;
       if (range === "1D") {
-        const daily = genHistory(p.symbol, RANGE_TRADING_DAYS["1M"]);
+        const daily = liveHistories.get(p.symbol) ?? genHistory(p.symbol, RANGE_TRADING_DAYS["1M"]);
         const prevClose = daily.length > 1 ? daily[daily.length - 2]!.closePaise : ltp;
         seriesBySymbol[p.symbol] = genIntraday(p.symbol, prevClose, ltp);
       } else {
         historyItems.push({
           symbol: p.symbol,
           qty: p.qty,
-          closes: genHistory(p.symbol, RANGE_TRADING_DAYS[range]),
+          closes: liveHistories.get(p.symbol) ?? genHistory(p.symbol, RANGE_TRADING_DAYS[range]),
           ...(firstBuyDateISOBySymbol?.[p.symbol]
             ? { firstBuyDateISO: firstBuyDateISOBySymbol[p.symbol] }
             : {}),
         });
       }
     }
-    // Anchor the series to the live simulated value: the last plotted point
+    // Anchor the series to the current value: the last plotted point
     // is always what the summary card shows.
     const nowPaise = positions.reduce(
       (a, p) => a + Math.round(p.qty * (ltpBySymbol[p.symbol] ?? 0)),
@@ -142,12 +162,20 @@ export function PortfolioChart({
     }));
     if (combined.length === 0) return combined;
     return [...combined, { label: "Now", valuePaise: nowPaise }];
-  }, [positions, ltpBySymbol, range, firstBuyDateISOBySymbol]);
+  }, [positions, ltpBySymbol, range, firstBuyDateISOBySymbol, liveHistories]);
 
   const first = points[0];
   const last = points[points.length - 1];
   const up = !first || !last || last.valuePaise >= first.valuePaise;
   const stroke = up ? "var(--gain)" : "var(--loss)";
+
+  // Honest data note: the 1D intraday path is always simulated (only its
+  // anchors are live); daily ranges plot real closes when available.
+  const dataNote = !hasLiveHistory
+    ? "Simulated demo data, not live prices."
+    : range === "1D"
+      ? "Simulated intraday path between live prices (Yahoo Finance, delayed ~15 min)."
+      : "Live Yahoo Finance data, delayed ~15 min.";
 
   // Explicit ticks with deduped labels: recharts' auto ticks on a flat
   // series emit values that round to identical "₹X" labels. The domain is
@@ -180,7 +208,7 @@ export function PortfolioChart({
         role="img"
         aria-label={
           first && last
-            ? `Portfolio value, ${range}, ${first.label} to ${last.label}, ${up ? "up" : "down"} from ${formatINR(first.valuePaise)} to ${formatINR(last.valuePaise)}. Simulated demo data, not live prices.`
+            ? `Portfolio value, ${range}, ${first.label} to ${last.label}, ${up ? "up" : "down"} from ${formatINR(first.valuePaise)} to ${formatINR(last.valuePaise)}. ${dataNote}`
             : "Portfolio value chart loading"
         }
       >
@@ -238,8 +266,11 @@ export function PortfolioChart({
       </div>
 
       <p className="mt-2 text-xs text-muted-foreground">
-        Value of your current holdings at simulated prices — history starts at your first recorded
-        purchase per stock. Not live market data.
+        {!hasLiveHistory
+          ? "Value of your current holdings at simulated prices — history starts at your first recorded purchase per stock. Not live market data."
+          : range === "1D"
+            ? "Simulated intraday path between yesterday's live close and the current live price (Yahoo Finance, delayed ~15 min)."
+            : "Value of your current holdings at live prices (Yahoo Finance, delayed ~15 min) — history starts at your first recorded purchase per stock."}
       </p>
     </div>
   );

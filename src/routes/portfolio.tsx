@@ -37,6 +37,7 @@ import { cn } from "@/lib/utils";
 import { getStock, STOCKS } from "@/lib/market/data";
 import { genHistory, getLTP, refreshLTP } from "@/lib/market/history";
 import { getQuote } from "@/lib/market/quote";
+import { useLiveQuotes } from "@/lib/market/live-hooks";
 import { PageShell } from "@/components/markets/PageShell";
 import { HoldingDialog } from "@/components/markets/HoldingDialog";
 import { SipSheet } from "@/components/markets/SipSheet";
@@ -156,9 +157,26 @@ function PortfolioPage() {
     void refetch();
   }
 
+  // Live quotes (Yahoo via the market-data Edge Function) when available —
+  // one batch request for holdings + watchlist. Symbols that fail resolve
+  // to the simulated LTP below, so the page never depends on the feed.
+  const liveQuotesQuery = useLiveQuotes([...(holdings ?? []).map((h) => h.symbol), ...watchlist]);
+  const liveQuotes = liveQuotesQuery.data;
+  // `refetch` is referentially stable in React Query v5 — safe as a
+  // useCallback dep, unlike the whole query result object.
+  const refetchLiveQuotes = liveQuotesQuery.refetch;
+  const hasLivePrices = (liveQuotes?.size ?? 0) > 0;
+
   useEffect(() => {
-    setPrices(Object.fromEntries((holdings ?? []).map((h) => [h.symbol, getLTP(h.symbol)])));
-  }, [holdings, priceTick]);
+    setPrices(
+      Object.fromEntries(
+        (holdings ?? []).map((h) => [
+          h.symbol,
+          liveQuotes?.get(h.symbol)?.pricePaise ?? getLTP(h.symbol),
+        ]),
+      ),
+    );
+  }, [holdings, priceTick, liveQuotes]);
 
   const priceOf = useCallback(
     (symbol: string) => prices?.[symbol] ?? getStock(symbol)?.pricePaise ?? 0,
@@ -188,16 +206,19 @@ function PortfolioPage() {
   const ready = !isPending;
   const totals = useMemo(() => portfolioTotals(rows), [rows]);
 
-  /** Today's returns: value change between the last demo close and the
-   *  current simulated LTP, summed across holdings. */
+  /** Today's returns: value change between the last close and the
+   *  current LTP, summed across holdings. Live prev-close when a live
+   *  quote resolved, otherwise the simulated history's penultimate close. */
   const todayReturns = useMemo(
     () =>
       rows.reduce((a, r) => {
+        const livePrevClose = liveQuotes?.get(r.holding.symbol)?.prevClosePaise;
         const daily = genHistory(r.holding.symbol, 22);
-        const prevClose = daily.length > 1 ? daily[daily.length - 2]!.closePaise : r.ltp;
+        const prevClose =
+          livePrevClose ?? (daily.length > 1 ? daily[daily.length - 2]!.closePaise : r.ltp);
         return a + todayReturnPaise(r.holding.qty, r.ltp, prevClose);
       }, 0),
-    [rows],
+    [rows, liveQuotes],
   );
 
   /** Simulated-brokerage orders, parsed from ledger notes. Every ledger row
@@ -278,12 +299,12 @@ function PortfolioPage() {
     try {
       (holdings ?? []).forEach((h) => refreshLTP(h.symbol));
       setPriceTick((t) => t + 1);
-      await refetch();
+      await Promise.all([refetch(), refetchLiveQuotes()]);
       toast.success("Prices refreshed.");
     } finally {
       setIsRefreshing(false);
     }
-  }, [holdings, refetch]);
+  }, [holdings, refetch, refetchLiveQuotes]);
 
   function openInvest(mode: InvestMode = "order") {
     setInvestMode(mode);
@@ -312,7 +333,11 @@ function PortfolioPage() {
     <PullToRefresh onRefresh={refreshPortfolio} className="min-h-screen">
       <PageShell
         title="Portfolio"
-        subtitle="Your investments, valued at simulated prices — not live market data."
+        subtitle={
+          hasLivePrices
+            ? "Your investments, valued at live prices (Yahoo Finance, delayed ~15 min) where available — simulated prices otherwise."
+            : "Your investments, valued at simulated prices — not live market data."
+        }
         active="Portfolio"
         actions={
           <>
@@ -706,9 +731,11 @@ function PortfolioPage() {
                       const stock = getStock(symbol);
                       const name = stock?.name ?? symbol;
                       // Single quote source: price and % share one basis.
+                      // Live quote when one resolved, simulated otherwise.
+                      const live = liveQuotes?.get(symbol);
                       const q = getQuote(symbol);
-                      const price = q?.pricePaise ?? priceOf(symbol);
-                      const changePct = q?.changePct ?? 0;
+                      const price = live?.pricePaise ?? q?.pricePaise ?? priceOf(symbol);
+                      const changePct = live?.changePct ?? q?.changePct ?? 0;
                       return (
                         <li key={symbol}>
                           <MarketRow

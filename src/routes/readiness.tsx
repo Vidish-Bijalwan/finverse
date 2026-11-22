@@ -19,6 +19,7 @@ import { formatINR, monthKey } from "@/lib/finance/format";
 import { isInvestmentOrder } from "@/lib/finance/investments";
 import { getStock } from "@/lib/market/data";
 import { genHistory } from "@/lib/market/history";
+import { useLiveHistories } from "@/lib/market/live-hooks";
 import {
   annualizedVolatility,
   scoreReadiness,
@@ -160,6 +161,15 @@ function ReadinessPage() {
   const { data: budgets, isPending: budgetsPending } = useBudgets(month);
   const { data: holdings, isPending: holdingsPending } = useHoldings();
 
+  // Live histories (Yahoo via the market-data Edge Function) for the
+  // volatility factor — per-holding fallback to simulated history inside
+  // the model memo below. The scorer itself is untouched: only its
+  // volatility INPUT changes source.
+  const liveHistories = useLiveHistories(
+    (holdings ?? []).map((h) => h.symbol),
+    "3M",
+  );
+
   const [amount, setAmount] = useState("");
   const [asked, setAsked] = useState(false);
 
@@ -223,21 +233,34 @@ function ReadinessPage() {
       }))
       .filter((h) => h.currentValuePaise > 0);
 
-    // Volatility per holding from simulated price history (see
-    // src/lib/market/history.ts). Holdings with too little history are
-    // excluded instead of failing the factor.
+    // Volatility per holding from live price history when available,
+    // simulated history otherwise (see src/lib/market/history.ts).
+    // Holdings with too little history are excluded instead of failing
+    // the factor.
     const holdingVolatilities: Array<{
       symbol: string;
       volatility: number;
       currentValuePaise: number;
     }> = [];
+    let volatilityLiveCount = 0;
+    let volatilityMeasuredCount = 0;
     for (const holding of pricedHoldings) {
-      const closes = genHistory(holding.symbol, VOLATILITY_HISTORY_DAYS).map((p) => p.closePaise);
+      const history =
+        liveHistories.get(holding.symbol) ?? genHistory(holding.symbol, VOLATILITY_HISTORY_DAYS);
+      const closes = history.map((p) => p.closePaise);
       const volatility = annualizedVolatility(closes);
       if (volatility !== null) {
+        volatilityMeasuredCount += 1;
+        if (liveHistories.has(holding.symbol)) volatilityLiveCount += 1;
         holdingVolatilities.push({ ...holding, volatility });
       }
     }
+    const volatilitySource: "live" | "mixed" | "simulated" =
+      volatilityMeasuredCount > 0 && volatilityLiveCount === volatilityMeasuredCount
+        ? "live"
+        : volatilityLiveCount > 0
+          ? "mixed"
+          : "simulated";
 
     // Debt-to-income: this repo records no loans or outstanding debt, so
     // the factor is always unmeasured for now — never invented, never zero.
@@ -274,6 +297,22 @@ function ReadinessPage() {
           return incomeNow > 0
             ? `Rent ${formatINR(Math.round(rent))} + bills ${formatINR(billsTotal)} = ${formatINR(Math.round(fixedTotal))} ÷ income ${formatINR(Math.round(incomeNow))} = ${((fixedTotal / incomeNow) * 100).toFixed(1)}% (healthy ≤ 30%).`
             : factor.detail;
+        case "volatility": {
+          // The scorer's detail says "simulated price history" — it cannot
+          // know the route resolved live history for the input. Override
+          // the suffix honestly; if the scorer's wording ever changes, the
+          // check fails and the detail stays as the scorer wrote it
+          // (under-claiming liveness, never over-claiming it).
+          const simulatedSuffix = "Computed from simulated price history.";
+          if (!factor.detail.endsWith(simulatedSuffix)) return factor.detail;
+          const liveSuffix =
+            volatilitySource === "live"
+              ? "Computed from live price history (Yahoo Finance)."
+              : volatilitySource === "mixed"
+                ? "Computed from live price history (Yahoo Finance) where available, simulated otherwise."
+                : simulatedSuffix;
+          return factor.detail.slice(0, -simulatedSuffix.length) + liveSuffix;
+        }
         default:
           return factor.detail;
       }
@@ -315,8 +354,9 @@ function ReadinessPage() {
       surplus,
       portfolioValue,
       holdingCount: holdings.length,
+      volatilitySource,
     };
-  }, [goals, txns, bills, budgets, holdings, month]);
+  }, [goals, txns, bills, budgets, holdings, month, liveHistories]);
 
   const verdict = model?.assessment.available === true ? model.assessment.band : "";
 
@@ -536,9 +576,13 @@ function ReadinessPage() {
             discipline 10% (% of this month's budgets unbreached) · fixed-cost ratio 10% (≤30% =
             full marks, 60%+ = zero) · portfolio concentration 15% (largest holding ≤20% = full
             marks) · portfolio volatility 10% (≤15% = full marks, 60%+ = zero). Factors with no data
-            are left out and the score rescales over the rest — never counted as zero. Volatility is
-            computed from simulated price history. Scores are educational estimates from your
-            recorded data — not financial advice.
+            are left out and the score rescales over the rest — never counted as zero.{" "}
+            {model?.volatilitySource === "live"
+              ? "Volatility is computed from live price history (Yahoo Finance)."
+              : model?.volatilitySource === "mixed"
+                ? "Volatility is computed from live price history (Yahoo Finance) where available, simulated otherwise."
+                : "Volatility is computed from simulated price history."}{" "}
+            Scores are educational estimates from your recorded data — not financial advice.
           </p>
         </div>
       )}

@@ -23,6 +23,7 @@ import {
 } from "@/lib/market/data";
 import { getLTP } from "@/lib/market/history";
 import { getQuote } from "@/lib/market/quote";
+import { useLiveQuotes } from "@/lib/market/live-hooks";
 import {
   EmptyState,
   MarketRow,
@@ -81,33 +82,6 @@ function ScreenerPage() {
     }
   }
 
-  /** Symbol search suggestions for the SearchDropdown (top 8 matches). */
-  const searchGroups: SearchResultGroup[] = useMemo(() => {
-    const q = query.trim().toLowerCase();
-    if (!q) return [];
-    const matches = STOCKS.filter(
-      (s) => s.symbol.toLowerCase().includes(q) || s.name.toLowerCase().includes(q),
-    ).slice(0, 8);
-    return [
-      {
-        label: "Stocks",
-        items: matches.map((s) => {
-          // Single quote source: displayed price and % share one basis.
-          const q = getQuote(s.symbol);
-          const changePct = q?.changePct ?? 0;
-          const up = changePct >= 0;
-          return {
-            id: s.symbol,
-            title: s.symbol,
-            subtitle: `${s.name} · ${s.sector}`,
-            right: `${formatINR(q?.pricePaise ?? getLTP(s.symbol))} ${up ? "+" : "−"}${Math.abs(changePct).toFixed(2)}%`,
-            rightTone: (up ? "gain" : "loss") as "gain" | "loss",
-          };
-        }),
-      },
-    ];
-  }, [query]);
-
   const results = useMemo(() => {
     const q = query.trim().toLowerCase();
     const filtered = STOCKS.filter((s) => {
@@ -123,19 +97,56 @@ function ScreenerPage() {
     return [...filtered].sort((a, b) => (a[sortKey] - b[sortKey]) * dir);
   }, [query, sectors, maxPE, minYield, band, sortKey, sortDir]);
 
-  /** Simulated LTP + day-change per result, computed once per filter change. */
+  // Live quotes (Yahoo via the market-data Edge Function) for the filtered
+  // results — one batch request, chunked to the function's cap. Symbols
+  // that fail resolve to the simulated quote below.
+  const liveQuotesQuery = useLiveQuotes(results.map((s) => s.symbol));
+  const liveQuotes = liveQuotesQuery.data;
+  const hasLivePrices = (liveQuotes?.size ?? 0) > 0;
+
+  /** Symbol search suggestions for the SearchDropdown (top 8 matches). */
+  const searchGroups: SearchResultGroup[] = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    if (!q) return [];
+    const matches = STOCKS.filter(
+      (s) => s.symbol.toLowerCase().includes(q) || s.name.toLowerCase().includes(q),
+    ).slice(0, 8);
+    return [
+      {
+        label: "Stocks",
+        items: matches.map((s) => {
+          // Single quote source: displayed price and % share one basis.
+          // Live quote when one resolved, simulated otherwise.
+          const live = liveQuotes?.get(s.symbol);
+          const q = getQuote(s.symbol);
+          const changePct = live?.changePct ?? q?.changePct ?? 0;
+          const up = changePct >= 0;
+          return {
+            id: s.symbol,
+            title: s.symbol,
+            subtitle: `${s.name} · ${s.sector}`,
+            right: `${formatINR(live?.pricePaise ?? q?.pricePaise ?? getLTP(s.symbol))} ${up ? "+" : "−"}${Math.abs(changePct).toFixed(2)}%`,
+            rightTone: (up ? "gain" : "loss") as "gain" | "loss",
+          };
+        }),
+      },
+    ];
+  }, [query, liveQuotes]);
+
+  /** Live LTP + day-change per result when resolved, simulated otherwise. */
   const live = useMemo(() => {
     const map = new Map<string, { pricePaise: number; changePct: number }>();
     for (const s of results) {
       // Single quote source: displayed price and % share one basis.
+      const liveQuote = liveQuotes?.get(s.symbol);
       const q = getQuote(s.symbol);
       map.set(s.symbol, {
-        pricePaise: q?.pricePaise ?? getLTP(s.symbol),
-        changePct: q?.changePct ?? 0,
+        pricePaise: liveQuote?.pricePaise ?? q?.pricePaise ?? getLTP(s.symbol),
+        changePct: liveQuote?.changePct ?? q?.changePct ?? 0,
       });
     }
     return map;
-  }, [results]);
+  }, [results, liveQuotes]);
 
   function openStock(symbol: string) {
     navigate({ to: "/stocks/$symbol", params: { symbol } });
@@ -272,7 +283,9 @@ function ScreenerPage() {
             {filterCount > 0 && ` · ${filterCount} filter${filterCount > 1 ? "s" : ""} active`}
           </p>
           <p className="text-xs text-muted-foreground">
-            Demo dataset · simulated prices — not live
+            {hasLivePrices
+              ? "Demo dataset · live prices via Yahoo Finance (delayed ~15 min), simulated where unavailable"
+              : "Demo dataset · simulated prices — not live"}
           </p>
         </div>
         <div className="flex items-center gap-2">

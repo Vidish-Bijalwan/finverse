@@ -26,7 +26,9 @@ import {
   STOCKS,
   type StockInfo,
 } from "@/lib/market/data";
-import { dayChange, genHistory, getLTP, refreshLTP, type PricePoint } from "@/lib/market/history";
+import { dayChange, getLTP, refreshLTP, type PricePoint } from "@/lib/market/history";
+import { resolveHistory } from "@/lib/market/live";
+import { useLiveHistory, useLiveQuote } from "@/lib/market/live-hooks";
 import {
   ChartCard,
   chartTooltipFormatter,
@@ -422,11 +424,22 @@ function StockDetailPage() {
     if (stock) setLtp(getLTP(sym));
   }, [stock, sym]);
 
-  const history = useMemo(() => genHistory(sym, 1260), [sym]); // 5Y ≈ 1260 trading days
+  // Live data (Yahoo via the market-data Edge Function) when available —
+  // the resolvers fall back to the simulated feed otherwise, and the Pill
+  // below discloses which one is shown.
+  const liveQuoteQuery = useLiveQuote(sym);
+  const liveHistoryQuery = useLiveHistory(sym, "5Y");
+  const resolvedHistory = useMemo(
+    () => resolveHistory(sym, 1260, liveHistoryQuery.data),
+    [sym, liveHistoryQuery.data],
+  );
+  const history = resolvedHistory.history; // 5Y ≈ 1260 trading days
+  const liveQuote = liveQuoteQuery.data ?? null;
+  const isLive = liveQuote !== null || resolvedHistory.source === "live";
   const change = useMemo(() => dayChange(history), [history]);
   const prevClose = history.length >= 2 ? history[history.length - 2]!.closePaise : undefined;
 
-  const displayPrice = ltp ?? stock?.pricePaise ?? 0;
+  const displayPrice = liveQuote?.pricePaise ?? ltp ?? stock?.pricePaise ?? 0;
 
   const seriesForRange = useCallback(
     (range: ChartRangeKey): ChartPoint[] => {
@@ -480,7 +493,13 @@ function StockDetailPage() {
       : 50;
 
   function handleRefresh() {
-    setLtp(refreshLTP(sym));
+    // Live data refreshes from Yahoo; simulated data re-jitters.
+    if (liveQuote !== null || liveHistoryQuery.data) {
+      void liveQuoteQuery.refetch();
+      void liveHistoryQuery.refetch();
+    } else {
+      setLtp(refreshLTP(sym));
+    }
   }
 
   function handleConfirm(order: FvOrder) {
@@ -530,12 +549,25 @@ function StockDetailPage() {
         </Link>
         <Badge variant="secondary">{stock.symbol}</Badge>
         <Badge variant="outline">{stock.sector}</Badge>
-        <Pill variant="neutral" size="sm" label="Simulated data">
-          SIMULATION
-        </Pill>
-        <span className="text-xs text-muted-foreground">
-          Simulated price — not live market data
-        </span>
+        {isLive ? (
+          <>
+            <Pill variant="gain" size="sm" label="Live data" dot>
+              LIVE
+            </Pill>
+            <span className="text-xs text-muted-foreground">
+              Live price · Yahoo Finance, delayed ~15 min
+            </span>
+          </>
+        ) : (
+          <>
+            <Pill variant="neutral" size="sm" label="Simulated data">
+              SIMULATION
+            </Pill>
+            <span className="text-xs text-muted-foreground">
+              Simulated price — not live market data
+            </span>
+          </>
+        )}
       </div>
 
       <div className="mb-4 flex flex-wrap items-end justify-between gap-4">
@@ -544,7 +576,9 @@ function StockDetailPage() {
             {ltp === null ? (
               <Skeleton className="h-10 w-44" />
             ) : (
-              <p className="text-4xl font-black text-primary-dark tabular-nums">{formatINR(ltp)}</p>
+              <p className="text-4xl font-black text-primary-dark tabular-nums">
+                {formatINR(displayPrice)}
+              </p>
             )}
             <button
               onClick={handleRefresh}
