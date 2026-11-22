@@ -101,10 +101,7 @@ function resolveConfig(get: (key: string) => string | undefined): RagConfig {
   const apiKey = get("OPENROUTER_API_KEY")?.trim();
   return {
     apiKey: apiKey ? apiKey : undefined,
-    baseUrl: textEnv(
-      get("LLM_EMBEDDING_BASE_URL") ?? get("LLM_BASE_URL"),
-      DEFAULT_BASE_URL,
-    ),
+    baseUrl: textEnv(get("LLM_EMBEDDING_BASE_URL") ?? get("LLM_BASE_URL"), DEFAULT_BASE_URL),
     embeddingModel: textEnv(get("LLM_EMBEDDING_MODEL"), EMBEDDING_MODEL),
     timeoutMs: intEnv(get("LLM_EMBEDDING_TIMEOUT_MS"), DEFAULT_EMBEDDING_TIMEOUT_MS),
     ingestBatchSize: intEnv(get("RAG_INGEST_BATCH_SIZE"), DEFAULT_RAG_INGEST_BATCH_SIZE),

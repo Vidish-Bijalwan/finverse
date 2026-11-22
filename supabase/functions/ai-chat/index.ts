@@ -157,10 +157,7 @@ function resolveConfig(get: (key: string) => string | undefined): AiChatConfig {
     apiKey: apiKey ? apiKey : undefined,
     baseUrl: textEnv(get("LLM_BASE_URL"), DEFAULT_BASE_URL),
     primaryModel: textEnv(get("LLM_MODEL_PRIMARY"), DEFAULT_PRIMARY_MODEL),
-    embeddingModel: textEnv(
-      get("LLM_EMBEDDING_MODEL"),
-      EMBEDDING_MODEL,
-    ),
+    embeddingModel: textEnv(get("LLM_EMBEDDING_MODEL"), EMBEDDING_MODEL),
     timeoutMs: intEnv(get("LLM_TIMEOUT_MS"), DEFAULT_TIMEOUT_MS),
     maxToolRounds: intEnv(get("LLM_MAX_TOOL_ROUNDS"), DEFAULT_MAX_TOOL_ROUNDS),
     rateLimitPerMinute: intEnv(get("LLM_RATE_LIMIT_PER_MINUTE"), DEFAULT_RATE_LIMIT_PER_MINUTE),

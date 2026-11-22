@@ -262,11 +262,7 @@ export interface ToolDataAccess {
    * embeddings layer is down or unconfigured; zero chunks means
    * nothing relevant passed the similarity floor.
    */
-  searchKnowledge(
-    query: string,
-    symbol: string | null,
-    topK: number,
-  ): Promise<RetrievedContext>;
+  searchKnowledge(query: string, symbol: string | null, topK: number): Promise<RetrievedContext>;
 }
 
 // ---------------------------------------------------------------------------

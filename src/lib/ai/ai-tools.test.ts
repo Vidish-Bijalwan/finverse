@@ -124,6 +124,9 @@ const HISTORY: ToolHistoryBar[] = Array.from({ length: 63 }, (_, i) => ({
   volume: null,
 }));
 
+/** searchKnowledge calls made through fakeData(), reset per test. */
+const SEARCH_CALLS: Array<{ query: string; symbol: string | null; topK: number }> = [];
+
 function fakeData(): ToolDataAccess {
   return {
     async listTransactions(filter) {
@@ -171,12 +174,56 @@ function fakeData(): ToolDataAccess {
     async getHistory(yahooSymbol) {
       return yahooSymbol === "RELIANCE.NS" ? HISTORY : null;
     },
+    async searchKnowledge(query, symbol, topK) {
+      SEARCH_CALLS.push({ query, symbol, topK });
+      if (query.toLowerCase().includes("outage")) {
+        return { available: false, chunks: [], reason: "Retrieval is unavailable right now." };
+      }
+      if (query.toLowerCase().includes("long")) {
+        return {
+          available: true,
+          reason: null,
+          chunks: [
+            {
+              id: "doc-long",
+              sourceType: "guide",
+              title: "Long guide",
+              symbol: null,
+              publishedAt: null,
+              url: null,
+              similarity: 0.9,
+              content: "x".repeat(700),
+            },
+          ],
+        };
+      }
+      if (query.toLowerCase().includes("sip")) {
+        return {
+          available: true,
+          reason: null,
+          chunks: [
+            {
+              id: "doc-sip",
+              sourceType: "guide",
+              title: "What is a SIP?",
+              symbol: null,
+              publishedAt: "2026-11-23T10:00:00Z",
+              url: null,
+              similarity: 0.87654,
+              content: "A SIP invests a fixed amount every month.",
+            },
+          ],
+        };
+      }
+      return { available: true, chunks: [], reason: null };
+    },
   };
 }
 
 beforeEach(() => {
   vi.useFakeTimers();
   vi.setSystemTime(new Date("2026-11-23T12:00:00Z"));
+  SEARCH_CALLS.length = 0;
 });
 
 afterEach(() => {
@@ -534,22 +581,68 @@ describe("getGoalProgress", () => {
   });
 });
 
-describe("searchKnowledge (M4 stub)", () => {
-  it("returns available:false with the M4 reason", async () => {
+describe("searchKnowledge", () => {
+  it("returns mapped chunks from the data access", async () => {
     const result = await executeTool(fakeData(), "searchKnowledge", {
-      query: "RELIANCE earnings",
+      query: "what is a SIP?",
+    });
+    expect(result).toEqual({
+      available: true,
+      chunks: [
+        {
+          sourceType: "guide",
+          title: "What is a SIP?",
+          symbol: null,
+          // Full timestamp in the store, date-only in the tool result.
+          publishedAt: "2026-11-23",
+          url: null,
+          // Similarity rounded to 2 decimals (0.87654 → 0.88).
+          similarity: 0.88,
+          content: "A SIP invests a fixed amount every month.",
+        },
+      ],
+    });
+  });
+
+  it("returns available:false with the reason when retrieval is down", async () => {
+    const result = await executeTool(fakeData(), "searchKnowledge", {
+      query: "outage test",
     });
     expect(result).toEqual({
       available: false,
-      reason: "Knowledge search is not set up yet — it arrives with the RAG layer (M4).",
+      reason: "Retrieval is unavailable right now.",
       chunks: [],
     });
+  });
+
+  it("returns available:true with zero chunks when nothing matches", async () => {
+    const result = await executeTool(fakeData(), "searchKnowledge", {
+      query: "obscure topic",
+    });
+    expect(result).toEqual({ available: true, chunks: [] });
   });
 
   it("still validates its arguments", async () => {
     await expect(executeTool(fakeData(), "searchKnowledge", { query: "" })).rejects.toThrow(
       "A search query is required (1–500 characters).",
     );
+  });
+
+  it("normalises the symbol to Yahoo form and asks for the top 3", async () => {
+    await executeTool(fakeData(), "searchKnowledge", {
+      query: "RELIANCE news",
+      symbol: "RELIANCE",
+    });
+    expect(SEARCH_CALLS).toHaveLength(1);
+    expect(SEARCH_CALLS[0]?.symbol).toBe("RELIANCE.NS");
+    expect(SEARCH_CALLS[0]?.topK).toBe(3);
+  });
+
+  it("caps long chunk content at 600 characters", async () => {
+    const result = (await executeTool(fakeData(), "searchKnowledge", {
+      query: "long guide",
+    })) as { chunks: Array<{ content: string }> };
+    expect(result.chunks[0]?.content).toBe(`${"x".repeat(600)}…`);
   });
 });
 

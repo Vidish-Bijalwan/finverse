@@ -62,9 +62,9 @@ none landed in any of the new directories.
 | Old phase                                                                                                                                                               | Old implementation                                                    | New location / status                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                           |
 | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | Phase 0 — Deterministic core (SMA/EMA/RSI/MACD, CAGR/XIRR, Markowitz + Sharpe)                                                                                          | NestJS services + `apps/web/lib/`                                     | **Done in M1:** ported to `src/lib/calc/indicators.ts`, `src/lib/calc/portfolio-math.ts`, `src/lib/calc/optimization.ts` (pure functions, 37 new vitest tests; full suite 343/343 green). Original preserved in `reference/nestjs-backend/src/` and `reference/web-math/`. **Live market data done in M2 (see §7):** Yahoo quotes + history via the `market-data` Supabase Edge Function, wired behind the `getQuote`/`genHistory` seams with the simulated feed as fallback.                                                                                                                                   |
-| Phase 1 — LLM foundation (OpenRouter provider, 7 typed tools, tool loop, rate limit + cache)                                                                            | NestJS `ai` module (`ai.provider.ts`, `ai.tools.ts`, `ai.service.ts`) | **Done in M3 (see §8):** `ai-chat` Supabase Edge Function — OpenRouter provider (primary `qwen/qwen-2.5-72b-instruct`), 8 typed tools (the old 7 + a `searchKnowledge` stub until M4), tool loop ≤4 rounds, DB-backed rate limit (10/min/user) + 60s cache. Client: `EdgeFunctionAdapter` in `src/lib/ai/remote.ts` behind the existing `LLMAdapter` interface; chat prefers the function and falls back to the local regex engine. |
-| Phase 2 — RAG (pgvector/Neon, embeddings, Yahoo news, Smart Screener, `searchKnowledge` tool)                                                                           | NestJS + Neon pgvector                                                | Planned Supabase pgvector migration (0006). The `searchKnowledge` tool exists as an `available: false` stub in M3 (see §8) until this lands.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            |
-| Phase 3 — Guardrails (verification engine re-checking numeric claims against deterministic evidence, money exact to paise)                                              | NestJS verification engine                                            | **Done in M3 (see §8):** full verification-engine port in `supabase/functions/_shared/ai-guardrail.ts` (money exact to the paise, %/ratios ±0.1, one correction retry then a template answer built only from verified numbers), the 40-case corrupted-output suite ported to `src/lib/ai/guardrail.test.ts`, and the `guardrail_checks` log table in migration 0005. |
+| Phase 1 — LLM foundation (OpenRouter provider, 7 typed tools, tool loop, rate limit + cache)                                                                            | NestJS `ai` module (`ai.provider.ts`, `ai.tools.ts`, `ai.service.ts`) | **Done in M3 (see §8):** `ai-chat` Supabase Edge Function — OpenRouter provider (primary `qwen/qwen-2.5-72b-instruct`), 8 typed tools (the old 7 + `searchKnowledge`, wired to RAG in M4 — see §9), tool loop ≤4 rounds, DB-backed rate limit (10/min/user) + 60s cache. Client: `EdgeFunctionAdapter` in `src/lib/ai/remote.ts` behind the existing `LLMAdapter` interface; chat prefers the function and falls back to the local regex engine.                                                                                                                                                                |
+| Phase 2 — RAG (pgvector/Neon, embeddings, Yahoo news, Smart Screener, `searchKnowledge` tool)                                                                           | NestJS + Neon pgvector                                                | **Done in M4 (see §9):** pgvector migration 0006 (`rag_documents` + `match_documents` RPC) + `rag` Edge Function (index + search ops, bge-base-en-v1.5 embeddings via the same OpenRouter key) + real `searchKnowledge` tool in ai-chat (top 3 chunks, shared `_shared/rag.ts` search, no HTTP hop to the `rag` function). 8 seed guides indexed as shared docs (SIP, EMI, PPF, ELSS, emergency fund, readiness score, index vs active, diversification). News ingestion is a follow-up (needs a scheduled job — see §9).                                                                                       |
+| Phase 3 — Guardrails (verification engine re-checking numeric claims against deterministic evidence, money exact to paise)                                              | NestJS verification engine                                            | **Done in M3 (see §8):** full verification-engine port in `supabase/functions/_shared/ai-guardrail.ts` (money exact to the paise, %/ratios ±0.1, one correction retry then a template answer built only from verified numbers), the 40-case corrupted-output suite ported to `src/lib/ai/guardrail.test.ts`, and the `guardrail_checks` log table in migration 0005.                                                                                                                                                                                                                                            |
 | Phase 4 — Readiness (deterministic 0–100 score: emergency fund 25, debt-to-income 20, monthly surplus 25, concentration 15, volatility 15; bands 0–39 / 40–69 / 70–100) | NestJS `readiness` module + `GET /api/readiness`                      | **Done in M5:** merged 7-factor model in `src/lib/calc/readiness.ts` + `src/routes/readiness.tsx` (pure scorer + 28 new vitest tests). Merged weights (decided 22 Nov, see §6): emergency 20, savings rate 20, debt-to-income 15, budget discipline 10, fixed-cost ratio 10, concentration 15, volatility 10; existing 4 bands kept. Missing factor = unavailable, never zero; score rescales over available factors. Debt-to-income is unmeasured — this repo records no loans or outstanding debt. Volatility uses live price history where available, simulated otherwise (M2, see §7; disclosed in the UI). |
 
 ---
@@ -239,8 +239,8 @@ TCS.NS ₹2,376.20 (+33.50, +1.43%), ^NSEI 25,800.60 (+286.30, +1.122%)
 
 **Section-numbering note:** this is §7 on `main`. The M6 static
 conversion (branch `feat/pages-static`) also added a §7 to this file;
-M3 took §8 on main, so when that branch merges, the M6 §7 must be
-renumbered to §9.
+M3 took §8 and M4 took §9 on main, so when that branch merges, the M6
+§7 must be renumbered to §10.
 
 ---
 
@@ -262,7 +262,7 @@ engine; the remote path is invisible.
   as an env secret and runs the tool loop + guardrails server-side.
   The key never reaches the browser. `POST { "message": string }`
   (1–2000 chars) → `{ answer, claims, refused, refusalReason, model,
-  toolsUsed, disclaimer, verification }`. Errors are honest JSON
+toolsUsed, disclaimer, verification }`. Errors are honest JSON
   (`{ error, code }`, never a stack trace): 400 bad message, 401 no
   JWT, 429 rate-limited, 502 OpenRouter unreachable, 503 key not
   configured (`AI_NOT_CONFIGURED` — the client renders guidance, not
@@ -420,3 +420,195 @@ it were global.
    shows the "Verified against your data" caption. If the degraded
    line appears instead, check the browser network tab for the
    `/functions/v1/ai-chat` call.
+
+---
+
+## 9. M4 — RAG: pgvector + embeddings + `searchKnowledge` (Supabase Edge Function)
+
+**Date:** 23 November 2026. **Status: code complete, function NOT yet
+deployed, migration 0006 NOT applied, and the OpenRouter key does NOT
+exist yet** — the key is still outstanding from Sarthak, and
+deployment + migration are owner actions (see below). Until all three
+land, `searchKnowledge` returns `available: false` and chat answers
+concept questions from the local engine; the RAG layer is invisible.
+
+**Function URL (once deployed):**
+`https://txktgmzgpvymmostpmol.supabase.co/functions/v1/rag`
+
+### What was built
+
+- **Migration 0006** (`supabase/migrations/0006_rag_documents.sql`,
+  idempotent, 0003 style): `create extension if not exists vector`
+  (pgvector ships with Supabase Postgres) + a `rag_documents` table
+  (one row per chunk: `owner_id`, `source_type`, `source_id`,
+  `chunk_index`, `symbol`, `title`, `content`, `embedding`
+  vector(768), `published_at`, `url`, `metadata`, `created_at`) + an
+  ivfflat cosine index + a `match_documents(owner_id,
+query_embedding, match_count, p_symbol)` RPC (cosine similarity,
+  0.35 floor, top-N). `owner_id` NULL means a SHARED document (seed
+  guides) — visible to every user through the RPC; a set owner
+  means a user document, visible only to that user. The RPC is
+  SECURITY DEFINER because RLS hides NULL-owner rows from direct
+  PostgREST reads; it enforces the shared-or-owned rule in SQL.
+  RLS + the "owner all" policy still apply to direct table access.
+  **Manual-application queue:** 0003, 0004 and 0005 are still
+  unapplied on the live database; 0006 joins the same queue. The
+  functions degrade without it (no chunks, honest
+  `available: false`) but return nothing until it lands.
+- **Shared module** `supabase/functions/_shared/rag.ts` (ported from
+  the old Phase 2 `src/rag/`): `chunkText` (~500 chars, 50-char
+  overlap, sentence-aware with hard-splitting — see the
+  chars-not-tokens note below), the news/profile/transaction chunk
+  builders, an `OpenRouterEmbeddingsClient` (bge-base-en-v1.5,
+  768d, same OpenRouter key as ai-chat; every returned vector's
+  length is validated, and a mismatch fails loudly instead of
+  storing a vector the column cannot hold), and `searchDocuments`
+  (embed the query → `match_documents` RPC → parsed chunks).
+  Search never throws: `available: false` is an outage, zero
+  chunks is "no relevant context" — the two states are kept
+  distinct on purpose, as in the old retrieval service.
+- **Edge Function** `supabase/functions/rag/index.ts` (Deno, zero
+  dependencies — plain fetch only, like M2/M3): two operations.
+  `POST { "op": "index", ... }` chunks the content, embeds each
+  chunk (batches of 25), deletes the document's old rows, and
+  stores the new ones (re-indexing replaces; `shared: true` stores
+  a NULL owner). `POST { "op": "search", "query", "match_count"?,
+"symbol"? }` embeds the query and returns the top chunks with
+  similarity scores. Errors are honest JSON (`{ error, code }`,
+  never a stack trace): 400 bad request, 401 no JWT, 502
+  embeddings unreachable, 503 key not configured
+  (`AI_NOT_CONFIGURED` — same secret as ai-chat), 500 index
+  failed. CORS allowlist: same as market-data / ai-chat.
+  `verify_jwt = true` (`supabase/config.toml`, new
+  `[functions.rag]` section): rag_documents are owner-scoped via
+  RLS, so the gateway must verify the JWT — same reason as
+  ai-chat.
+- **`searchKnowledge` is real now** (`supabase/functions/_shared/ai-tools.ts`
+  - `ai-chat/index.ts`): the M3 stub is gone. The tool asks for the
+    top 3 chunks, normalises the symbol to Yahoo form, and returns
+    the old shape (`{ available, chunks: [{ sourceType, title,
+symbol, publishedAt (date-only), url, similarity (2dp), content
+(capped 600 chars)] }`) the guardrail's `chunksFromToolResults`
+    already expects. Its description now says what is actually
+    indexed (guides; no news yet) and when to use it (concept /
+    "what is…" / "how does … work" questions, market context — never
+    for the user's own numbers). System prompt rule 8 was updated
+    to match.
+- **Seed documents** (`supabase/seed/rag-documents.json`): 8
+  evergreen financial-literacy guides — what a SIP / EMI / PPF /
+  ELSS is, emergency-fund basics, how the FinVerse readiness
+  score works (7 factors, weights, bands — the app's own facts),
+  index vs active funds, diversification. Content only — no
+  embeddings stored (they are generated at index time), no market
+  prices, no return figures, no interest rates. Indexed as shared
+  docs by the owner (see the deploy steps).
+
+### Why ai-chat does NOT call the rag function over HTTP
+
+The `searchKnowledge` tool shares the `_shared/rag.ts` search code
+in-process instead of calling the `rag` function server-to-server.
+Three reasons: (1) no extra network hop inside the chat tool loop
+(each tool round already waits on the model — a second HTTP
+round-trip per search would add latency to every concept question);
+(2) typed results — the tool gets `RetrievedChunk[]` directly
+instead of parsing another function's JSON envelope; (3) one
+implementation — the `rag` function's search op and the chat tool
+cannot drift apart, because they are the same function. The `rag`
+function stays the HTTP API for indexing (owner-invoked) and for
+direct search from future clients; ai-chat just doesn't need the
+HTTP hop to use the same logic. (M3's ai-chat DOES call market-data
+over HTTP — but that function is public, keyless, and a genuinely
+separate concern; the RAG search needs the same key and the same
+PostgREST client ai-chat already has.)
+
+### Chars, not tokens — a deliberate port decision
+
+The old chunker caps chunks at 500 CHARS (~100–125 tokens), not 500
+tokens: bge-base-en-v1.5 takes at most 512 tokens per input, so a
+500-token chunk could exceed the model limit once tokenised, while
+500 chars leaves generous headroom for any input. M4 ports the old
+cap faithfully (same constant, same comment, same tests) rather than
+raising it to 500 tokens.
+
+### Verification
+
+- Tests: **533/533** (495 baseline + 38 new: 34 in
+  `src/lib/ai/rag.test.ts` — chunker incl. the ported old-spec
+  cases, chunk builders, embedding request/response parsing,
+  search-result parsing, `searchDocuments` behaviour with fake
+  embed/RPC deps — and 6 rewritten `searchKnowledge` tool tests in
+  `src/lib/ai/ai-tools.test.ts` replacing the 2 M3 stub tests).
+  `bun run build` green (Nitro). tsc 45 total (baseline, zero in
+  touched files). ESLint clean on touched files.
+- Both functions bundle cleanly with esbuild (rag 22.1 KB, ai-chat
+  94.4 KB, zero dependencies resolved remotely). No `deno` on this
+  VM — no Deno test run was possible; the functions' pure logic is
+  covered by vitest via the `_shared` modules.
+- **NOT verified:** live embeddings (no API key exists yet), live
+  pgvector search (no database access from here — the migration
+  SQL, the RPC, and the ivfflat index are untested against a real
+  Postgres with pgvector), the deployed functions, the seed
+  indexing, or browser wiring against the deployed functions. The
+  chunker, embeddings parsing, search parsing, and tool contract
+  ARE verified by unit tests; only the hosted hop, the model, and
+  the database are not.
+
+### Owner deploy steps
+
+1. Install the Supabase CLI and log in (`supabase login`), then link
+   the project (`supabase link --project-ref txktgmzgpvymmostpmol`).
+   Needs a Supabase access token — owner action. (Same step as
+   M2/M3; skip if already linked.)
+2. From the repo root: `supabase functions deploy rag`
+   (the `verify_jwt = true` setting in `supabase/config.toml` is
+   picked up automatically). The `OPENROUTER_API_KEY` secret is the
+   same one ai-chat uses — set it once (step 3 of §8) and both
+   functions share it. Until it is set, the rag function answers
+   503 `AI_NOT_CONFIGURED` and `searchKnowledge` returns
+   `available: false`.
+3. Run `supabase/migrations/0006_rag_documents.sql` in the SQL
+   Editor (same manual queue as 0003/0004/0005 — run them in
+   order). Without it, indexing fails (no table) and search
+   returns no chunks.
+4. Index the 8 seed guides (once, after steps 2–3). Each document
+   is one call with a signed-in user's JWT (sign in to the app,
+   then copy the access token from the browser's local storage —
+   the `sb-<project-ref>-auth-token` entry — or use any valid user
+   JWT):
+   `for doc in $(jq -c '.documents[]' supabase/seed/rag-documents.json); do body=$(echo "$doc" | jq '{op:"index", shared:true} + .'); curl -X POST "https://txktgmzgpvymmostpmol.supabase.co/functions/v1/rag" -H "apikey: <anon key>" -H "Authorization: Bearer $JWT" -H "Content-Type: application/json" -d "$body"; done`
+   Expect one `{ indexed: true, chunks: 2–3, shared: true }` per
+   document. Re-running the loop replaces the old rows (safe to
+   re-run).
+5. Smoke-test search with the same JWT:
+   `curl -X POST "https://txktgmzgpvymmostpmol.supabase.co/functions/v1/rag" -H "apikey: <anon key>" -H "Authorization: Bearer $JWT" -H "Content-Type: application/json" -d '{"op":"search","query":"what is a SIP?"}'`
+   — expect HTTP 200 with `available: true` and the SIP guide
+   chunk. A 503 means the key is not set yet; a 401 means the JWT
+   is missing/expired; `available: false` means the embeddings
+   service or the database is unreachable.
+6. Reload the app and ask a concept question in chat ("what is a
+   SIP?"): the answer should cite the guide by title. If chat
+   answers from the local engine instead, check the browser
+   network tab for the `/functions/v1/ai-chat` call, and that the
+   `rag` function + migration 0006 are both in place.
+
+### Follow-ups (not built — recorded, not half-built)
+
+- **News ingestion (out of scope for M4):** the old Phase 2
+  ingested Yahoo news on a schedule. That needs a scheduled job
+  (pg_cron calling the `rag` index op, or an external trigger) —
+  an owner decision about where the scheduler lives. The chunk
+  builder (`buildNewsChunkText`), the `news` source type, and the
+  symbol filter are all in place; only the scheduled ingester is
+  missing. Do not build a half-working version without the
+  scheduler decision.
+- **Rate limiting on the `rag` function:** none yet. Indexing is
+  owner-invoked and search is cheap, and the chat path is already
+  limited by ai-chat — but a direct caller with a valid JWT could
+  call search/index without limit. A DB-backed limit (reusing the
+  `ai_rate_limits` pattern from M3) belongs here when the function
+  gets real traffic.
+- **Shared-index restriction:** any signed-in user can currently
+  index a `shared: true` document (visible to everyone). Shared
+  indexing is owner-invoked by convention; restricting it needs an
+  admin concept the app does not have yet (e.g. an allowlist of
+  user ids checked in the function).

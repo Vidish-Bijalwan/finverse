@@ -139,9 +139,7 @@ export function chunkText(text: string, options: ChunkOptions = {}): string[] {
     chunks.push(current);
     const tail = overlapTail(current, overlapChars);
     current =
-      tail && tail.length + 1 + sentence.length <= maxChars
-        ? `${tail} ${sentence}`
-        : sentence;
+      tail && tail.length + 1 + sentence.length <= maxChars ? `${tail} ${sentence}` : sentence;
   }
   if (current) chunks.push(current);
   return chunks;
@@ -235,9 +233,7 @@ export function parseEmbeddingResponse(
   const record = data as Record<string, unknown>;
   const items = record["data"];
   if (!Array.isArray(items) || items.length !== expectedCount) {
-    throw new RagEmbeddingError(
-      "The embeddings provider returned the wrong number of vectors.",
-    );
+    throw new RagEmbeddingError("The embeddings provider returned the wrong number of vectors.");
   }
   const vectors: number[][] = [];
   // The API returns items in input order, but sort by index defensively
