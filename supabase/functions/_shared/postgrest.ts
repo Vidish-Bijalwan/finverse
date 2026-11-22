@@ -46,6 +46,13 @@ export interface PostgrestClient {
   insert(table: string, rows: Array<Record<string, unknown>>): Promise<boolean>;
   /** Best-effort delete of rows matching the filters. Never throws. */
   deleteWhere(table: string, filters: PostgrestFilter[]): Promise<void>;
+  /**
+   * Call a Postgres function (POST /rest/v1/rpc/<fn>). Throws on
+   * failure, like `select` — callers that need the result (vector
+   * search) treat a failure as an outage, not an empty answer.
+   * Arguments with a database default may be omitted from `args`.
+   */
+  rpc<T>(fn: string, args: Record<string, unknown>): Promise<T[]>;
 }
 
 const POSTGREST_TIMEOUT_MS = 10_000;
@@ -155,5 +162,22 @@ export function createPostgrestClient(
     }
   }
 
-  return { select, count, insert, deleteWhere };
+  async function rpc<T>(fn: string, args: Record<string, unknown>): Promise<T[]> {
+    const res = await fetchFn(`${base}/rest/v1/rpc/${encodeURIComponent(fn)}`, {
+      method: "POST",
+      headers: headers({ "Content-Type": "application/json" }),
+      body: JSON.stringify(args),
+      signal: AbortSignal.timeout(POSTGREST_TIMEOUT_MS),
+    });
+    if (!res.ok) {
+      throw new PostgrestError(`PostgREST rpc ${fn} failed.`, res.status);
+    }
+    const json: unknown = await res.json();
+    if (!Array.isArray(json)) {
+      throw new PostgrestError(`PostgREST rpc ${fn} returned no rows.`, res.status);
+    }
+    return json as T[];
+  }
+
+  return { select, count, insert, deleteWhere, rpc };
 }

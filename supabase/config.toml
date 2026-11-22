@@ -14,3 +14,10 @@ verify_jwt = false
 # before the function runs — the opposite of market-data. See the header
 # comment in supabase/functions/ai-chat/index.ts for the full reasoning.
 verify_jwt = true
+
+[functions.rag]
+# RAG reads and writes owner-scoped documents (rag_documents) via
+# PostgREST with the caller's JWT, so the gateway must verify the JWT
+# before the function runs — same reason as ai-chat. See the header
+# comment in supabase/functions/rag/index.ts for the full reasoning.
+verify_jwt = true
