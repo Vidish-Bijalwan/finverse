@@ -7,6 +7,7 @@ import { ChatMessage, type ChatMsg } from "@/components/ai/ChatMessage";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { billStatuses, previousMonth } from "@/lib/ai/engine";
+import { fetchAiChat, getAiChatAccessToken, type AiChatFailureStatus } from "@/lib/ai/remote";
 import { ALL_CATEGORIES, categoryById } from "@/lib/finance/categories";
 import { loadFinanceDB } from "@/lib/finance/db";
 import { formatINR, monthKey, monthLabel, todayISO } from "@/lib/finance/format";
@@ -210,6 +211,13 @@ const SUGGESTIONS = [
 let msgSeq = 0;
 const nextId = () => `msg-${Date.now()}-${(msgSeq += 1)}`;
 
+/** Honest degraded-state lines: guidance, never an error screen. */
+const AI_STATUS_LINES: Record<AiChatFailureStatus, string> = {
+  "not-configured": "AI isn't set up yet — answering from your data",
+  "rate-limited": "AI is busy — answering from your data",
+  unavailable: "AI is unreachable — answering from your data",
+};
+
 function ChatPage() {
   const dbQuery = useQuery({
     queryKey: ["finverse", "db"],
@@ -225,11 +233,15 @@ function ChatPage() {
   ]);
   const [input, setInput] = useState("");
   const [typing, setTyping] = useState(false);
+  /** Degraded remote-AI state (null = the remote path is working). */
+  const [aiStatus, setAiStatus] = useState<AiChatFailureStatus | null>(null);
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const mountedRef = useRef(true);
   const bottomRef = useRef<HTMLDivElement>(null);
 
   useEffect(
     () => () => {
+      mountedRef.current = false;
       if (timer.current) clearTimeout(timer.current);
     },
     [],
@@ -240,13 +252,43 @@ function ChatPage() {
     bottomRef.current?.scrollIntoView({ behavior: "auto", block: "end" });
   }, [messages, typing]);
 
-  const send = (raw: string) => {
-    const text = raw.trim();
-    if (!text || typing) return;
-    setMessages((m) => [...m, { id: nextId(), role: "user", text }]);
-    setInput("");
-    setTyping(true);
+  /**
+   * Remote-first send: the ai-chat Edge Function answers with a
+   * guardrail-verified answer when it is reachable; on any failure the
+   * local regex engine answers instead (after the usual typing delay)
+   * and the degraded-state line explains why. The app never breaks when
+   * AI is down — and a missing token (signed-out) degrades the same way.
+   */
+  const sendRemote = async (text: string): Promise<void> => {
+    const token = await getAiChatAccessToken();
+    if (token) {
+      const result = await fetchAiChat(text, token);
+      if (!mountedRef.current) return;
+      if (result.status === "ok") {
+        setAiStatus(null);
+        const verification = result.response.verification.status;
+        const meta =
+          verification === "verified"
+            ? "Verified against your data"
+            : verification === "template"
+              ? "Built from your verified numbers — the AI answer couldn't be checked"
+              : undefined;
+        const aiMsg: ChatMsg = {
+          id: nextId(),
+          role: "ai",
+          text: result.response.answer,
+        };
+        if (meta) aiMsg.meta = meta;
+        setMessages((m) => [...m, aiMsg]);
+        setTyping(false);
+        return;
+      }
+      setAiStatus(result.status);
+    } else {
+      setAiStatus("unavailable");
+    }
     timer.current = setTimeout(() => {
+      if (!mountedRef.current) return;
       const answer = dbQuery.data
         ? answerQuery(text, dbQuery.data)
         : dbQuery.isError
@@ -259,6 +301,15 @@ function ChatPage() {
     }, 600);
   };
 
+  const send = (raw: string) => {
+    const text = raw.trim();
+    if (!text || typing) return;
+    setMessages((m) => [...m, { id: nextId(), role: "user", text }]);
+    setInput("");
+    setTyping(true);
+    void sendRemote(text);
+  };
+
   // The app shell renders the sticky AppHeader above and the bottom tab bar
   // below (mobile); size the chat to the remaining viewport height.
   return (
@@ -267,6 +318,11 @@ function ChatPage() {
         <div className="pb-1 pt-3">
           <h1 className="text-lg font-black tracking-tight">FinVerse AI Chat</h1>
           <p className="text-xs text-muted-foreground">Answers computed from your real data</p>
+          {aiStatus && (
+            <p className="mt-1 text-xs text-muted-foreground" role="status">
+              {AI_STATUS_LINES[aiStatus]}
+            </p>
+          )}
         </div>
         {dbQuery.isError && (
           <div

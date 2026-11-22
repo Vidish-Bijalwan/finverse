@@ -8,6 +8,8 @@ export interface ChatMsg {
   role: "user" | "ai";
   text: string;
   link?: { to: string; label: string };
+  /** Tiny provenance caption under an AI answer (e.g. verification state). */
+  meta?: string;
 }
 
 export function ChatMessage({ msg }: { msg: ChatMsg }) {
@@ -32,6 +34,9 @@ export function ChatMessage({ msg }: { msg: ChatMsg }) {
         )}
       >
         <p className="whitespace-pre-wrap">{msg.text}</p>
+        {msg.meta && (
+          <p className="mt-1.5 text-[11px] leading-4 text-muted-foreground">{msg.meta}</p>
+        )}
         {msg.link && (
           <Link
             to={msg.link.to}

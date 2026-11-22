@@ -5,6 +5,12 @@
  * below answers using the deterministic `buildInsights` engine — no network,
  * no API keys, fully explainable. That is what ships in this PR.
  *
+ * M3 added the real remote backend: `EdgeFunctionAdapter` in `./remote.ts`
+ * calls the `ai-chat` Supabase Edge Function (OpenRouter + the guardrail
+ * engine). The chat route prefers it and falls back to the local engine
+ * whenever the function is unavailable, rate-limited, or unconfigured —
+ * see `src/routes/chat.tsx` and `docs/MIGRATION.md` §8.
+ *
  * ============================================================================
  *  HOW TO SWAP IN A REAL OPEN-SOURCE LLM (later, when keys are available)
  * ============================================================================
